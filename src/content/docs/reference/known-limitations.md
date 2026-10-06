@@ -72,8 +72,8 @@ VM, give it a modern CPU model (`host-passthrough`, or at least `Nehalem`).
 ## What is unavailable on arm64
 
 The core of the media server works on arm64: browsing, streaming, transcoding,
-metadata and recommendations. Three optional extras don't. Each one logs a warning
-instead of failing:
+metadata and recommendations. Three optional extras don't. Lumastra skips them
+cleanly instead of failing:
 
 | Feature                                      | On arm64    | Why                                               |
 | -------------------------------------------- | ----------- | ------------------------------------------------- |

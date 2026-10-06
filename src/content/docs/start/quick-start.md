@@ -51,7 +51,10 @@ emulated models such as `qemu64` and `kvm64` may lack SSE4.2/POPCNT.
 :::note[ARM caveat]
 The Essentia audio-analysis binary only exists for x86-64, so on ARM64 the music
 **BPM and mood analysis is off**, and the DJ crossfades and mood picks work without
-those signals. Everything else, including all video features, works normally.
+those signals. The optional sound-similarity sidecar and Intel Quick Sync / VA-API
+hardware transcoding are x86-64 only as well; software transcoding works normally.
+Everything else works the same. See
+[Known limitations](/reference/known-limitations/#what-is-unavailable-on-arm64).
 :::
 
 ## The stack
