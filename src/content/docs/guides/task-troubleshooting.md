@@ -207,6 +207,13 @@ docker exec "$VALKEY_CONTAINER" valkey-cli --no-auth-warning -a "$VPASS" EXISTS 
 | Reconciler running but takes over 10 minutes | Normal. A 5-minute stale threshold plus classification work adds up. |
 | Need an immediate manual clear | Direct SQL + Valkey cleanup (see below). |
 
+A manually started run of a task that supports resuming (see
+[Runs interrupted by a restart](/guides/task-monitoring/#runs-interrupted-by-a-restart))
+stays `active` with a stale heartbeat after a clean shutdown on purpose: the reclaim
+picks it up and starts the run that continues it. Its key
+`task:run:interrupted:<RUN_ID>` exists until then. To stop it from being resumed,
+cancel the run; don't clear it by hand while a resume is wanted.
+
 ### Manual cleanup example
 
 A stale pending run blocking the scheduler:

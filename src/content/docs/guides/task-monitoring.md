@@ -133,6 +133,30 @@ runs and their logs. Mutations need their corresponding scopes or admin access.
 For graceful cancellation and Force stop behavior, see
 [Run states and cancellation](/guides/administration-operations/#run-states-and-cancellation).
 
+## Runs interrupted by a restart
+
+A restart or deploy stops every run in progress. Scheduled runs simply continue on
+their next cycle. A run you started by hand (from the admin UI, the API or a service
+token) is resumed automatically when its task supports it, for example **Media
+Segment Repair**:
+
+- A few minutes after the restart, the interrupted run shows **failed** with
+  "continued in a new run (1/3)", and a new run of the same task starts. It is
+  labelled **Resumed after restart (1/3)**, and its details name the run it
+  continues. Where the task saves its position, the new run carries on from there.
+- A run is resumed at most 3 times. The fourth interruption ends it with
+  "Stopped after 3 restarts".
+- A run interrupted again within 15 minutes of being resumed is not resumed again:
+  restarts that close together look like a restart loop.
+- Only a clean shutdown (a deploy, a container stop) leads to a resume. If the
+  server crashed or was killed while the run was active, the run is not resumed,
+  because the run itself may have caused the crash.
+- Cancelling wins: a run you cancelled is never resumed. To stop a resumed run,
+  cancel it like any other.
+
+Start the task again by hand once the cause of the restarts is fixed. Tasks that do
+not support resuming fail as before when a restart interrupts them.
+
 ## Diagnose stalled work
 
 The Pipeline's stuck-items panel flags:
