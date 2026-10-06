@@ -135,8 +135,9 @@ minimal examples. See [Deploy on Kubernetes](/guides/deploy-kubernetes/).
 
 See [Configuration](/guides/configuration/) for where the variable lives.
 
-Most people know this variable from forward auth: it decides which machines may send
-identity headers, and without it forward auth doesn't work at all. It also has a second
+Most people know this variable from forward auth: with `FORWARD_AUTH_ENABLED=true` it
+decides which machines may send identity headers, and without it forward auth doesn't
+work at all. On its own, with forward auth off, it signs nobody in. It also has a second
 effect that is easy to miss: it decides whether Lumastra believes `X-Forwarded-For` for
 the **client's IP address**.
 

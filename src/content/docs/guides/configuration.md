@@ -34,6 +34,7 @@ See [Backup & recovery](/guides/backup-recovery/) for backup and rotation.
 | `CACHE_URL`           | Yes                 | Valkey/Redis URL (cache + task queues)           |
 | `LUMASTRA_MASTER_KEY` | Yes (with secrets)  | Encrypts stored secrets                          |
 | `JWT_SECRET`          | For token auth      | Signs session / access tokens                    |
+| `FORWARD_AUTH_ENABLED` | For forward auth   | Read identity headers at all (default off)       |
 | `TRUSTED_PROXY_IPS`   | Behind a proxy      | IPs/CIDRs allowed to set identity headers        |
 | `NODE_ENV`            | Recommended         | Set `production` for deployments                 |
 
@@ -72,6 +73,7 @@ trusts them from known peers:
 | --------------------------- | ----------------------- | --------------------------------------------------------------------------- |
 | `USERHEADER`               | `X-Forwarded-User`     | Header carrying the authenticated username                                |
 | `GROUPHEADER`              | `X-Forwarded-Groups`   | Header carrying the user's groups (`\|`-separated)                        |
+| `FORWARD_AUTH_ENABLED`     | `false`                | Read the identity headers at all. Off: ignored from every peer, so `TRUSTED_PROXY_IPS` alone signs nobody in |
 | `TRUSTED_PROXY_IPS`        | unset (fail-closed)    | Comma-separated proxy IPs/CIDRs allowed to set the identity headers, **required** behind a reverse proxy |
 | `LUMASTRA_TRUST_ANY_PROXY` | `false`                | Trust identity headers from any peer, single private host only            |
 

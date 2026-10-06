@@ -110,7 +110,24 @@ Dex test stack), see [Single sign-on with OIDC](/guides/sso-oidc/).
 
 Use this if you already run an identity provider and want SSO without per-app OIDC
 clients. Identity arrives in HTTP headers from your reverse proxy, and Lumastra trusts
-them only from known peers.
+them only when forward auth is turned on and only from known peers.
+
+Forward auth is **off by default**. Turn it on with:
+
+```bash
+FORWARD_AUTH_ENABLED=true
+```
+
+While it's off, Lumastra ignores the identity headers from every address, so setting
+`TRUSTED_PROXY_IPS` to get real client IP addresses can never sign anyone in. The setup
+wizard tells you when your proxy sends identity headers while forward auth is off.
+
+:::caution[Upgrading a forward-auth install]
+Installs from before October 2026 read the headers without this switch. If you sign in
+through forward auth, add `FORWARD_AUTH_ENABLED=true` **before** you upgrade, or nobody
+can sign in. With Helm, `auth.forwardAuth.enabled: true` sets it (chart 0.1.0-beta.4 or
+later).
+:::
 
 <AuthFlowDiagram />
 
@@ -123,7 +140,7 @@ identical).
 ### Proxy trust: fail-closed
 
 Because identity arrives in plain HTTP headers, Lumastra only trusts them from known
-peers:
+peers, and only with `FORWARD_AUTH_ENABLED=true`:
 
 - Set **`TRUSTED_PROXY_IPS`** to your reverse proxy's IP(s)/CIDR(s). **Required in
   production**.
@@ -138,15 +155,16 @@ network instead; see [Deploy with Docker → Reverse proxy](/guides/deploy-docke
 If headers are rejected, the setup wizard and the logs (`identity headers ignored —
 untrusted TCP peer`) name the peer address that sent them.
 
-A trusted proxy must also remove the identity headers a client sends. Lumastra believes
-them from every address in `TRUSTED_PROXY_IPS`, whichever sign-in method you picked, so
-a proxy that passes a client's `X-Forwarded-User` through lets anyone sign in as anyone.
-The setups in the [Reverse proxy guide](/guides/reverse-proxy/#sign-in-headers) remove
-them.
+A trusted proxy must also remove the identity headers a client sends. With forward auth
+on, Lumastra believes them from every address in `TRUSTED_PROXY_IPS`, so a proxy that
+passes a client's `X-Forwarded-User` through lets anyone sign in as anyone. The setups
+in the [Reverse proxy guide](/guides/reverse-proxy/#sign-in-headers) remove them. With
+forward auth off, Lumastra ignores and logs such headers, and `npm run doctor` and the
+admin health page warn about them.
 
 :::caution
-If neither is set, identity headers are rejected and **nobody can sign in via forward
-auth**. This is intentional anti-spoofing: without it, anyone able to reach the
+If forward auth is on but neither is set, identity headers are rejected and **nobody can
+sign in via forward auth**. This is intentional anti-spoofing: without it, anyone able to reach the
 container could forge an admin header. (Built-in and OIDC login are unaffected.)
 :::
 
@@ -155,7 +173,7 @@ The header names are configurable: **`USERHEADER`** (default `X-Forwarded-User`)
 **`NAMEHEADER`** (default `x-authentik-name`), carries the user's human-readable
 display name. If your proxy sends it, other users see it (for example, in "who else
 watched this"); leave it blank and Lumastra keeps showing the username. `NAMEHEADER`
-is trusted on the same terms as `USERHEADER` (via `TRUSTED_PROXY_IPS`).
+is trusted on the same terms as `USERHEADER` (forward auth on, `TRUSTED_PROXY_IPS` only).
 
 nginx drops a header whose value is empty, so if your proxy always sends the groups
 header (Authentik's outpost does), a user with no groups can be read as still having
@@ -181,7 +199,8 @@ order:
 
 <Steps>
 1. **A valid session cookie** (built-in *or* OIDC) is honored first.
-2. Otherwise, **forward-auth headers** from a trusted proxy are used.
+2. Otherwise, **forward-auth headers** from a trusted proxy are used, if
+   `FORWARD_AUTH_ENABLED=true`.
 3. Otherwise, browser visits are sent to **`/login`** (where the password form and/or
    the OIDC button appear, depending on what's enabled), or, if only forward auth is
    configured, to your identity provider.
@@ -195,8 +214,9 @@ with a lingering session).
 
 ### Forward auth: trust the network path
 
-Identity headers are unsigned. Restrict access to the app port and trust only the
-proxy's TCP peer, as described [above](#proxy-trust-fail-closed). Otherwise a caller
+Identity headers are unsigned. Turn forward auth on only if you use it, restrict access
+to the app port, and trust only the proxy's TCP peer, as described
+[above](#proxy-trust-fail-closed). Otherwise a caller
 can forge an admin identity. MFA, password policy, lockout, and central logout are
 handled by your IdP; Lumastra stores no forward-auth password or session cookie.
 

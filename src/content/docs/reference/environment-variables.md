@@ -80,7 +80,8 @@ applies to both forward auth and OIDC.
 
 | Variable                   | Required        | Default             | Description                                            |
 | ---------------------------- | ------------------ | ---------------------- | --------------------------------------------------------- |
-| `TRUSTED_PROXY_IPS`        | Behind a proxy   | (unset → fail-closed) | IPs/CIDRs allowed to set identity headers            |
+| `FORWARD_AUTH_ENABLED`     | For forward auth | `false`               | Read identity headers at all. Off: ignored from every peer. Upgrading forward-auth installs must set `true` |
+| `TRUSTED_PROXY_IPS`        | Behind a proxy   | (unset → fail-closed) | IPs/CIDRs allowed to set identity headers (with `FORWARD_AUTH_ENABLED`) and `X-Forwarded-For`|
 | `LUMASTRA_TRUST_ANY_PROXY` | No               | `false`               | Trust any peer's identity headers (single host only)  |
 | `USERHEADER`               | No               | `X-Forwarded-User`    | Header carrying the authenticated username             |
 | `GROUPHEADER`              | No               | `X-Forwarded-Groups`  | Header carrying the user's groups (`\|`-separated)    |

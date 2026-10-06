@@ -309,6 +309,7 @@ values override and lock their admin UI settings. See
 | `auth.userPats`                      | `FEATURE_USER_PATS`                                    | Users create personal access tokens. App default `false`.                                       |
 | `auth.adminGroups`                   | `ADMIN_GROUPS`                                         | Comma-separated groups that are admins. App default `admin`.                                    |
 | `auth.watchPermissionGroups`         | `WATCH_PERMISSION_GROUPS`                              |                                                                                                 |
+| `auth.forwardAuth.enabled`           | `FORWARD_AUTH_ENABLED`                                 | `true` when set (chart 0.1.0-beta.4+). The app ignores identity headers without it.             |
 | `auth.forwardAuth.*`                 | `USERHEADER`, `GROUPHEADER`, `NAMEHEADER`, `TRUSTED_PROXY_IPS` | Rendered with `auth.forwardAuth.enabled`.                                               |
 | `auth.oidc.*`                        | `AUTH_OIDC_*`                                          | Rendered with `auth.oidc.enabled`. The client secret goes in `secrets.env`.                     |
 
@@ -345,7 +346,8 @@ auth:
     clientId: lumastra
 ```
 
-**Forward auth** lets an identity proxy sign users in and pass identity headers. The app
+**Forward auth** lets an identity proxy sign users in and pass identity headers.
+`auth.forwardAuth.enabled: true` turns it on in the app (`FORWARD_AUTH_ENABLED`). The app
 trusts those headers only from the addresses in `auth.forwardAuth.trustedProxyIps`. With
 the router, those are the router pods, which in practice means your whole pod network.
 Any pod that can reach `web:3000` could then claim any user. So the chart requires

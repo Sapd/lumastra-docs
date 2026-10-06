@@ -23,6 +23,13 @@ documented API. See [all features](https://lumastra.org/#all-features), the
 [quick start](/start/quick-start/) and the
 [known limitations](/reference/known-limitations/).
 
+Forward auth is now opt-in: set `FORWARD_AUTH_ENABLED=true` to sign in through
+Authentik, Authelia or another forward-auth proxy. **If you ran a pre-release build with
+forward auth, add that line before you upgrade**, or nobody can sign in. With forward
+auth off, a proxy trusted only for client IP addresses can no longer sign anyone in by
+passing an `X-Forwarded-User` header through. See
+[Authentication](/guides/authentication/#forward-authentication).
+
 ## iPhone, iPad and Apple TV apps
 
 The apps are in public TestFlight. New builds show their notes in TestFlight under

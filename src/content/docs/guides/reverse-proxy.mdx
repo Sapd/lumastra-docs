@@ -70,12 +70,15 @@ Every proxy below is set up for this list. If you use another one, check each li
 With [forward auth](/guides/authentication/#forward-authentication), your proxy signs the
 user in and tells Lumastra who it is in the headers `X-Forwarded-User`,
 `X-Forwarded-Groups` and `X-Authentik-Name` (the defaults of `USERHEADER`, `GROUPHEADER`
-and `NAMEHEADER`). Lumastra believes these headers from every address in
-`TRUSTED_PROXY_IPS`, whichever sign-in method you picked.
+and `NAMEHEADER`). Lumastra reads these headers only when forward auth is turned on
+(`FORWARD_AUTH_ENABLED=true`, off by default), and then believes them from every address
+in `TRUSTED_PROXY_IPS`.
 
 A proxy passes headers it doesn't know straight through. If it isn't set up to remove
-them and its address is in `TRUSTED_PROXY_IPS`, anyone can send
-`X-Forwarded-User: admin` and is signed in as that user. Every setup below removes the
+them, forward auth is on and its address is in `TRUSTED_PROXY_IPS`, anyone can send
+`X-Forwarded-User: admin` and is signed in as that user. With forward auth off,
+Lumastra ignores the headers and logs that it did; remove them anyway, so that turning
+forward auth on later is safe. Every setup below removes the
 three headers. Keep those lines when you adapt a setup, and add them if you use another
 proxy. If you changed `USERHEADER`, `GROUPHEADER` or `NAMEHEADER`, remove those header
 names instead.
@@ -89,7 +92,8 @@ the client's copies. Follow [Authentication](/guides/authentication/) and
 `TRUSTED_PROXY_IPS` lists the addresses of proxies that Lumastra believes. It does two
 things:
 
-- It lets those proxies send the sign-in headers above. Forward auth needs this.
+- With `FORWARD_AUTH_ENABLED=true`, it lets those proxies send the sign-in headers above.
+  Forward auth needs this. With forward auth off, no proxy can sign anyone in.
 - It makes Lumastra believe `X-Forwarded-For` from those proxies, so it knows each
   client's real IP address.
 
@@ -100,7 +104,7 @@ proxy's address and refused. Setting `TRUSTED_PROXY_IPS` fixes both, but only se
 when two things are true:
 
 - Your proxy removes the sign-in headers, as every setup on this page does.
-- The address you list belongs to your proxy alone.
+- The address you list belongs to your proxy alone, if you turn forward auth on.
 
 Which address to use depends on where the proxy runs:
 

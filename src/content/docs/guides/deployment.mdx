@@ -27,8 +27,8 @@ cache always run separately and should stay on a private network.
 ## Reverse proxy
 
 Terminate TLS at Caddy, Traefik, or nginx and forward to port 3000. Set `ORIGIN` for
-secure login cookies. Forward auth additionally requires identity headers and
-`TRUSTED_PROXY_IPS`; see [Authentication](/guides/authentication/).
+secure login cookies. Forward auth additionally requires `FORWARD_AUTH_ENABLED=true`,
+identity headers and `TRUSTED_PROXY_IPS`; see [Authentication](/guides/authentication/).
 
 The [Reverse proxy guide](/guides/reverse-proxy/) has copy-paste setups for Caddy, nginx,
 Traefik and Nginx Proxy Manager. The [Docker proxy section](/guides/deploy-docker/#reverse-proxy--tls)
@@ -68,7 +68,7 @@ per-pod requirements, and the Valkey eviction-policy split.
 - `JWT_SECRET` and `LUMASTRA_MASTER_KEY` set to ≥ 32-byte random values; the master key
   **backed up separately**
 - Sign-in configured: a first admin via the `/setup` wizard (built-in login); for
-  forward auth, `TRUSTED_PROXY_IPS` set and admin granted via an `ADMIN_GROUPS` group in
+  forward auth, `FORWARD_AUTH_ENABLED=true` and `TRUSTED_PROXY_IPS` set and admin granted via an `ADMIN_GROUPS` group in
   your IdP; or for [OIDC](/guides/sso-oidc/), `AUTH_OIDC_*` set and the callback URI
   registered
 - Postgres and Valkey on a private network; regular [backups](/guides/backup-recovery/)

@@ -224,10 +224,13 @@ This applies regardless of proxy choice (Authelia, Traefik, Caddy); only the
 
 ## 3. Configure Lumastra
 
-Tell Lumastra which headers carry the identity, which group grants admin, and which
-peer it may trust the headers from:
+Turn forward auth on, and tell Lumastra which headers carry the identity, which group
+grants admin, and which peer it may trust the headers from:
 
 ```dotenv
+# Forward auth is off by default; nobody signs in through the proxy without this
+FORWARD_AUTH_ENABLED=true
+
 # Match the headers Authentik sends
 USERHEADER=X-authentik-username
 GROUPHEADER=X-authentik-groups
@@ -235,14 +238,38 @@ GROUPHEADER=X-authentik-groups
 # A user in this group becomes an admin (default: admin)
 ADMIN_GROUPS=admin
 
-# Trust identity headers ONLY from your reverse proxy (required — fail-closed)
-TRUSTED_PROXY_IPS=127.0.0.1,::1
+# Trust identity headers ONLY from your reverse proxy (required — fail-closed).
+# The address Lumastra sees the proxy connect from, never 127.0.0.1 (see below).
+TRUSTED_PROXY_IPS=172.28.0.10
 ```
 
+`TRUSTED_PROXY_IPS` is the address Lumastra sees the proxy connect **from**:
+
+- **Proxy in the same compose file:** give it a fixed address on the compose network and
+  list that address, for example `172.28.0.10`. The
+  [Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips) shows how for each
+  proxy. This is the recommended setup for forward auth.
+- **Proxy installed on the Docker host** (nginx or Caddy from your package manager):
+  Lumastra sees the Docker network's gateway, for example `172.18.0.1`, not `127.0.0.1`.
+  Find it with:
+
+  ```bash
+  docker inspect $(docker compose ps -q lumastra) -f '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}'
+  ```
+
+  Every program on the host connects from that same address, so trusting it lets any
+  local program sign in as anyone. Prefer moving the proxy onto the compose network.
+
 :::caution
-If `TRUSTED_PROXY_IPS` doesn't match the address your proxy connects from, Lumastra
-**rejects** the identity headers and forward-auth sign-in fails (anti-spoofing). Set it
-to your proxy's IP/CIDR. See [Authentication → proxy trust](/guides/authentication/#proxy-trust-fail-closed).
+If `FORWARD_AUTH_ENABLED` is off, or `TRUSTED_PROXY_IPS` doesn't match the address your
+proxy connects from, Lumastra **ignores** the identity headers and forward-auth sign-in
+fails. The setup wizard and the logs say which of the two it is and name the address
+Lumastra sees. See [Authentication → proxy trust](/guides/authentication/#proxy-trust-fail-closed).
+:::
+
+:::caution[Upgrading]
+Before October 2026 Lumastra read the headers without `FORWARD_AUTH_ENABLED`. Add it
+before you upgrade, or nobody can sign in.
 :::
 
 :::tip[Match Jellyfin usernames]
