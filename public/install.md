@@ -25,9 +25,17 @@ Run these checks and report the results:
 - Docker 24 or newer and Docker Compose 2.20 or newer: `docker --version`,
   `docker compose version`. If Docker is missing, ask before installing it.
 - Memory: 8 GB RAM recommended (`free -h` on Linux). With less, warn the person that the
-  background tasks that scan and analyse the library need memory, and offer
-  `LUMASTRA_LOW_RAM_MODE=true` for a small library.
-- Disk: at least 20 GB free for the app and its data, plus space for the media.
+  background tasks that scan and analyse the library need memory. The example compose
+  file already sets `LUMASTRA_LOW_RAM_MODE: 'true'`; keep it on such a host.
+- Disk: at least 20 GB free for the app and its data, plus space for the media
+  (`df -h` on the folder Lumastra will live in and on Docker's data directory). With
+  less, warn the person and ask whether to continue.
+- An earlier Lumastra install: run `docker ps -a` and `docker volume ls`. Docker Compose
+  names volumes after the install folder (`~/lumastra` gives `lumastra_config`,
+  `lumastra_lumastra_postgres_data` and so on), so a new install in a folder of the same
+  name silently reuses them, and the old database rejects the newly generated password.
+  If such volumes exist, ask whether to reuse that install (then keep its old `.env`) or
+  to install fresh in a folder with another name. Never delete them without asking.
 - CPU: x86-64 with x86-64-v2 support (`grep -m1 -o 'sse4_2\|popcnt' /proc/cpuinfo` shows
   both on Linux), or any 64-bit ARM CPU. On ARM, music BPM and mood analysis, the
   sound-similarity sidecar and Intel Quick Sync transcoding are not available.
@@ -94,15 +102,20 @@ is lost, the secrets Lumastra stores can't be decrypted.
 
 ## 5. Mount the media
 
-Edit `docker-compose.yml`: under `volumes:` of the `lumastra` service, add one read-only
-line per media folder from question 3, for example:
+Edit `docker-compose.yml`: the `lumastra` service's `volumes:` list is the first one in the
+file and ends with `- plugins:/app/plugins`. Add one read-only line per media folder from
+question 3 right after that entry, keeping the folder names under `/data/media`, for
+example:
 
 ```yaml
-      - /srv/media:/data/media:ro
+      - /srv/movies:/data/media/movies:ro
+      - /srv/music:/data/media/music:ro
 ```
 
 Keep the indentation of the existing entries. Validate the file with
-`docker compose config --quiet` (no output means it's valid).
+`docker compose config --quiet` (no output means it's valid). That check does not notice a
+line added to the wrong service, so also confirm that `docker compose config` lists the
+`/data/media/...` targets under `lumastra`.
 
 ## 6. Start and verify
 
@@ -111,10 +124,11 @@ docker compose up -d
 docker compose logs --tail=100 lumastra
 ```
 
-Wait until the log shows `Schema migration completed successfully`, then check:
+Wait until the log shows `Schema migration completed successfully`. The first start
+also downloads the transcoder, so give it a few minutes, then check:
 
 ```bash
-curl -fsS http://localhost:3000/api/health
+timeout 300 sh -c 'until curl -fsS http://localhost:3000/api/health; do sleep 5; done'
 ```
 
 It must return `{"status":"pass"}`. If not, run `docker compose exec lumastra npm run doctor`
