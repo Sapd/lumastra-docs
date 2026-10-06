@@ -137,8 +137,9 @@ For graceful cancellation and Force stop behavior, see
 
 A restart or deploy stops every run in progress. Scheduled runs simply continue on
 their next cycle. A run you started by hand (from the admin UI, the API or a service
-token) is resumed automatically when its task supports it, for example **Media
-Segment Repair**:
+token) is resumed automatically when its task supports it: **Media Segment Repair**,
+**Reconciliation Backfill**, **Metadata Aggregation Backfill** and **Bulk Metadata
+Sync**:
 
 - A few minutes after the restart, the interrupted run shows **failed** with
   "continued in a new run (1/3)", and a new run of the same task starts. It is
