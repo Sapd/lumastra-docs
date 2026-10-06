@@ -15,7 +15,7 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
-### 0.1.0 (2026-10-09)
+### 0.1.0 (2026-10-15)
 
 The first public release, with movies and series, music, audiobooks through
 Audiobookshelf, Live TV, Watch Together, single sign-on on every device, and a
