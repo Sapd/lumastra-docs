@@ -79,16 +79,15 @@ Read https://lumastra.org/install.md and follow it to install Lumastra on this s
 The file walks it through the same steps, tells it what to ask you, and keeps the
 generated secrets out of the chat.
 
-In Claude Code you can install the same instructions as a skill instead:
+In Claude Code, you can install these instructions as a skill instead:
 
 ```text
 /plugin marketplace add Sapd/lumastra
 /plugin install lumastra-skills@lumastra
 ```
 
-Then ask it to install Lumastra. The skill is in
-[`plugins/lumastra-skills`](https://github.com/Sapd/lumastra/tree/main/plugins/lumastra-skills)
-in the repository.
+Then ask Claude to install Lumastra.
+[Read the skill's source on GitHub](https://github.com/Sapd/lumastra/tree/main/plugins/lumastra-skills).
 :::
 
 ## 1. Get the example files
