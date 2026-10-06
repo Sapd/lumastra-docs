@@ -14,8 +14,8 @@ proxy has to do and gives a working setup for the common ones.
 - **The Apple apps require it.** The iPhone, iPad and Apple TV apps only connect to a
   server on HTTPS with a certificate the device trusts. Plain HTTP and self-signed
   certificates don't work.
-- **Your password and session travel encrypted.** The session cookie is always marked
-  `Secure`, so browsers only send it over HTTPS.
+- **Your password and session travel encrypted.** Over HTTPS the session cookie is
+  marked `Secure`, so browsers only send it over HTTPS.
 
 ## Set `ORIGIN`
 
@@ -30,9 +30,10 @@ Restart the stack after changing it.
 
 Lumastra uses it for every address it builds and for its same-origin check on sign-in
 and other form posts. If you leave it unset, Lumastra takes the host from the `Host`
-header and assumes HTTPS, which works with every setup on this page. If you set it,
-the host and port must match the address in your browser. A wrong host, or a leftover
-`:3000`, makes sign-in fail with `403`. As an alternative you can set
+header. That works with every setup on this page. If you set it, the host and port must
+match the address in your browser. A wrong host, or a leftover `:3000`, makes sign-in
+fail with `403`. With an `https` address in `ORIGIN` the session cookie is always
+`Secure`, so sign-in then only works through that address. As an alternative you can set
 `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
 [Authentication](/guides/authentication/#proxy-trust-fail-closed) for the details.
 
@@ -560,6 +561,12 @@ Traefik picked the one it can't reach. Add the `traefik.docker.network=proxy` la
 **Login fails with 403.** `ORIGIN` doesn't match the address in your browser. Compare
 the host and port character by character, remove any `:3000`, then restart Lumastra.
 Also check that your proxy passes the `Host` header through.
+
+**Sign-in succeeds, but you land on the sign-in page again.** The browser dropped the
+session cookie because it is marked `Secure` and the page was opened over plain HTTP.
+This happens when `ORIGIN` is an `https` address and you open Lumastra at
+`http://<server-ip>:3000`. Use the `https` address, or leave `ORIGIN` unset if you also
+want plain-HTTP access on your local network.
 
 **Live updates arrive late or never.** The proxy is buffering or compressing event
 streams. Turn off buffering for the Lumastra location (`proxy_buffering off` in nginx),

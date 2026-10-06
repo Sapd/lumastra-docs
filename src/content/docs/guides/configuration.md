@@ -77,10 +77,10 @@ trusts them from known peers:
 
 Forward auth fails closed when neither proxy-trust setting is configured.
 
-Behind a TLS-terminating proxy, also set `ORIGIN` (or `PROTOCOL_HEADER` /
-`HOST_HEADER`, default `x-forwarded-proto` / `x-forwarded-host`) so the app
-sees the request as `https`. That's what gives the built-in-login session
-cookie its `Secure` flag.
+The built-in-login session cookie is marked `Secure` unless the request shows plain
+HTTP: the browser's `Origin` on the sign-in request, or the proxy's `X-Forwarded-Proto` header
+from a `TRUSTED_PROXY_IPS` address (or from any address while that list is empty).
+Set `ORIGIN` to your `https` address to make the cookie `Secure` on every request.
 
 These paths authenticate their own clients and must bypass the proxy's identity gate.
 Otherwise token/device clients fail or enter redirect loops:

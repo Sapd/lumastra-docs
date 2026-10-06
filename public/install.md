@@ -59,10 +59,12 @@ Ask these before you continue, and use the answers in the later steps:
      `media.example.com`), and does its DNS already point at this server?
    - If they have no reverse proxy, set one up in step 7: Traefik with Docker labels
      fits Docker Compose well; Caddy is also simple. Let them choose.
-   - Only if they explicitly want Lumastra on this machine alone, skip the proxy. Tell
-     them that sign-in then only works at `http://localhost:3000` on this machine:
-     browsers drop the session cookie on plain HTTP to any other address. Don't change
-     the port mapping to `3000:3000` to work around that.
+   - Only if they explicitly want Lumastra without HTTPS, skip the proxy. It then works
+     at `http://localhost:3000` on this machine. For other devices on their local
+     network, change the port mapping to `3000:3000` and leave `ORIGIN` unset; they open
+     `http://<server-ip>:3000`. Tell them that plain HTTP sends passwords unencrypted
+     over the network, that the iPhone, iPad and Apple TV apps need HTTPS, and not to
+     forward port 3000 on their router.
 5. How should people sign in? Built-in accounts work out of the box. Single sign-on via
    OIDC or forward auth can be added later: https://lumastra.org/guides/authentication/
 6. Do they have a free TMDB API key for movie and series metadata? It's optional but
@@ -172,7 +174,8 @@ configuration: https://lumastra.org/guides/reverse-proxy/
 
 Tell the person to open `https://<their domain>/setup` to create the admin account and
 add the libraries under `/data/media/...`. Without a proxy, they open
-http://localhost:3000/setup on that machine or through an SSH tunnel. You can't do this
+http://localhost:3000/setup on that machine, through an SSH tunnel, or at
+`http://<server-ip>:3000/setup` if they changed the port mapping. You can't do this
 step for them.
 
 Summarise for the person: the install folder, which media folders are mounted, the

@@ -41,13 +41,14 @@ forward-auth request or OIDC sign-in), or set `SETUP_UNLOCK=1` in the container
 once recovery is complete; `settings.json` cannot unlock setup. Local/dev recovery is
 also documented in `scripts/setup-unlock.ts`.
 
-:::note[Set your origin behind a TLS proxy]
-Built-in and OIDC sessions use a cookie that's marked `Secure` only when the app sees
-the request as HTTPS. Behind a TLS-terminating reverse proxy, set
-`ORIGIN=https://your-domain` (or `PROTOCOL_HEADER=x-forwarded-proto` +
-`HOST_HEADER=x-forwarded-host`) so the app knows it's served over `https`. The setup
-wizard detects this mismatch and warns you. Forward auth alone (no login cookie) is
-unaffected.
+:::note[When the session cookie is Secure]
+Built-in and OIDC sessions use a cookie that's marked `Secure` unless the request shows
+that the browser is on plain HTTP. Lumastra sees that from the browser's own `Origin`
+header on the sign-in request, or from `X-Forwarded-Proto` (or `Forwarded`) sent by your
+reverse proxy. The proxy header counts only from an address in `TRUSTED_PROXY_IPS`, or from any
+address while that list is empty. So sign-in works over plain HTTP on your local
+network, and HTTPS sites keep `Secure`. Set `ORIGIN=https://your-domain` to mark the
+cookie `Secure` on every request. Forward auth alone (no login cookie) is unaffected.
 :::
 
 ## Built-in login
@@ -204,8 +205,8 @@ handled by your IdP; Lumastra stores no forward-auth password or session cookie.
 Passwords use scrypt hashing. Login is rate-limited per IP, with per-account lockout
 and a server-side password policy. Sessions are database-backed, stored as hashes,
 and revoked on password change. Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure`
-when the app sees HTTPS; set `ORIGIN` behind a TLS proxy. Cross-site form posts are
-blocked by an origin check.
+when the browser uses HTTPS (see the note above). Cross-site form posts are blocked by
+an origin check.
 
 There is no built-in MFA or email password reset. Use strong passwords; admins reset
 user passwords at **Admin → Users**, or use the host command under
