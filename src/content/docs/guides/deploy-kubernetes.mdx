@@ -37,7 +37,7 @@ role. The sonic sidecar has its own image, `ghcr.io/lumastra/lumastra-sonic-embe
 | `proxy`                     | Live TV stream proxy                                                     | off                                           |
 | `sonic`                     | Sonic embedder sidecar (music similarity)                                | off                                           |
 | `valkey-cache`, `valkey-tasks` | Bundled Valkey, or one instance with `valkey.single`                  | on                                            |
-| CloudNativePG `Cluster`     | Optional PostgreSQL, with `database.mode: cnpg`                          | off (you bring a database)                    |
+| CloudNativePG `Cluster`     | PostgreSQL, with `database.mode: cnpg` (recommended)                     | off (you bring a database)                    |
 
 `mode: split` (the default) runs `web` and `worker` separately. `mode: allInOne` runs
 one pod that does both and needs no router.
@@ -116,8 +116,9 @@ Pods run as uid and gid 1000 with `fsGroup: 1000`. Many NFS setups ignore `fsGro
 make the volumes writable by uid 1000 on the server side.
 
 **PostgreSQL 17 or newer** with the `vector` (pgvector), `pg_trgm`, `pgcrypto` and
-`unaccent` extensions. Use your own server, or let the chart render a
-[CloudNativePG](https://cloudnative-pg.io/) cluster. The app's role does not need to be
+`unaccent` extensions. We recommend letting the chart render a
+[CloudNativePG](https://cloudnative-pg.io/) cluster; you can also use your own server.
+The app's role does not need to be
 a superuser, but the extensions must exist before the first start. PostgreSQL 16 does
 not work.
 
@@ -452,12 +453,10 @@ Migrations run inside the web and worker pods at startup, under a PostgreSQL adv
 lock. No Job or init container is involved. The first pod to boot migrates and the
 others wait.
 
-**External database** (the default). `DATABASE_URL` comes from the Secret named in
-`database.external.existingSecret`, or from `secrets.existingSecret` when that is
-unset. The key defaults to `DATABASE_URL` and is set by `database.external.urlKey`.
-Create the extensions once as shown in the quick start.
-
-**CloudNativePG** (`database.mode: cnpg`). The CloudNativePG operator must be installed.
+**CloudNativePG (recommended)** (`database.mode: cnpg`). This is the setup the chart is
+tested with in production. The CloudNativePG operator must be installed first; the chart
+does not install it, because it is a cluster-wide component. The chart's default stays
+`external`, so an install never creates a database you didn't ask for.
 The chart renders a `Cluster` with a non-superuser owner and creates the extensions in
 `postInitApplicationSQL`. The app reads `DATABASE_URL` from the operator's `<cluster>-app`
 Secret. The Valkey password and the master key still come from your own Secret. While the
@@ -473,6 +472,19 @@ database:
       size: 50Gi
       storageClass: fast-block
 ```
+
+The `Cluster` uses the same Postgres settings as the Docker Compose file:
+`shared_buffers: 512MB` and raised JIT thresholds. Add your own under
+`database.cnpg.parameters`; they are merged into these, so you can raise
+`shared_buffers` on a large node (together with the pod's memory).
+
+**Your own database** (`database.mode: external`, the chart default). `DATABASE_URL` comes
+from the Secret named in `database.external.existingSecret`, or from
+`secrets.existingSecret` when that is unset. The key defaults to `DATABASE_URL` and is set
+by `database.external.urlKey`. Create the extensions once as shown in the quick start. The
+chart can't tune a database it doesn't run: set at least `shared_buffers` above the 128MB
+default and raise `jit_above_cost` to `10000000` (with `jit_optimize_above_cost` and
+`jit_inline_above_cost` at `50000000`), as the Compose file does.
 
 **Locale and collation.** CloudNativePG initialises the database with locale `C` unless
 told otherwise. That is fine for a new install. If you move an existing database into a
