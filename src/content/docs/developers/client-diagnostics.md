@@ -10,7 +10,7 @@ and how to review or disable it.
 ## What gets reported
 
 Each app can send small diagnostic events to `POST /diagnostics/events`, batched
-(up to 50 per request) and mounted on both `/api` and `/api/v1`. There are six
+(up to 50 per request) and mounted on both `/api` and `/api/v1`. There are seven
 kinds:
 
 | Kind | What it is | Gated by |
@@ -21,6 +21,7 @@ kinds:
 | `api_failures` | Counts of failed API calls, by endpoint | `FEATURE_CLIENT_DIAGNOSTICS` |
 | `playback_incident` | A playback failure or stall | always on |
 | `log_bundle` | A submitted log bundle (see below) | `FEATURE_CLIENT_LOG_BUNDLES` |
+| `compat_incident` | A Jellyfin app that could not play an item (see [Jellyfin apps](#jellyfin-apps)) | `FEATURE_JELLYFIN_COMPAT` |
 
 `playback_incident` is always recorded regardless of the feature switch: it's
 the same report a client sends when a stream stalls or fails, and it's exempt
@@ -43,6 +44,35 @@ limited to 10 uploads per hour per user, and gated by its own FEATURE_* flag,
 `FEATURE_CLIENT_LOG_BUNDLES` (default: on). Every line in an uploaded bundle is
 scrubbed server-side before it is stored. The stored size, not the upload's
 original size, is what counts against the byte budget.
+
+### Jellyfin apps
+
+Third-party Jellyfin apps connect through Lumastra's Jellyfin-compatible API.
+They don't send Lumastra's own diagnostics, so the server watches for two
+signals instead.
+
+**Jellyfin client incompatibility.** This entry (kind `compat_incident`) means
+the app asked how to play an item and then never requested the stream, twice in
+a row on the same device, or once when Lumastra's own answer did not match what
+the app's data model requires. It usually means the app could not read
+Lumastra's answer. The server records one entry per device and app version per
+day. Each holds the app name and version, the device name, and up to the last
+five misses with the technical shape of the media (container, codecs and the
+like) and any contract violations found. It contains no titles or paths.
+
+**Crash logs.** Some Jellyfin apps, such as the Android TV app, upload crash
+reports. These are stored as log bundles (`source: jellyfin`) and appear in the
+same admin list. They are scrubbed like any other bundle, capped at 2 MiB, kept
+at most 5 per device and for 30 days (`CLIENT_LOG_BUNDLE_RETENTION_DAYS`),
+deduplicated, and subject to `FEATURE_CLIENT_LOG_BUNDLES` and the per-user daily
+byte budget.
+
+**Report on GitHub.** On these rows an admin can open a report preview. The
+report removes titles, user and device names, file paths, IP addresses and
+tokens, and replaces ids with short tags that are only meaningful on your
+server. From the preview an admin can download the report file or open a
+prefilled GitHub issue form. Nothing is sent by the server; the admin decides
+whether to submit anything.
 
 ## Redaction
 
