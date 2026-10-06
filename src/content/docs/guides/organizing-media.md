@@ -73,8 +73,11 @@ TV/
 :::caution[The series name comes from the folder]
 For TV, the **show folder** (the folder above `Season XX`) is what Lumastra uses
 to identify the series, not the filename. A good folder name matters more than
-the episode filename. Recognized season folders include `Season 01`, `Season 1`,
-`Staffel 2`, `Saison 3`, `Temporada 4`, and `S01` (case-insensitive).
+the episode filename. Recognized season folders (case-insensitive):
+
+- `Season 01`, `Season 1`
+- `Staffel 2`, `Saison 3`, `Temporada 4`
+- `S01`
 :::
 
 ### Music
@@ -110,9 +113,12 @@ Training/
 
 ## Naming conventions
 
-Lumastra normalizes `.`, `_`, space, and `-` separators, strips a leading
-`[Group]` tag, and drops quality/codec junk tokens (`1080p`, `BluRay`, `x265`,
-`DTS`, …) so they never pollute the title.
+Before reading a filename, Lumastra:
+
+- treats `.`, `_`, space, and `-` as separators;
+- strips a leading `[Group]` tag;
+- drops quality and codec tokens (`1080p`, `BluRay`, `x265`, `DTS`, …) so they
+  never end up in the title.
 
 ### Movies
 
@@ -123,29 +129,41 @@ Lumastra normalizes `.`, `_`, space, and `-` separators, strips a leading
 | `Metropolis (1927) {tmdb-19}.mkv`                   | TMDB id (exact match)            |
 | `Nosferatu.1922.{imdb-tt0013442}.mkv`               | IMDB id tt0013442                |
 
-A parenthesized `(Year)` is preferred and disambiguates remakes. Embedding a
-`{tmdb-NNN}` or `tt#######` id (in the filename **or** parent folder) bypasses the
-fuzzy search entirely.
+- A parenthesized `(Year)` is preferred and tells remakes apart.
+- A `{tmdb-NNN}` or `tt#######` id in the filename **or** the parent folder
+  skips the fuzzy search entirely.
 
 ### TV episodes
 
-The primary pattern is `SxxExx` (case-insensitive; the episode number itself
-has no digit cap: Lumastra never truncates an over-long episode number, since
-shortening it could turn a bad filename into a different, real-looking
-episode). The episode title may appear in the filename:
+The primary pattern is `SxxExx`:
+
+- It is case-insensitive.
+- The episode number has no digit cap. Lumastra never shortens an over-long
+  episode number, because that could turn a bad filename into a different,
+  real-looking episode.
+- The episode title may follow it in the filename.
+
+The `1x05` form (season `x` episode) works too:
 
 | Filename                                              | Season / Episode |
 | ------------------------------------------------------ | ----------------- |
 | `The.Adventures.of.Superman.S02E05.mkv`               | 2 / 5             |
 | `Dragnet - S01E01 - The Human Bomb.mkv`               | 1 / 1             |
 | `The.Adventures.of.Superman.S01E13.mkv`               | 1 / 13            |
+| `Dragnet 1x05.mkv`                                    | 1 / 5             |
+| `Dragnet S01.E05.mkv` or `Dragnet S01 E05.mkv`        | 1 / 5             |
 
 ### Anime / absolute numbering
 
-When there's no `SxxExx`, several anime forms work: `[Fansub] Momotaro - 001
-[1080p].mkv`, `Momotaro 01 - The Peach Boy.mkv`, `Momotaro.Ep01.mkv`, and a `v2`
-version suffix. Absolute-ordered anime is stored as a high episode number under
-season 1 (e.g. `S01E0001`).
+When there's no `SxxExx`, these anime forms work:
+
+- `[Fansub] Momotaro - 001 [1080p].mkv`
+- `Momotaro 01 - The Peach Boy.mkv`
+- `Momotaro.Ep01.mkv`
+- a `v2` version suffix, as in `Momotaro - 01v2.mkv`
+
+Absolute-ordered anime is stored as a high episode number under season 1
+(e.g. `S01E0001`).
 
 :::note[Split-cour anime and TMDB season mismatches]
 Sonarr/TVDB and TMDB sometimes disagree on season structure for split-cour anime
@@ -165,15 +183,17 @@ into one item per episode, all sharing the same file:
 | `Dragnet.S01E01-E03.mkv`                                     | 1 → 3         |
 | `Betty Boop - S01E01-02-03 - Snow White + Bimbo + Ha!.mp4`   | 1 → 3         |
 | `Momotaro.S01E0001E0002.mkv`                                 | 1 → 2 (anime) |
+| `Dragnet 1x01-03.mkv`                                        | 1 → 3         |
 
-Lumastra creates a distinct episode entry for each number in the range and
-attaches the same physical file to all of them. On re-scan, a partially-linked
-combined file self-heals. Quality tokens are protected: `Dragnet.S01E05-1080p.mkv`
-is episode 5 only, **not** a range.
-
-**Per-segment thumbnails:** when frame extraction is enabled, each episode in a
-combined file gets a *different* frame, sampled proportionally. Two episodes get
-frames at 25% and 75% of the file, so the thumbnails aren't identical.
+- Lumastra creates a distinct episode entry for each number in the range and
+  attaches the same physical file to all of them.
+- On re-scan, a partially linked combined file repairs itself.
+- Quality tokens are protected: `Dragnet.S01E05-1080p.mkv` is episode 5 only,
+  **not** a range.
+- **Per-segment thumbnails:** when frame extraction is enabled, each episode in
+  a combined file gets a *different* frame, sampled proportionally. Two
+  episodes get frames at 25% and 75% of the file, so the thumbnails aren't
+  identical.
 
 ## Specials, editions & multi-part movies
 
@@ -182,33 +202,51 @@ frames at 25% and 75% of the file, so the thumbnails aren't identical.
 - **Editions** are recognized via Plex-style `{edition-Restored}` /
   `{edition-4K}` braces, a library-path edition label, or inline patterns.
   Multiple editions of a movie become selectable versions.
-- **Multi-part movies**: `Part1`/`pt2`/`cd1`/`disc2` are treated as parts of one
-  movie, not separate items. (To store two *episodes* in one file, use the
-  `S01E01-E02` forms above.)
+- **Multi-part files**: `Part1`, `pt2`, `cd1`, `disc2` mark the parts of one
+  movie or episode, not separate items. A part counts only when the other
+  parts sit in the same folder; a lone `Part 1` is read as part of the title.
+  For an episode, every part needs the episode number:
+  `The Show S01E01 pt1.mkv` and `The Show S01E01 pt2.mkv`. (To store two
+  *episodes* in one file, use the `S01E01-E02` forms above.)
 
 ## Sidecar files & extensions
 
-**Video:** `.mkv .mp4 .avi .m4v .mov .wmv .ts .m2ts .webm .ogv .flv .3gp .mpg
-.mpeg` · **Audio:** `.flac .mp3 .m4a .opus .ogg .wav .wma .aac .alac` (only
-ingested in music libraries).
+Scanned extensions:
 
-- **Subtitles** (`.srt .ass .ssa .vtt .sub .sup`) are matched by name:
-  `Nosferatu.en.srt`, `Nosferatu.de.forced.srt`, `Nosferatu.pt-BR.srt`,
-  `Nosferatu.en.sdh.srt`.
-- **Artwork** (`folder`/`poster`/`cover`/`backdrop`/`logo`/`banner` images) and
-  **`.nfo`** sidecars (read for authoritative IMDB/TMDB ids) are picked up
-  automatically.
-- **Ignored:** `extras`, `samples`, `trailers`, `featurettes`, disc folders
-  (`VIDEO_TS`, `BDMV`), vendor dirs (`@eaDir`, `$RECYCLE.BIN`), files with
-  `sample` in the name, and anything matched by a per-directory **`.lumastraignore`**
-  file (gitignore-style).
+- **Video:** `.mkv` `.mp4` `.avi` `.m4v` `.mov` `.wmv` `.ts` `.m2ts` `.webm`
+  `.ogv` `.flv` `.3gp` `.mpg` `.mpeg`
+- **Audio:** `.flac` `.mp3` `.m4a` `.opus` `.ogg` `.wav` `.wma` `.aac` `.alac`
+  (only ingested in music libraries)
+
+**Subtitles** (`.srt` `.ass` `.ssa` `.vtt` `.sub` `.sup`) are matched to the
+video by name:
+
+- `Nosferatu.en.srt`
+- `Nosferatu.de.forced.srt`
+- `Nosferatu.pt-BR.srt`
+- `Nosferatu.en.sdh.srt`
+
+These are picked up automatically:
+
+- **Artwork:** `folder`, `poster`, `cover`, `backdrop`, `logo`, and `banner`
+  images.
+- **`.nfo` sidecars**, read for authoritative IMDB/TMDB ids.
+
+**Ignored:**
+
+- `extras`, `samples`, `trailers`, and `featurettes` folders
+- disc folders (`VIDEO_TS`, `BDMV`)
+- vendor folders (`@eaDir`, `$RECYCLE.BIN`)
+- files with `sample` in the name
+- anything matched by a per-folder **`.lumastraignore`** file (gitignore-style)
 
 ## Troubleshooting
 
-Nothing is dropped: a file that can't be matched is still added as a playable
-**unmatched** item built from its filename, and is retried automatically once
-providers are healthy. Items needing manual attention appear in the admin
-re-identify surface.
+Nothing is dropped. A file that can't be matched:
+
+- is still added as a playable **unmatched** item built from its filename;
+- is retried automatically once providers are healthy;
+- appears in the admin re-identify surface when it needs manual attention.
 
 **Make identification reliable:**
 
@@ -222,9 +260,8 @@ re-identify surface.
 
 | Mistake                                       | Fix                                |
 | ---------------------------------------------- | ----------------------------------- |
-| `The Show 1x05.mkv` (Plex `x` format)         | Use `The Show S01E05.mkv`          |
 | Daily show `The Show 2021.03.14.mkv` (date)   | Use `SxxExx` numbering             |
-| Two episodes as `…pt1.mkv` / `…pt2.mkv`       | Use `S01E01-E02.mkv`               |
+| Split episode as `The Show pt1.mkv` / `pt2.mkv` (no episode number) | Use `The Show S01E01 pt1.mkv` / `pt2.mkv` |
 | Episode title used as the show folder         | Folder must be the **show** name   |
 | Music with no tags in a flat folder           | Use `Artist/Album/Track` folders   |
 
