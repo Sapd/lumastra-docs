@@ -27,7 +27,7 @@ Two limits govern scan throughput:
 
 ## Database connection pools
 
-Lumastra splits one Postgres database into **three connection pools** so background work
+Lumastra splits one Postgres database into **four connection pools** so background work
 can never starve user-facing requests (see
 [Architecture decisions](/developers/architecture-decisions/)):
 
@@ -36,9 +36,11 @@ can never starve user-facing requests (see
 | `LUMASTRA_DB_POOL_WEB_MAX`   | `8` | User-facing web & API requests |
 | `LUMASTRA_DB_POOL_TASK_MAX`  | `7` | Background tasks, scans, ingest |
 | `LUMASTRA_DB_POOL_ADMIN_MAX` | `4` | Admin polling (separate so it never delays playback) |
+| `LUMASTRA_DB_POOL_HEARTBEAT_MAX` | `2` | Task liveness heartbeats (separate so a busy scan can't starve them) |
 
-Defaults sum to **19 connections per instance**, well under Postgres' default
-`max_connections` of 100.
+Defaults sum to **21 connections per instance**, well under Postgres' default
+`max_connections` of 100. For comparison, a setup with two web replicas, a worker and
+the stream proxy uses about 55 connections.
 
 - Raise `LUMASTRA_DB_POOL_TASK_MAX` on a **dedicated worker container**, since its
   web/admin pools sit idle, and keep it `≥ LUMASTRA_SCAN_CONCURRENCY + a few`.
