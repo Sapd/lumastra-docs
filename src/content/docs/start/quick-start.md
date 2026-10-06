@@ -182,9 +182,10 @@ curl http://localhost:3000/api/health
 
 The example compose file publishes port 3000 on `127.0.0.1` only, so this check works
 right away. To reach the app from other machines on your network without a reverse
-proxy, change `127.0.0.1:3000:3000` to `3000:3000` on the `lumastra` service. Once a
-reverse proxy is in front, remove the `ports:` block so the app is only reachable
-through the proxy.
+proxy, change `127.0.0.1:3000:3000` to `3000:3000` on the `lumastra` service. A
+reverse proxy installed on the same host connects to `127.0.0.1:3000`, so keep the
+block then. If the proxy runs in the same compose file, remove the `ports:` block so the
+app is only reachable through the proxy.
 
 The admin-only config doctor at `/api/health/config` returns `401` before setup.
 Run it locally instead:

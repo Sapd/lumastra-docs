@@ -137,6 +137,12 @@ network instead; see [Deploy with Docker → Reverse proxy](/guides/deploy-docke
 If headers are rejected, the setup wizard and the logs (`identity headers ignored —
 untrusted TCP peer`) name the peer address that sent them.
 
+A trusted proxy must also remove the identity headers a client sends. Lumastra believes
+them from every address in `TRUSTED_PROXY_IPS`, whichever sign-in method you picked, so
+a proxy that passes a client's `X-Forwarded-User` through lets anyone sign in as anyone.
+The setups in the [Reverse proxy guide](/guides/reverse-proxy/#sign-in-headers) remove
+them.
+
 :::caution
 If neither is set, identity headers are rejected and **nobody can sign in via forward
 auth**. This is intentional anti-spoofing: without it, anyone able to reach the

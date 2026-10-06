@@ -14,19 +14,27 @@ proxy has to do and gives a working setup for the common ones.
 - **The Apple apps require it.** The iPhone, iPad and Apple TV apps only connect to a
   server on HTTPS with a certificate the device trusts. Plain HTTP and self-signed
   certificates don't work.
-- **Login cookies.** The session cookie gets its `Secure` flag only when Lumastra sees
-  the request as HTTPS.
-- **`ORIGIN` has to match.** Behind a TLS proxy, Lumastra sees plain HTTP unless you
-  tell it the public URL. Set `ORIGIN` in your `.env`:
+- **Your password and session travel encrypted.** The session cookie is always marked
+  `Secure`, so browsers only send it over HTTPS.
 
-  ```dotenv
-  ORIGIN=https://lumastra.example.com
-  ```
+## Set `ORIGIN`
 
-  Use the exact public address: scheme, host and port (leave the port out if it is 443).
-  Restart the stack after changing it. As an alternative you can set
-  `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
-  [Authentication](/guides/authentication/#proxy-trust-fail-closed) for the details.
+Set `ORIGIN` in your `.env` to the public address:
+
+```dotenv
+ORIGIN=https://lumastra.example.com
+```
+
+Use the exact public address: scheme, host and port (leave the port out if it is 443).
+Restart the stack after changing it.
+
+Lumastra uses it for every address it builds and for its same-origin check on sign-in
+and other form posts. If you leave it unset, Lumastra takes the host from the `Host`
+header and assumes HTTPS, which works with every setup on this page. If you set it,
+the host and port must match the address in your browser. A wrong host, or a leftover
+`:3000`, makes sign-in fail with `403`. As an alternative you can set
+`PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
+[Authentication](/guides/authentication/#proxy-trust-fail-closed) for the details.
 
 ## What the proxy must do
 
@@ -34,12 +42,17 @@ Every proxy below is set up for this list. If you use another one, check each li
 
 - [ ] Forward to Lumastra on port 3000 over plain `http://`.
 - [ ] Pass the `Host` header through, and set `X-Forwarded-For` and `X-Forwarded-Proto`.
+- [ ] Remove the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and
+      `X-Authentik-Name` from every request it forwards. Lumastra reads them for
+      [forward auth](/guides/authentication/#forward-authentication). See
+      [Sign-in headers](#sign-in-headers) below for why this matters.
 - [ ] Don't buffer streaming responses. Live updates (notifications, watch-state sync,
       Watch Together) use Server-Sent Events, and video is served as HLS segments and
       byte ranges. Lumastra needs no WebSocket support.
-- [ ] Allow long read timeouts. A stream or an event connection can stay open for hours,
-      and a transcode can take a while to produce its first segment. Lumastra sends a
-      keepalive comment about every 10 seconds on event streams.
+- [ ] Allow long timeouts in both directions. A stream or an event connection can stay
+      open for hours, a transcode can take a while to produce its first segment, and a
+      paused player can stop reading for minutes. Lumastra sends a keepalive comment
+      about every 10 seconds on event streams.
 - [ ] Accept request bodies up to the biggest upload you want, at least the app's
       `BODY_SIZE_LIMIT` (50 MB in the example compose file). The app's own limits are
       10 MB for artwork, 2 MiB for avatars and 3 MiB for diagnostics bundles from the
@@ -51,37 +64,56 @@ Every proxy below is set up for this list. If you use another one, check each li
       query string. See
       [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
+## Sign-in headers
+
+With [forward auth](/guides/authentication/#forward-authentication), your proxy signs the
+user in and tells Lumastra who it is in the headers `X-Forwarded-User`,
+`X-Forwarded-Groups` and `X-Authentik-Name` (the defaults of `USERHEADER`, `GROUPHEADER`
+and `NAMEHEADER`). Lumastra believes these headers from every address in
+`TRUSTED_PROXY_IPS`, whichever sign-in method you picked.
+
+A proxy passes headers it doesn't know straight through. If it isn't set up to remove
+them and its address is in `TRUSTED_PROXY_IPS`, anyone can send
+`X-Forwarded-User: admin` and is signed in as that user. Every setup below removes the
+three headers. Keep those lines when you adapt a setup, and add them if you use another
+proxy. If you changed `USERHEADER`, `GROUPHEADER` or `NAMEHEADER`, remove those header
+names instead.
+
+With forward auth, the forward-auth step sets these headers after the proxy has removed
+the client's copies. Follow [Authentication](/guides/authentication/) and
+[Setting up Authentik](/guides/sso-authentik/) for that part.
+
 ## `TRUSTED_PROXY_IPS`
 
 `TRUSTED_PROXY_IPS` lists the addresses of proxies that Lumastra believes. It does two
 things:
 
-- It lets those proxies send identity headers for [forward auth](/guides/authentication/#forward-authentication).
-  Without it, forward auth does not work.
+- It lets those proxies send the sign-in headers above. Forward auth needs this.
 - It makes Lumastra believe `X-Forwarded-For` from those proxies, so it knows each
   client's real IP address.
 
-If you use built-in or OIDC login and leave it empty, everything still works. Per-IP rate
+With built-in or OIDC login you can leave it empty, and everything works. Per-IP rate
 limits and failed-login counters then give everyone behind the proxy one shared budget,
 and a personal access token restricted with `allowed_ips` is compared against the
-proxy's address and refused. Set `TRUSTED_PROXY_IPS` to your proxy's address to fix both.
+proxy's address and refused. Setting `TRUSTED_PROXY_IPS` fixes both, but only set it
+when two things are true:
+
+- Your proxy removes the sign-in headers, as every setup on this page does.
+- The address you list belongs to your proxy alone.
+
+Which address to use depends on where the proxy runs:
+
+- **Proxy in the same compose file** (the Caddy service variant, Traefik and Nginx Proxy
+  Manager below): give the proxy a fixed address and list only that address. Each setup
+  below shows how.
+- **Proxy installed on the Docker host** (Caddy or nginx from your package manager):
+  leave `TRUSTED_PROXY_IPS` empty. Lumastra sees the proxy's requests coming from the
+  compose network's gateway (for example `172.18.0.1`), and every other program on the
+  host connects from that same address. Trusting the gateway lets any local program send
+  sign-in headers. The details are in
+  [Deploy with Docker](/guides/deploy-docker/#reverse-proxy--tls).
+
 See [Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-you-run-behind-a-reverse-proxy).
-
-```dotenv
-# Proxy on the same host, reaching Lumastra through the published port
-# (see the caution below for what Lumastra sees in that case)
-TRUSTED_PROXY_IPS=127.0.0.1,::1
-```
-
-:::caution[Which address does Lumastra see?]
-Lumastra checks the TCP peer that connects to it. With a proxy installed on the Docker
-host, that peer is the compose network's gateway (for example `172.21.0.1`).
-Lumastra never sees `127.0.0.1` in that case. Trusting the gateway trusts every process
-on the host. For forward auth,
-run the proxy as a service in the same compose file and trust only its fixed container
-address. The details are in
-[Deploy with Docker](/guides/deploy-docker/#reverse-proxy--tls).
-:::
 
 ## Before you start
 
@@ -89,12 +121,14 @@ address. The details are in
   443 for certificate issuance and HTTPS.
 - Set `ORIGIN` in `.env` as above.
 - When the proxy runs on the same host, the example compose file already publishes
-  `127.0.0.1:3000:3000`, which is all it needs. When the proxy runs in the same compose
-  file, remove the `ports:` block from the `lumastra` service and send traffic to
-  `lumastra:3000` over the compose network.
+  `127.0.0.1:3000:3000`, which is all it needs. Keep that `ports:` block. When the proxy
+  runs in the same compose file, remove the `ports:` block from the `lumastra` service
+  and send traffic to `lumastra:3000` over the compose network.
 - The example compose file ships Traefik labels with an Authentik forward-auth
   middleware. They do nothing without Traefik. If you use Traefik, replace them as shown
   in the Traefik setup below.
+- The example compose file indents with 4 spaces, and so do the snippets below. Keep the
+  indentation when you paste, or Docker Compose rejects the file.
 
 ## Setups
 
@@ -108,45 +142,76 @@ as described in [Authentication](/guides/authentication/) and
 
 Caddy gets and renews certificates by itself. It passes `Host` through, sets
 `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`, flushes event streams
-immediately, and doesn't limit request body size by default. The whole config is:
+immediately, has no timeouts that cut off a stream, and doesn't limit request body size
+by default. The whole config is:
 
 ```caddyfile
 lumastra.example.com {
-    reverse_proxy 127.0.0.1:3000
+    reverse_proxy 127.0.0.1:3000 {
+        # Lumastra reads sign-in headers from trusted proxies. Never pass a client's own.
+        header_up -X-Forwarded-User
+        header_up -X-Forwarded-Groups
+        header_up -X-Authentik-Name
+    }
 }
 ```
+
+With Caddy installed on the host, leave `TRUSTED_PROXY_IPS` empty (see
+[`TRUSTED_PROXY_IPS`](#trusted_proxy_ips)).
 
 If Caddy runs in the same compose file, point it at the service name instead:
 
 ```caddyfile
 lumastra.example.com {
-    reverse_proxy lumastra:3000
+    reverse_proxy lumastra:3000 {
+        header_up -X-Forwarded-User
+        header_up -X-Forwarded-Groups
+        header_up -X-Authentik-Name
+    }
 }
 ```
 
-Add Caddy as a service next to `lumastra`, on the same network, and add the three
-volumes at the bottom of the file:
+Add Caddy as a service next to `lumastra` with a fixed address, remove the `ports:`
+block from `lumastra`, and add the two volumes at the bottom of the file:
 
 ```yaml
 services:
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - lumastra-network
+    caddy:
+        image: caddy:2
+        restart: unless-stopped
+        ports:
+            - '80:80'
+            - '443:443'
+            - '443:443/udp'
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        networks:
+            lumastra-network:
+                ipv4_address: 172.28.0.10
 
 volumes:
-  caddy_data:
-  caddy_config:
+    caddy_data:
+    caddy_config:
 ```
+
+A fixed address needs a subnet on the network. Replace the `lumastra-network` entry
+under the top-level `networks:` with:
+
+```yaml
+networks:
+    lumastra-network:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.28.0.0/24
+                  ip_range: 172.28.0.128/25
+```
+
+`ip_range` keeps Docker's automatic addresses away from the one you picked. Then set
+`TRUSTED_PROXY_IPS=172.28.0.10` in `.env`. If `172.28.0.0/24` is already used on your
+host, pick another private range and change all three addresses.
 
 Caddy writes no access log unless you add a `log` block. If you do, filter the query
 string as shown in
@@ -155,9 +220,19 @@ string as shown in
 </TabItem>
 <TabItem label="nginx">
 
-This is a complete `server` block for a proxy on the same host. Certificates come from
-your own setup, for example Certbot. Put the file in `/etc/nginx/conf.d/lumastra.conf`
-or your `sites-available` folder.
+This is a complete config for nginx installed on the same host. It works with nginx 1.18
+and newer, so also with the versions in Debian 12 and Ubuntu 22.04 and 24.04.
+
+Get the certificate first, because nginx refuses to start with a `ssl_certificate` file
+that doesn't exist yet. With Certbot and its nginx plugin, while only the default site
+is enabled:
+
+```bash
+sudo certbot certonly --nginx -d lumastra.example.com
+```
+
+Certbot also sets up renewal. Then put this file in `/etc/nginx/conf.d/lumastra.conf`
+or your `sites-available` folder:
 
 ```nginx
 server {
@@ -168,9 +243,9 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;   # nginx 1.25.1 or newer; on older versions use "listen 443 ssl http2;"
+    # nginx 1.25.1 or newer also accepts "listen 443 ssl;" plus "http2 on;".
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name lumastra.example.com;
 
     ssl_certificate     /etc/letsencrypt/live/lumastra.example.com/fullchain.pem;
@@ -179,13 +254,21 @@ server {
     # Match the app's BODY_SIZE_LIMIT. nginx defaults to 1 MB.
     client_max_body_size 50m;
 
+    # A paused player stops reading. Keep its stream open.
+    send_timeout 1h;
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
 
         proxy_set_header Host              $host;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Lumastra reads sign-in headers from trusted proxies. Never pass a client's own.
+        proxy_set_header X-Forwarded-User   "";
+        proxy_set_header X-Forwarded-Groups "";
+        proxy_set_header X-Authentik-Name   "";
 
         # Live updates and video must not be buffered.
         proxy_buffering off;
@@ -203,6 +286,16 @@ Check and reload:
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+nginx 1.25.1 and newer print a warning that `listen ... http2` is deprecated. It still
+works. To silence it, use `listen 443 ssl;` and add `http2 on;` on its own line.
+
+`X-Forwarded-For $remote_addr` sends only the address nginx sees. If another proxy or a
+CDN sits in front of nginx, use `$proxy_add_x_forwarded_for` and list that proxy in
+`TRUSTED_PROXY_IPS` too.
+
+With nginx installed on the host, leave `TRUSTED_PROXY_IPS` empty (see
+[`TRUSTED_PROXY_IPS`](#trusted_proxy_ips)).
+
 nginx writes the full request URI, query string included, to its default access log.
 Add the `lumastra_no_query` log format from
 [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out)
@@ -216,84 +309,105 @@ video, audio and HLS.
 <TabItem label="Traefik">
 
 Traefik reads its routing from Docker labels. Put them on the `lumastra` service and
-remove the `ports:` block. Traefik and Lumastra must share a Docker network, so this
-example uses an external network called `proxy`:
+remove the `ports:` block. Traefik and Lumastra share a Docker network called `proxy`.
+Create it with a fixed subnet, so Traefik can have an address of its own:
 
 ```bash
-docker network create proxy
+docker network create --subnet 172.30.0.0/24 --ip-range 172.30.0.128/25 proxy
 ```
 
-Replace the Traefik labels in the example compose file with these, and add the `proxy`
-network to the service:
+`--ip-range` keeps Docker's automatic addresses away from the one Traefik gets below.
+If `172.30.0.0/24` is already used on your host, pick another private range and change
+the addresses on this page to match.
+
+Replace the Traefik labels in the example compose file with these, add the `proxy`
+network to the service, and add `proxy` to the top-level `networks:`:
 
 ```yaml
 services:
-  lumastra:
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=proxy
-      - traefik.http.routers.lumastra.rule=Host(`lumastra.example.com`)
-      - traefik.http.routers.lumastra.entrypoints=websecure
-      - traefik.http.routers.lumastra.tls=true
-      - traefik.http.routers.lumastra.tls.certresolver=letsencrypt
-      - traefik.http.services.lumastra.loadbalancer.server.port=3000
-    networks:
-      - lumastra-network
-      - proxy
+    lumastra:
+        labels:
+            - traefik.enable=true
+            - traefik.docker.network=proxy
+            - traefik.http.routers.lumastra.rule=Host(`lumastra.example.com`)
+            - traefik.http.routers.lumastra.entrypoints=websecure
+            - traefik.http.routers.lumastra.tls=true
+            - traefik.http.routers.lumastra.tls.certresolver=letsencrypt
+            - traefik.http.routers.lumastra.middlewares=lumastra-headers
+            # Lumastra reads sign-in headers from trusted proxies. Never pass a client's own.
+            - traefik.http.middlewares.lumastra-headers.headers.customrequestheaders.X-Forwarded-User=
+            - traefik.http.middlewares.lumastra-headers.headers.customrequestheaders.X-Forwarded-Groups=
+            - traefik.http.middlewares.lumastra-headers.headers.customrequestheaders.X-Authentik-Name=
+            - traefik.http.services.lumastra.loadbalancer.server.port=3000
+        networks:
+            - lumastra-network
+            - proxy
 
 networks:
-  proxy:
-    external: true
+    proxy:
+        external: true
 ```
+
+An empty value in `customrequestheaders` removes that header from the request.
 
 The router refers to an entrypoint `websecure` and a certificate resolver `letsencrypt`.
-Both come from Traefik's own configuration. A minimal Traefik service that defines them
-(in its own compose file or in the same one):
+Both come from Traefik's own configuration. A minimal Traefik service that defines them,
+in its own compose file or in the same one:
 
 ```yaml
 services:
-  traefik:
-    image: traefik:v3
-    restart: unless-stopped
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.letsencrypt.acme.email=you@example.com
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_letsencrypt:/letsencrypt
-    networks:
-      - proxy
+    traefik:
+        image: traefik:v3
+        restart: unless-stopped
+        command:
+            - --providers.docker=true
+            - --providers.docker.exposedbydefault=false
+            - --entrypoints.web.address=:80
+            - --entrypoints.web.http.redirections.entrypoint.to=websecure
+            - --entrypoints.web.http.redirections.entrypoint.scheme=https
+            - --entrypoints.websecure.address=:443
+            - --certificatesresolvers.letsencrypt.acme.email=you@example.com
+            - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+            - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+        ports:
+            - '80:80'
+            - '443:443'
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - traefik_letsencrypt:/letsencrypt
+        networks:
+            proxy:
+                ipv4_address: 172.30.0.2
 
 volumes:
-  traefik_letsencrypt:
+    traefik_letsencrypt:
 
 networks:
-  proxy:
-    external: true
+    proxy:
+        external: true
 ```
 
-Traefik forwards `Host`, sets `X-Forwarded-For` and `X-Forwarded-Proto`, doesn't buffer
-responses, and doesn't limit request bodies. It does close a request that takes longer
-than the entrypoint's `readTimeout` (60 seconds by default) to arrive, which can cut off
-a large upload from a slow connection. To lift that limit, add this to the Traefik
-`command:` list:
+Then set `TRUSTED_PROXY_IPS=172.30.0.2` in Lumastra's `.env`.
+
+Traefik forwards `Host`, sets `X-Forwarded-For` and `X-Forwarded-Proto`, drops those
+headers when a client sends its own, doesn't buffer responses, and doesn't limit request
+bodies. It does close a request that takes longer than the entrypoint's `readTimeout`
+(60 seconds by default) to arrive, which can cut off a large upload from a slow
+connection. To lift that limit, add this to the Traefik `command:` list:
 
 ```yaml
-      - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
+            - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
 ```
 
-To keep credentials out of the access log, drop query parameters. See
-[Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
+Traefik writes no access log by default. If you turn it on, drop query parameters so
+credentials stay out of it:
+
+```yaml
+            - --accesslog=true
+            - --accesslog.fields.queryparameters.defaultmode=drop
+```
+
+See [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
 </TabItem>
 <TabItem label="Nginx Proxy Manager">
@@ -309,30 +423,48 @@ the steps below work.
 :::
 
 If you run it as a container, the simplest layout is to add it to the same compose file
-as Lumastra, so it can reach the app by service name:
+as Lumastra, so it can reach the app by service name. Give it a fixed address:
 
 ```yaml
 services:
-  npm:
-    image: jc21/nginx-proxy-manager:latest
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-      - '81:81'   # admin UI: don't expose this to the internet
-    volumes:
-      - npm_data:/data
-      - npm_letsencrypt:/etc/letsencrypt
-    networks:
-      - lumastra-network
+    npm:
+        image: jc21/nginx-proxy-manager:latest
+        restart: unless-stopped
+        ports:
+            - '80:80'
+            - '443:443'
+            - '81:81' # admin UI: don't expose this to the internet
+        volumes:
+            - npm_data:/data
+            - npm_letsencrypt:/etc/letsencrypt
+        networks:
+            lumastra-network:
+                ipv4_address: 172.28.0.10
 
 volumes:
-  npm_data:
-  npm_letsencrypt:
+    npm_data:
+    npm_letsencrypt:
 ```
 
+A fixed address needs a subnet on the network. Replace the `lumastra-network` entry
+under the top-level `networks:` with:
+
+```yaml
+networks:
+    lumastra-network:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.28.0.0/24
+                  ip_range: 172.28.0.128/25
+```
+
+Set `TRUSTED_PROXY_IPS=172.28.0.10` in `.env`. If `172.28.0.0/24` is already used on
+your host, pick another private range and change all three addresses.
+
 Remove the `ports:` block from `lumastra`, run `docker compose up -d`, and open the NPM
-admin UI on port 81. Then add a proxy host.
+admin UI on port 81. On first start it asks you to create the admin account. Then add a
+proxy host.
 
 On the **Details** tab:
 
@@ -352,20 +484,27 @@ and **HTTP/2 Support**.
 On the **Advanced** tab, paste this into **Custom Nginx Configuration**:
 
 ```nginx
+# Lumastra reads sign-in headers from trusted proxies. Never pass a client's own.
+more_clear_input_headers X-Forwarded-User X-Forwarded-Groups X-Authentik-Name;
+
 # Live updates and video must not be buffered.
 proxy_buffering off;
 
 # Streams and event connections stay open for a long time.
 proxy_read_timeout 1h;
 proxy_send_timeout 1h;
+send_timeout 1h;
 
 # Match the app's BODY_SIZE_LIMIT.
 client_max_body_size 50m;
+
+# NPM logs the full request URI, which can hold tokens. Turn its log off.
+access_log off;
 ```
 
 NPM's proxy hosts already pass `Host`, `X-Forwarded-For` and `X-Forwarded-Proto` to the
-upstream. NPM's own access log is per proxy host. Check it for query strings that hold
-tokens, as described in
+upstream. Its per-host access log records the query string, and the Advanced tab can't
+change its format, so the snippet turns it off. If you need an access log, see
 [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
 </TabItem>
@@ -383,39 +522,51 @@ tokens, as described in
    `curl` fails with a certificate error if the certificate is missing or untrusted.
    Fix that before you try an app.
 
-2. Open `https://lumastra.example.com` in a browser. The address bar should show a
+2. Check that the proxy removes the sign-in headers. This must answer `401`:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' \
+     https://lumastra.example.com/api/user/profile
+   ```
+
+   A `200` means anyone can sign in as any user. Stop the stack and fix the proxy
+   config before you go on.
+
+3. Open `https://lumastra.example.com` in a browser. The address bar should show a
    valid certificate.
-3. Sign in. If you are still on first setup, finish the wizard at `/setup`. A login that
+4. Sign in. If you are still on first setup, finish the wizard at `/setup`. A login that
    works and stays signed in means `ORIGIN` and the forwarded headers are right.
-4. Open the browser's network tools and look at the event stream request. It should stay
-   open and show a `: ping` line about every 10 seconds.
-5. Sign in from the iPhone, iPad or Apple TV app using your public HTTPS address.
+5. Open the browser's network tools and look at the event stream request
+   (`/api/events/user`). It should stay open and show a `: ping` line about every
+   10 seconds.
+6. Sign in from the iPhone, iPad or Apple TV app using your public HTTPS address.
 
 ## Common problems
 
 **502 Bad Gateway.** The proxy can't reach Lumastra. Check these in order:
 
-- The upstream must be `http://`, not `https://`, and must use port 3000.
+- The upstream uses `http://` and port 3000. Lumastra itself speaks no HTTPS.
 - If the proxy runs in a container, `127.0.0.1` points at the proxy container itself.
   Use the service name `lumastra` on a shared network, or the host's address.
 - If the proxy runs on the host, make sure the `ports:` mapping on `lumastra` is still
   there.
 - Run `docker compose ps` and check that `lumastra` is healthy.
 
-**Login fails with 403, or the page keeps redirecting.** `ORIGIN` doesn't match the
-address in your browser. Compare the scheme, host and port character by character, then
-restart Lumastra. Also check that your proxy passes the `Host` header through.
+**504 Gateway Timeout on Traefik.** The `lumastra` service is on two networks and
+Traefik picked the one it can't reach. Add the `traefik.docker.network=proxy` label.
 
-**The login works but you are signed out on the next request.** The session cookie
-didn't get its `Secure` flag, usually because `ORIGIN` is unset. Set it and restart.
+**Login fails with 403.** `ORIGIN` doesn't match the address in your browser. Compare
+the host and port character by character, remove any `:3000`, then restart Lumastra.
+Also check that your proxy passes the `Host` header through.
 
 **Live updates arrive late or never.** The proxy is buffering or compressing event
 streams. Turn off buffering for the Lumastra location (`proxy_buffering off` in nginx),
 and exclude `text/event-stream` from compression.
 
-**Playback stops after about a minute.** A read timeout is too short. nginx waits
-60 seconds by default between two reads from Lumastra, so raise `proxy_read_timeout`.
-On Traefik, check the entrypoint timeouts.
+**Playback stops after a pause, or after about a minute.** A timeout is too short.
+nginx closes a connection when the player hasn't read from it for 60 seconds
+(`send_timeout`), and when Lumastra hasn't sent anything for 60 seconds
+(`proxy_read_timeout`). Raise both. On Traefik, check the entrypoint timeouts.
 
 **Uploads fail with 413.** The proxy's body limit is smaller than the upload. Raise
 `client_max_body_size` in nginx (or its equivalent), to at least `BODY_SIZE_LIMIT`.

@@ -153,6 +153,14 @@ forged. But both are coarser than you'd want, and the token case looks like a br
 token rather than a missing setting. Set `TRUSTED_PROXY_IPS` to your proxy's address
 and both work per client again.
 
+Before you set it, make sure the proxy removes the sign-in headers (`X-Forwarded-User`,
+`X-Forwarded-Groups`, `X-Authentik-Name`) from client requests. Lumastra believes them
+from every trusted address, whichever sign-in method you use. List only an address that
+belongs to your proxy alone: with a proxy installed on the Docker host, that address is
+the network gateway, which every local program shares, so leave the variable empty
+there. The [Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips) shows both
+parts for each proxy.
+
 ## Performance on large libraries
 
 Browsing isn't optimised yet, and on a large library that's the first thing you'll

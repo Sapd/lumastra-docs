@@ -199,7 +199,7 @@ That's the minimum. Two more you'll usually want:
 | Variable            | Purpose                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `JWT_SECRET`        | Signs login / device-flow tokens. **Optional**, derived from the master key if unset, but set it explicitly (`openssl rand -hex 32`) to rotate it independently. |
-| `TRUSTED_PROXY_IPS` | Your reverse proxy's IP(s) (e.g. `127.0.0.1,::1`). Required for forward auth. It also makes client IPs and rate limits work per client. See [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips). |
+| `TRUSTED_PROXY_IPS` | The fixed address of a reverse proxy that runs in this compose file. Required for forward auth. It also makes client IPs and rate limits work per client. The proxy must remove the sign-in headers. See [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips). |
 
 :::caution[Back up your master key]
 `LUMASTRA_MASTER_KEY` encrypts every secret stored in the database. Lose it and those
@@ -311,8 +311,8 @@ tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
 
 ## Reverse proxy & TLS
 
-Lumastra listens on port 3000. Terminate TLS at a reverse proxy and forward to it; set
-`ORIGIN` (above) so the secure login cookie is set. The
+Lumastra listens on port 3000. Terminate TLS at a reverse proxy and forward to it, and
+set `ORIGIN` (above) to the public address. The
 [Reverse proxy guide](/guides/reverse-proxy/) has a checklist of what the proxy must do
 and copy-paste setups for Caddy, nginx, Traefik and Nginx Proxy Manager. The sections
 below cover compression, access logs and request body size in more detail.
@@ -320,23 +320,48 @@ below cover compression, access logs and request body size in more detail.
 If you use **forward auth**, the proxy must also inject `X-Forwarded-User` /
 `X-Forwarded-Groups`, and you must set `TRUSTED_PROXY_IPS` to the proxy's address:
 those headers are rejected from untrusted peers ([Authentication →
-proxy trust](/guides/authentication/#proxy-trust-fail-closed)).
+proxy trust](/guides/authentication/#proxy-trust-fail-closed)). Lumastra believes these
+headers from a trusted proxy whichever sign-in method you use, so every proxy must
+remove the copies a client sends. The setups in the
+[Reverse proxy guide](/guides/reverse-proxy/#sign-in-headers) do.
 
 :::caution[Forward auth: run the proxy on the compose network]
 With a proxy installed **on the host** (as above), Lumastra doesn't see the proxy's
 address. Docker rewrites it, so every request arrives from the network's gateway (for
 example `172.21.0.1`). Trusting that gateway trusts **every process on the host**: any
 local program can then send `X-Forwarded-User: admin` to `127.0.0.1:3000` and gets
-admin. That is fine for plain `reverse_proxy` with built-in or OIDC login, which don't
-use identity headers.
+admin, whichever sign-in method you use. With a proxy on the host, leave
+`TRUSTED_PROXY_IPS` empty.
 
-For forward auth, run the proxy as a service in the same compose file, remove the
-`ports:` block from `lumastra`, and point the proxy at `lumastra:3000`. Then
-`TRUSTED_PROXY_IPS` is the proxy container's own address. Give it a fixed
-`ipv4_address` and trust only that one IP. Don't trust the whole subnet, because it
-contains the gateway, and host processes that connect to a container address arrive
-from the gateway. Lumastra warns
-at startup when `TRUSTED_PROXY_IPS` contains its own gateway.
+For forward auth, or to see real client IPs, run the proxy as a service in the same
+compose file, remove the `ports:` block from `lumastra`, and point the proxy at
+`lumastra:3000`. Then `TRUSTED_PROXY_IPS` is the proxy container's own address. Give it
+a fixed `ipv4_address` and trust only that one IP. Don't trust the whole subnet, because
+it contains the gateway, and host processes that connect to a container address arrive
+from the gateway. Lumastra warns at startup when `TRUSTED_PROXY_IPS` contains its own
+gateway.
+
+A fixed address needs a subnet on the network, and `ip_range` keeps Docker's automatic
+addresses away from it:
+
+```yaml
+services:
+    caddy: # or traefik, npm, ...
+        networks:
+            lumastra-network:
+                ipv4_address: 172.28.0.10
+
+networks:
+    lumastra-network:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.28.0.0/24
+                  ip_range: 172.28.0.128/25
+```
+
+Then set `TRUSTED_PROXY_IPS=172.28.0.10`. Changing the subnet of an existing network
+needs `docker compose down` and `docker compose up -d`.
 :::
 
 ### Compression
@@ -401,7 +426,11 @@ lumastra.example.com {
             header Content-Type image/svg+xml*
         }
     }
-    reverse_proxy 127.0.0.1:3000
+    reverse_proxy 127.0.0.1:3000 {
+        header_up -X-Forwarded-User
+        header_up -X-Forwarded-Groups
+        header_up -X-Authentik-Name
+    }
 }
 ```
 
@@ -448,6 +477,8 @@ Some clients can't send auth headers, so they put credentials in the **query str
 - Subsonic apps (`/subsonic/`): `t` + `s`, `apiKey`, and `p`, which is the user's
   **password**
 - Native players and `<audio>`/`<video>` streams: `stream_token`
+- HLS playlists for the iPhone, iPad and Apple TV apps (`/api/v1/`): `api_key`, a
+  short-lived access token
 - Server-sent event streams from third-party clients: `api_key=pat_…`
 
 Most proxies' default access-log formats record the full request URI (nginx's
@@ -491,22 +522,36 @@ lumastra.example.com {
             }
         }
     }
-    reverse_proxy 127.0.0.1:3000
+    reverse_proxy 127.0.0.1:3000 {
+        header_up -X-Forwarded-User
+        header_up -X-Forwarded-Groups
+        header_up -X-Authentik-Name
+    }
 }
 ```
 
 </TabItem>
 <TabItem label="Traefik">
 
-Drop query parameters from the access log (static configuration). On an older release
-without `queryParameters`, drop the `RequestPath` field instead:
+Drop query parameters from the access log. With the command-line flags used in the
+[Reverse proxy guide](/guides/reverse-proxy/), add these to the `command:` list:
+
+```yaml
+            - --accesslog=true
+            - --accesslog.fields.queryparameters.defaultmode=drop
+```
+
+Traefik reads its static configuration from one source only. If you use a `traefik.yml`
+file instead of flags, put the same setting there:
 
 ```yaml
 accessLog:
-  fields:
-    queryParameters:
-      defaultMode: drop
+    fields:
+        queryParameters:
+            defaultMode: drop
 ```
+
+On an older release without `queryParameters`, drop the `RequestPath` field instead.
 
 </TabItem>
 </Tabs>

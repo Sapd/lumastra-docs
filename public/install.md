@@ -131,15 +131,24 @@ configuration: https://lumastra.org/guides/reverse-proxy/
   service in the same `docker-compose.yml`, following the guide. Show them the changes
   before applying them.
 - Make sure the proxy follows the guide's checklist: no buffering, long timeouts for
-  streams, a request body limit of at least 50 MB, and the forwarded headers.
+  streams, a request body limit of at least 50 MB, the forwarded headers, and removing
+  the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and `X-Authentik-Name`.
+  Copy the guide's config for that proxy as it is, including those lines.
 - Set `ORIGIN=https://<their domain>` in `.env`. If the proxy runs as a container,
-  set `TRUSTED_PROXY_IPS` as the guide describes so Lumastra sees real client IPs.
+  give it the fixed address the guide shows and set `TRUSTED_PROXY_IPS` to that address
+  so Lumastra sees real client IPs. If the proxy runs on the host, leave
+  `TRUSTED_PROXY_IPS` empty.
 - Restart with `docker compose up -d`.
-- Once the proxy works, remove the `ports:` block from the `lumastra` service so the app
-  is only reachable through the proxy.
+- If the proxy runs as a container, remove the `ports:` block from the `lumastra`
+  service once the proxy works, so the app is only reachable through the proxy. A proxy
+  on the host needs the block, so keep it then.
 - Check: `curl -fsS https://<their domain>/api/health` returns `{"status":"pass"}`. If the
   certificate can't be issued, check that DNS points at this server and that ports 80
   and 443 reach it.
+- Check the sign-in headers are removed:
+  `curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-User: admin' https://<their domain>/api/user/profile`
+  must print `401`. A `200` means anyone can sign in as anyone: stop and fix the proxy
+  config.
 
 ## 8. Finish
 
