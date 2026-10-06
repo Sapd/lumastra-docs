@@ -80,8 +80,9 @@ tone-mapping ignores both.
 :::
 
 Encoder selection is automatic by default (`VIDEO_CODEC_AUTO=true`): Lumastra probes
-ffmpeg for available encoders and picks the best for your GPU (GPU encoders first,
-software last), ordered by `VIDEO_ENCODER_PREFERENCE`. Set `VIDEO_CODEC_AUTO=false` to
+ffmpeg for available encoders and, for each transcode, picks the best codec the playing
+device supports (AV1 only on a GPU encoder, then HEVC, then H.264), using a GPU encoder
+for it when one is available and software otherwise. Set `VIDEO_CODEC_AUTO=false` to
 force a specific `VIDEO_CODEC`.
 
 ### NVENC concurrent-session cap
