@@ -51,7 +51,10 @@ Ask these before you continue, and use the answers in the later steps:
      `media.example.com`), and does its DNS already point at this server?
    - If they have no reverse proxy, set one up in step 7: Traefik with Docker labels
      fits Docker Compose well; Caddy is also simple. Let them choose.
-   - Only if they explicitly want Lumastra on this machine alone, skip the proxy.
+   - Only if they explicitly want Lumastra on this machine alone, skip the proxy. Tell
+     them that sign-in then only works at `http://localhost:3000` on this machine:
+     browsers drop the session cookie on plain HTTP to any other address. Don't change
+     the port mapping to `3000:3000` to work around that.
 5. How should people sign in? Built-in accounts work out of the box. Single sign-on via
    OIDC or forward auth can be added later: https://lumastra.org/guides/authentication/
 6. Do they have a free TMDB API key for movie and series metadata? It's optional but
