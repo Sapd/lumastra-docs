@@ -75,7 +75,7 @@ that; see [Deploy with Docker](/guides/deploy-docker/).
 Prefer to let an AI assistant with shell access (Claude Code, Codex, Cursor and similar)
 do the steps below? Give it this prompt:
 
-```text
+```text wrap
 Read https://lumastra.org/install.md and follow it to install Lumastra on this server. Ask me before anything you can't check yourself.
 ```
 
@@ -184,13 +184,15 @@ curl http://localhost:3000/api/health
 ```
 
 The example compose file publishes port 3000 on `127.0.0.1` only, so this check works
-right away. Signing in needs HTTPS, or `http://localhost` on the server itself: the
-session cookie is always marked `Secure`, and browsers drop it on plain HTTP to any
-other address. To use Lumastra from other machines, put the
-[reverse proxy](/guides/reverse-proxy/) in front. A reverse proxy installed on the same
-host connects to `127.0.0.1:3000`, so keep the `ports:` block then. If the proxy runs
-in the same compose file, remove the `ports:` block so the app is only reachable
-through the proxy.
+right away. To reach the app from other machines on your network without a reverse
+proxy, change `127.0.0.1:3000:3000` to `3000:3000` on the `lumastra` service, leave
+`ORIGIN` unset, and open `http://<server-ip>:3000`. Sign-in works over plain HTTP, but
+your password and session then cross the network unencrypted, and the iPhone, iPad and
+Apple TV apps only connect over HTTPS. For those apps and for access from outside your
+network, put the [reverse proxy](/guides/reverse-proxy/) in front. A reverse proxy
+installed on the same host connects to `127.0.0.1:3000`, so keep the `ports:` block
+then. If the proxy runs in the same compose file, remove the `ports:` block so the app
+is only reachable through the proxy.
 
 The admin-only config doctor at `/api/health/config` returns `401` before setup.
 Run it locally instead:
