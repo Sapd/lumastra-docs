@@ -153,6 +153,26 @@ The `1x05` form (season `x` episode) works too:
 | `Dragnet 1x05.mkv`                                    | 1 / 5             |
 | `Dragnet S01.E05.mkv` or `Dragnet S01 E05.mkv`        | 1 / 5             |
 
+### Daily shows (air date)
+
+Talk shows, news, and other daily shows can be named by air date instead of
+`SxxExx`. Lumastra links the file to the episode TMDB lists for that day:
+
+- `The Daily Program 2021.03.14.mkv`
+- `The Daily Program - 2021-03-14 - Guest Name.mkv`
+- `2021_03_14.mkv` inside the show's folder
+
+Rules:
+
+- The date is year first (`YYYY.MM.DD`, `YYYY-MM-DD`, `YYYY_MM_DD`, or with
+  spaces). Day-first dates like `14.03.2021` are not read.
+- An episode number in the name wins over the date.
+- Dates are read only in TV and anime libraries.
+- If two episodes aired the same day, the season folder decides. If it can't,
+  the file is left unlinked and listed as a scan issue; rename it with `SxxExx`.
+- Files scanned before Lumastra has the show's episode list are moved to the
+  right episode after the next metadata refresh.
+
 ### Anime / absolute numbering
 
 When there's no `SxxExx`, these anime forms work:
@@ -260,7 +280,6 @@ Nothing is dropped. A file that can't be matched:
 
 | Mistake                                       | Fix                                |
 | ---------------------------------------------- | ----------------------------------- |
-| Daily show `The Show 2021.03.14.mkv` (date)   | Use `SxxExx` numbering             |
 | Split episode as `The Show pt1.mkv` / `pt2.mkv` (no episode number) | Use `The Show S01E01 pt1.mkv` / `pt2.mkv` |
 | Episode title used as the show folder         | Folder must be the **show** name   |
 | Music with no tags in a flat folder           | Use `Artist/Album/Track` folders   |
