@@ -42,7 +42,9 @@ set `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
 Every proxy below is set up for this list. If you use another one, check each line.
 
 - [ ] Forward to Lumastra on port 3000 over plain `http://`.
-- [ ] Forward every path on Lumastra's domain or subdomain to it. Besides the web app,
+- [ ] Give Lumastra its own domain or subdomain, such as `media.example.com`. Serving it
+      under a subpath such as `example.com/lumastra/` is not supported yet.
+- [ ] Forward every path on that domain or subdomain to Lumastra. Besides the web app,
       the apps and clients use these paths, and none of them may be blocked or sent to a
       login page:
       - `/api/v1/` for the [public API](/developers/api/), the iPhone, iPad and Apple TV

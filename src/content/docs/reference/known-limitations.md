@@ -66,6 +66,11 @@ such as `:0.1.0`) are built for `linux/amd64` **and** `linux/arm64`. `:edge` fol
 every commit to `main` and is **amd64 only**; on an ARM host it fails with
 `exec format error`. The reference compose file uses `:stable`.
 
+**Lumastra needs its own domain or subdomain** (for example `media.example.com`).
+Serving it under a subpath such as `example.com/lumastra/` isn't supported yet; the
+code has options for it, but they haven't been tested. See the
+[reverse proxy guide](/guides/reverse-proxy/).
+
 **x86-64 hosts need x86-64-v2** (SSE4.2, POPCNT) for the `sharp` image library. In a
 VM, give it a modern CPU model (`host-passthrough`, or at least `Nehalem`).
 
