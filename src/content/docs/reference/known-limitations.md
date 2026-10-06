@@ -12,6 +12,24 @@ later. If one of them rules Lumastra out for your setup, better to know now.
 None of this is a bug report. Bugs go to
 [GitHub issues](https://github.com/sapd/lumastra/issues).
 
+:::tip[Troubleshoot with an AI assistant]
+If your install misbehaves, the `lumastra-troubleshoot` skill takes Claude Code through
+the health checks, the reverse proxy checklist and the common causes: the HTTPS the
+Apple apps need, a lost master key, database passwords, CPU and memory limits, OIDC and
+forward auth, stream limits and library mounts. It checks first, shows you the error and
+the fix before it changes anything, and keeps your secrets out of the chat.
+
+```text
+/plugin marketplace add Sapd/lumastra
+/plugin install lumastra-skills@lumastra
+```
+
+Then describe the problem, for example "my Lumastra login keeps failing". Other
+assistants can read the
+[skill's instructions](https://github.com/Sapd/lumastra/tree/main/plugins/lumastra-skills/skills/lumastra-troubleshoot)
+as plain Markdown.
+:::
+
 ## Early release
 
 **Lumastra is at v0.1.** It runs real libraries every day, but it's an early release.
