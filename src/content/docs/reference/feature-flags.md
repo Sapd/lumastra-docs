@@ -120,7 +120,6 @@ feature, follow the linked guide.
 | ---- | ------- | ----- |
 | `FEATURE_SIDEBAR` | `true` | Sidebar navigation (vs. mega-menu). |
 | `FEATURE_DOCK_TOGGLE` | `true` | The dock-vs-sidebar toggle itself, dependent on `FEATURE_SIDEBAR`. |
-| `FEATURE_SECTIONS_TOGGLE` | `true` | Letting users hide individual home-page sections. |
 | `FEATURE_STARS_BACKGROUND` | `true` | The animated starfield background. |
 
 Custom CSS/JS injection, custom themes, and the default theme are configured (not
