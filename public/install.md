@@ -1,190 +1,276 @@
 # Install Lumastra: instructions for an AI assistant
 
-You are helping a person install Lumastra, a self-hosted media server, on a server they
+You are helping a person install Lumastra, a self-hosted media server, on a machine they
 control. Follow these steps in order. Run commands yourself where you can, check each
 result before you go on, and ask the person whenever a step needs a decision or
-information you can't check yourself. Full human-readable guide:
-https://lumastra.org/start/quick-start/
+information you can't check yourself. The human-readable guide is
+https://lumastra.org/start/quick-start/.
+
+This file has the same steps as the `lumastra-install` skill in the Lumastra repository
+(`plugins/lumastra-skills`). You don't need the skill to follow this file.
 
 ## Rules
 
 - Never print, paste or send the generated secrets (`DATABASE_PASSWORD`, `CACHE_PASSWORD`,
-  `LUMASTRA_MASTER_KEY`) into the chat or any log. Write them only into `.env`.
-- Don't expose port 3000 to the internet. Remote access goes through a reverse proxy with
-  HTTPS (step 7).
-- Don't delete or overwrite existing files, containers or volumes without asking.
-- The secrets file must be named exactly `.env`. Docker Compose reads its variables from
-  that file; any other name makes `docker compose up` fail.
-- If something fails, show the person the relevant error lines and the fix you propose
-  before changing anything.
+  `LUMASTRA_MASTER_KEY`) into the chat or any log. Write them only into `.env`. Don't
+  `cat .env`, run `docker compose config` without `--quiet`, or run `docker inspect`
+  without a `-f` format that selects only the fields you need; all three print them.
+  Before you show the person log or doctor output, replace any `://user:password@` part
+  with `://***@`.
+- Keep port 3000 off the internet. Keep the mapping `127.0.0.1:3000:3000`. Change it to
+  `3000:3000` only when the person explicitly wants plain-HTTP access from their local
+  network without a proxy; then leave `ORIGIN` unset and tell them that passwords cross
+  the network unencrypted, that the iPhone, iPad and Apple TV apps need HTTPS, and never
+  to forward port 3000 on their router. Remote access goes through a reverse proxy with
+  HTTPS (step 8).
+- Ask before you delete or overwrite any file, container, volume or network. This
+  includes an existing `docker-compose.yml` or `.env` and existing Lumastra containers or
+  volumes.
+- The secrets file must be named exactly `.env`. Docker Compose reads variables such as
+  `${DATABASE_PASSWORD}` only from a file with that name.
+- Your shell may not keep its working directory between commands. Start every command
+  with `cd <install folder> &&`.
+- If a step fails, show the person the relevant error lines and the fix you propose, and
+  wait for their approval before you change anything.
 
-## 1. Check the machine
+## 1. Docker Compose or Kubernetes
 
-Run these checks and report the results:
+Ask first. Docker Compose is the default and the steps below cover it. For Kubernetes,
+stop here and follow https://lumastra.org/guides/deploy-kubernetes/ (Helm chart, beta).
+Its "What you need" section lists what to ask the person.
 
-- Docker 24 or newer and Docker Compose 2.20 or newer: `docker --version`,
-  `docker compose version`. If Docker is missing, ask before installing it.
-- Memory: 8 GB RAM recommended (`free -h` on Linux). With less, warn the person that the
-  background tasks that scan and analyse the library need memory. The example compose
-  file already sets `LUMASTRA_LOW_RAM_MODE: 'true'`; keep it on such a host.
-- Disk: at least 20 GB free for the app and its data, plus space for the media
-  (`df -h` on the folder Lumastra will live in and on Docker's data directory). With
-  less, warn the person and ask whether to continue.
-- An earlier Lumastra install: run `docker ps -a` and `docker volume ls`. Docker Compose
-  names volumes after the install folder (`~/lumastra` gives `lumastra_config`,
-  `lumastra_lumastra_postgres_data` and so on), so a new install in a folder of the same
-  name silently reuses them, and the old database rejects the newly generated password.
-  If such volumes exist, ask whether to reuse that install (then keep its old `.env`) or
-  to install fresh in a folder with another name. Never delete them without asking.
-- CPU: x86-64 with x86-64-v2 support (`grep -m1 -o 'sse4_2\|popcnt' /proc/cpuinfo` shows
-  both on Linux), or any 64-bit ARM CPU. On ARM, music BPM and mood analysis, the
+## 2. Check the machine
+
+Report each result. The commands are for Linux and macOS; on Windows, run them in WSL or
+report what Docker Desktop shows under Settings > Resources.
+
+```bash
+docker --version          # 24 or newer
+docker compose version    # 2.20 or newer
+docker info --format '{{.ServerVersion}} {{.MemTotal}} {{.Architecture}}'
+df -h "$(docker info --format '{{.DockerRootDir}}')" ~
+uname -m
+grep -o -w 'sse4_2\|popcnt' /proc/cpuinfo | sort -u    # Linux on x86-64 only
+```
+
+- **Docker.** If `docker info` fails with a permission error, the user account is not in
+  the `docker` group. Tell the person: they add the account to the group and log in
+  again, or prefix every `docker` command with `sudo`. If Docker is missing, ask before
+  installing it.
+- **Memory.** `MemTotal` is the memory Docker can use, in bytes; on Docker Desktop it is
+  the VM's limit. 8 GB is recommended; the background tasks that scan and analyze the
+  library use most of it. The example compose file sets `LUMASTRA_LOW_RAM_MODE: 'true'`,
+  which caps the Node.js heap. Keep it below 8 GB. Below about 4 GB, warn the person that
+  only a small library will run.
+- **Disk.** Docker's data directory (the first `df` line) needs at least 20 GB free.
+  Check media folders on other disks separately.
+- **CPU.** On `x86_64`, the `grep` must print both `popcnt` and `sse4_2` (x86-64-v2). In
+  a virtual machine, set the CPU model to `host-passthrough` or Nehalem or newer. On
+  `aarch64` or `arm64`, tell the person that music BPM and mood analysis, the
   sound-similarity sidecar and Intel Quick Sync transcoding are not available.
 
-## 2. Ask the person
+## 3. Ask the person
 
-Ask these before you continue, and use the answers in the later steps:
+1. **Install folder.** Default `~/lumastra`.
+2. **Media folders** (movies, series, music). They are mounted read-only.
+3. **Reverse proxy and domain.** The iPhone, iPad and Apple TV apps only connect over
+   HTTPS. Ask whether they already run a proxy (Traefik, Caddy, nginx, Nginx Proxy
+   Manager) and whether it runs on the host or as a container. Ask which domain to use
+   and whether that domain's DNS points at this server. With no proxy, offer Traefik with
+   Docker labels or Caddy and let them choose. Skip the proxy only if they explicitly
+   want local use.
+4. **Sign-in.** Built-in accounts work without extra setup. OIDC can be added later:
+   https://lumastra.org/guides/authentication/. If they want forward auth, set
+   `FORWARD_AUTH_ENABLED=true` in `.env`. It is off by default, nobody signs in through
+   the proxy without it, and it can only be set in the environment. The proxy then has to
+   run on the compose network with a fixed address; see
+   https://lumastra.org/guides/deploy-docker/#reverse-proxy--tls.
+5. **TMDB credential** for movie and series metadata. It is optional, strongly
+   recommended and free: https://www.themoviedb.org/settings/api. Either the "API Key" or
+   the "API Read Access Token" works.
 
-1. **Docker Compose or Kubernetes?** Docker Compose is the default and the main supported
-   way. If they want Kubernetes, stop here and follow the Kubernetes guide instead:
-   https://lumastra.org/guides/deploy-kubernetes/ (Helm chart, in beta; it needs a storage
-   class, PostgreSQL with pgvector or CloudNativePG, and an ingress or Gateway). Ask the
-   questions that guide lists, and don't use the Docker steps below.
-2. Which folder should Lumastra live in? Default: `~/lumastra`.
-3. Where are the media files (movies, series, music)? You will mount them read-only.
-4. **Reverse proxy and domain.** Lumastra is normally set up behind a reverse proxy with
-   HTTPS; the iPhone, iPad and Apple TV apps only connect over HTTPS. Ask:
-   - Do they already run a reverse proxy (Traefik, Caddy, nginx, Nginx Proxy Manager)? If
-     so, which one, and where does it run (on the host or as a container)?
-   - Which domain or subdomain should Lumastra use (for example
-     `media.example.com`), and does its DNS already point at this server?
-   - If they have no reverse proxy, set one up in step 7: Traefik with Docker labels
-     fits Docker Compose well; Caddy is also simple. Let them choose.
-   - Only if they explicitly want to run Lumastra without HTTPS, skip the proxy.
-     Lumastra then works at `http://localhost:3000` on this machine. If they ask for
-     access from other devices on their local network, change the port mapping to
-     `3000:3000` and leave `ORIGIN` unset; they open `http://<server-ip>:3000`.
-     Built-in accounts work there; single sign-on (OIDC) needs HTTPS. Tell them that
-     plain HTTP sends passwords unencrypted over the network and that the iPhone, iPad
-     and Apple TV apps need HTTPS. Also tell them not to forward port 3000 on their
-     router.
-5. How should people sign in? Built-in accounts work out of the box. Single sign-on via
-   OIDC or forward auth can be added later: https://lumastra.org/guides/authentication/
-6. Do they have a free TMDB API key for movie and series metadata? It's optional but
-   strongly recommended: https://www.themoviedb.org/settings/api
+## 4. Download the two files
 
-## 3. Download the two files
+Check for an earlier install first:
 
 ```bash
-mkdir -p ~/lumastra && cd ~/lumastra
-curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Sapd/lumastra/main/docker-compose.example.yml
-curl -fsSL -o .env https://raw.githubusercontent.com/Sapd/lumastra/main/.env.example
+docker compose ls -a
+docker volume ls --format '{{.Name}}' | grep -i lumastra
+mkdir -p ~/lumastra && cd ~/lumastra && ls -A
 ```
 
-Use the folder from question 2. Cloning the repository is not needed.
-
-## 4. Generate the secrets
-
-On macOS or Linux, this writes all three secrets into `.env` without printing them:
+If any of them shows Lumastra, or the folder already holds `docker-compose.yml` or
+`.env`, stop and ask. Compose names the project after the folder, so a second folder with
+the same name reuses the first install's volumes. Then download, using the folder from
+question 1:
 
 ```bash
-sed -i.bak \
-  -e "s|^DATABASE_PASSWORD=.*|DATABASE_PASSWORD=$(openssl rand -hex 24)|" \
-  -e "s|^CACHE_PASSWORD=.*|CACHE_PASSWORD=$(openssl rand -hex 24)|" \
-  -e "s|^# LUMASTRA_MASTER_KEY=.*|LUMASTRA_MASTER_KEY=$(openssl rand -hex 32)|" \
-  .env && rm -f .env.bak
+cd ~/lumastra && \
+  curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Sapd/lumastra/main/docker-compose.example.yml && \
+  curl -fsSL -o .env https://raw.githubusercontent.com/Sapd/lumastra/main/.env.example && \
+  chmod 600 .env
 ```
 
-Check without printing the values: `grep -c '^LUMASTRA_MASTER_KEY=[0-9a-f]\{64\}$' .env`
-must print `1`. Use hex only; base64 characters break the database connection string.
-On Windows without WSL, use the PowerShell variant from the quick start guide.
+You don't need to clone the repository.
 
-If the person has a TMDB key, add `TMDB_API_KEY=<key>` to `.env`. Let them paste it
-into the file themselves if they prefer not to share it with you.
+## 5. Generate the secrets
 
-Tell the person to back up `LUMASTRA_MASTER_KEY` somewhere safe outside the server. If it
-is lost, the secrets Lumastra stores can't be decrypted.
+Check that `.env` still holds the placeholders; this must print `3`:
 
-## 5. Mount the media
+```bash
+grep -c -e '^DATABASE_PASSWORD=changeme' -e '^CACHE_PASSWORD=changeme' -e '^# LUMASTRA_MASTER_KEY=' .env
+```
 
-Edit `docker-compose.yml`: the `lumastra` service's `volumes:` list is the first one in the
-file and ends with `- plugins:/app/plugins`. Add one read-only line per media folder from
-question 3 right after that entry, keeping the folder names under `/data/media`, for
-example:
+If it prints another number, `.env` holds values other than the placeholders, for example
+from an earlier install. Stop and ask the person. Replacing `DATABASE_PASSWORD` or
+`LUMASTRA_MASTER_KEY` on an existing database locks Lumastra out of its data.
+
+On Linux and macOS, this writes the three secrets as hex and prints `written`:
+
+```bash
+(
+  hex() { od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'; }
+  db=$(hex 24); cache=$(hex 24); key=$(hex 32)
+  if [ ${#db} -eq 48 ] && [ ${#cache} -eq 48 ] && [ ${#key} -eq 64 ]; then
+    sed -i.bak \
+      -e "s|^DATABASE_PASSWORD=.*|DATABASE_PASSWORD=$db|" \
+      -e "s|^CACHE_PASSWORD=.*|CACHE_PASSWORD=$cache|" \
+      -e "s|^# LUMASTRA_MASTER_KEY=.*|LUMASTRA_MASTER_KEY=$key|" \
+      .env && rm -f .env.bak && chmod 600 .env && echo written
+  else
+    echo 'secret generation failed; .env unchanged' >&2
+  fi
+)
+```
+
+Check them without printing them; this must print `3`:
+
+```bash
+grep -c -e '^DATABASE_PASSWORD=[0-9a-f]\{48\}$' -e '^CACHE_PASSWORD=[0-9a-f]\{48\}$' -e '^LUMASTRA_MASTER_KEY=[0-9a-f]\{64\}$' .env
+```
+
+Use hex only: the compose file puts both passwords into `DATABASE_URL` and `CACHE_URL`,
+where base64 characters break the connection strings. On Windows without WSL, use the
+PowerShell variant from the quick start guide.
+
+**TMDB.** Don't uncomment the sample line `# TMDB_API_KEY=your_tmdb_api_key`. Lumastra
+treats the sample value as a real key, and every TMDB request fails. The person can add
+the line `TMDB_API_KEY=<value>` to `.env` themselves in an editor, which keeps the value
+out of the chat. If they give you the value, run `grep -c '^TMDB_API_KEY=' .env` first;
+if it prints `0`, append the line with `printf '\nTMDB_API_KEY=%s\n' '<value>' >> .env`.
+
+## 6. Mount the media
+
+Add one read-only line per media folder from question 2 to the existing `volumes:` list
+of the `lumastra` service (the top-level `volumes:` block is a different list). Keep the
+container paths under `/data/media/`, and quote a line whose host path has spaces:
 
 ```yaml
-      - /srv/movies:/data/media/movies:ro
-      - /srv/music:/data/media/music:ro
+services:
+    lumastra:
+        volumes:
+            # existing entries stay as they are
+            - /srv/media/movies:/data/media/movies:ro
+            - '/srv/media/tv shows:/data/media/series:ro'
 ```
 
-Keep the indentation of the existing entries. Validate the file with
-`docker compose config --quiet` (no output means it's valid). That check does not notice a
-line added to the wrong service, so also confirm that `docker compose config` lists the
-`/data/media/...` targets under `lumastra`.
+The host folders must exist and be readable by uid 1000, which the container runs as.
+Docker creates a missing folder as an empty root-owned one. On Fedora or RHEL with
+SELinux, use `:ro,z`. On Docker Desktop, the folders must be in the file sharing list.
+Validate with `docker compose config --quiet`. No output means the file is valid.
 
-## 6. Start and verify
+## 7. Start and verify
 
 ```bash
-docker compose up -d --wait --wait-timeout 600
-docker compose logs --tail=100 lumastra
+cd ~/lumastra && docker compose up -d --wait --wait-timeout 600
 ```
 
-`--wait` returns once every container is healthy; the first start runs the database
-migrations and downloads the transcoder, which can take several minutes. The log must
-show `Schema migration completed successfully`. Then check:
+`--wait` returns once every container is healthy. The first start pulls the images and
+runs the database migrations, which can take several minutes. If `--wait` reports an
+unhealthy or timed-out container, read `docker compose logs --tail=200 lumastra`; while
+the log still shows migration progress, run the same command again. Then check:
 
 ```bash
-curl -fsS http://localhost:3000/api/health
+cd ~/lumastra && \
+  curl -fsS http://localhost:3000/api/health/ready && \
+  docker compose logs lumastra | grep -c 'Schema migration completed successfully' && \
+  docker compose exec lumastra ls /data/media
 ```
 
-It must return `{"status":"pass"}`. If not, run `docker compose exec lumastra npm run doctor`
-and show the person the result.
+The ready check must print `{"status":"pass"}`; it also checks PostgreSQL and Valkey. The
+`grep` must print at least `1`, and the last command must list the media folders. If
+something fails, run `docker compose ps` and `docker compose exec lumastra npm run doctor`
+and show the person the result, with connection strings masked.
 
-## 7. Reverse proxy and HTTPS
+## 8. Reverse proxy and HTTPS
 
-Do this step by default, using the answers to question 4. Skip it only if the person
-explicitly chose local-only use. Follow the reverse proxy guide for the exact
-configuration: https://lumastra.org/guides/reverse-proxy/
+Do this step unless the person chose local use only in question 3. Follow the reverse
+proxy guide for the exact configuration: https://lumastra.org/guides/reverse-proxy/. If
+you can't fetch it, ask the person to open it; don't write proxy configuration from
+memory. Show the person each change to `docker-compose.yml` and `.env`, and wait for
+their approval before you apply it.
 
-- **Existing proxy:** add Lumastra to it with the matching section of the guide. If the
-  proxy runs as a container, put it on the same Docker network as Lumastra and point it
-  at `lumastra:3000`; if it runs on the host, point it at `127.0.0.1:3000`.
-- **No proxy yet:** set up the one they chose (Traefik with Docker labels, or Caddy) as a
-  service in the same `docker-compose.yml`, following the guide. Show them the changes
-  before applying them.
-- Make sure the proxy follows the guide's checklist: no buffering, long timeouts for
-  streams, a request body limit of at least 50 MB, the forwarded headers, and removing
-  the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and `X-Authentik-Name`.
-  Copy the guide's config for that proxy as it is, including those lines.
-- Add the line `ORIGIN=https://<their domain>` to `.env` (the example file has none). It is
-  required behind a proxy. If the proxy runs as a container,
-  give it the fixed address the guide shows and set `TRUSTED_PROXY_IPS` to that address
-  so Lumastra sees real client IPs. Put only that address there, never the network's
-  subnet. Adding the subnet to `lumastra-network` changes the
-  network, so run `docker compose down` once before `docker compose up -d`. If the proxy runs on the host, leave
-  `TRUSTED_PROXY_IPS` empty.
-- Restart with `docker compose up -d`.
-- If the proxy runs as a container, remove the `ports:` block from the `lumastra`
-  service once the proxy works, so the app is only reachable through the proxy. A proxy
-  on the host needs the block, so keep it then.
-- Check: `curl -fsS https://<their domain>/api/health` returns `{"status":"pass"}`. If the
-  certificate can't be issued, check that DNS points at this server and that ports 80
-  and 443 reach it.
-- Check the sign-in headers are removed:
-  `curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-User: admin' https://<their domain>/api/user/profile`
-  must print `401`. A `200` means anyone can sign in as anyone: stop and fix the proxy
-  config.
+Before you start:
 
-## 8. Finish
+- Run `dig +short <domain>` and ask the person whether the address is the server's
+  public address. Don't look it up through an outside service without asking.
+- Ports 80 and 443 must reach the server. For a new proxy, check that nothing on the host
+  uses them yet (`ss -ltn` on Linux, `lsof -nP -iTCP -sTCP:LISTEN` on macOS).
 
-Tell the person to open `https://<their domain>/setup` to create the admin account and
-add the libraries under `/data/media/...`. Without a proxy, they open
-http://localhost:3000/setup on that machine, through an SSH tunnel, or at
-`http://<server-ip>:3000/setup` if they changed the port mapping. You can't do this
-step for them.
+Then:
 
-Summarise for the person: the install folder, which media folders are mounted, the
-reverse proxy and domain, the URL to open, that the master key must be backed up, and these links:
+- **Proxy on the compose network** (a container in the same `docker-compose.yml`, or on a
+  Docker network shared with Lumastra): point it at `lumastra:3000`.
+- **Proxy on the host:** point it at `127.0.0.1:3000` and keep the `ports:` mapping.
+- **Traefik:** the example compose file ships Traefik labels that use an Authentik
+  middleware (`authentik@docker`). Replace all of them with the labels from the guide.
+  With an existing Traefik, use its network, entrypoint and certificate resolver names.
+  Edit the existing `labels:` and `networks:` keys instead of adding a second key of the
+  same name, and keep `lumastra` on `lumastra-network`.
+- Copy the guide's config for that proxy as it is. It passes `Host`, sets
+  `X-Forwarded-For` and `X-Forwarded-Proto`, turns off buffering, allows long timeouts and
+  request bodies of at least 50 MB, and removes the sign-in headers `X-Forwarded-User`,
+  `X-Forwarded-Groups` and `X-Authentik-Name`. Never drop the lines that remove those
+  headers.
+- In `.env`, check that `grep -c -e '^ORIGIN=' -e '^TRUSTED_PROXY_IPS=' .env` prints `0`,
+  then add the line `ORIGIN=https://<domain>` (the example file has none). It is required
+  behind a proxy.
+- `TRUSTED_PROXY_IPS`: for a proxy in a container, give the proxy the fixed address the
+  guide shows and set `TRUSTED_PROXY_IPS` to that one address, never the network's subnet.
+  Adding the subnet to `lumastra-network` changes the network, so run
+  `docker compose down` once before `docker compose up -d`. For a proxy on the host, or on
+  Docker Desktop, leave `TRUSTED_PROXY_IPS` unset and tell the person that rate limits are
+  then shared by all clients.
+- Run `docker compose up -d`, then check `curl -fsS https://<domain>/api/health/ready`.
+  It must print `{"status":"pass"}`. HTML or any other body means the request did not
+  reach Lumastra. If the certificate can't be issued, check that DNS points at this
+  server and that ports 80 and 443 reach it.
+- Check that the proxy removes the sign-in headers. This must print `401`:
+  `curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' https://<domain>/api/user/profile`.
+  A `200` means anyone can sign in as anyone: stop, tell the person, and fix the proxy
+  config before you continue.
+- If the proxy reaches Lumastra over the compose network, remove the `ports:` block from
+  the `lumastra` service, run `docker compose up -d` and check again. From then on, check
+  the app directly with
+  `docker compose exec lumastra curl -fsS http://localhost:3000/api/health/ready`.
 
-- Known limitations: https://lumastra.org/reference/known-limitations/
+## 9. Finish
+
+Until the first admin account exists, anyone who can open the address can create it.
+Tell the person to open `https://<domain>/setup` as soon as the proxy works, create the
+admin account and add the libraries under `/data/media/...`. Without a proxy, they open
+`http://localhost:3000/setup` on that machine, or through an SSH tunnel from their own
+computer: `ssh -L 3000:127.0.0.1:3000 <user>@<server>`. With the mapping `3000:3000` for
+local-network access they open `http://<server-ip>:3000/setup`. You can't do this step
+for them.
+
+Summarize for the person: the install folder, the mounted media folders, the proxy and
+domain, the URL to open, and these points:
+
+- Back up `LUMASTRA_MASTER_KEY` from `.env` outside the server. Without it, the secrets
+  Lumastra stores can't be decrypted.
 - Backups: https://lumastra.org/guides/backup-recovery/
-- Updating later: `docker compose pull && docker compose up -d` in the install folder.
+- Known limitations: https://lumastra.org/reference/known-limitations/
+- Updating: back up first, then run `docker compose pull && docker compose up -d` in the
+  install folder. New versions migrate the database on start, and an older image can't
+  undo that.
