@@ -1,0 +1,24 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'client', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'Viewer', sub: 'mid-playback', kind: 'viewer', hasSource: true } },
+		{ id: 'proxy', type: 'flow', position: { x: 464, y: 160 }, data: { title: 'Sticky proxy', sub: 'fails over on error', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'webA', type: 'flow', position: { x: 232, y: 330 }, data: { title: 'Web replica A', sub: 'being replaced', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'webB', type: 'flow', position: { x: 696, y: 330 }, data: { title: 'Web replica B', sub: 'healthy · serving', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'cache', type: 'flow', position: { x: 232, y: 490 }, data: { title: 'Shared transcode cache', sub: 'TRANSCODE_TEMP_DIR · RWX', kind: 'infra', hasTarget: true } },
+		{ id: 'db', type: 'flow', position: { x: 696, y: 490 }, data: { title: 'PostgreSQL', sub: 'session state · resumable', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-client-proxy', source: 'client', target: 'proxy', label: 'stream_token' },
+		{ id: 'e-proxy-webA', source: 'proxy', target: 'webA', label: 'draining' },
+		{ id: 'e-proxy-webB', source: 'proxy', target: 'webB', label: 'fails over here' },
+		{ id: 'e-webA-cache', source: 'webA', target: 'cache' },
+		{ id: 'e-webB-cache', source: 'webB', target: 'cache', label: 'resumes segments' },
+		{ id: 'e-webB-db', source: 'webB', target: 'db', label: 'claims session' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Playback during a rolling update" />

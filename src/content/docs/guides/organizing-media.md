@@ -1,0 +1,240 @@
+---
+title: Organizing your media
+description: How to name and arrange files on disk so Lumastra recognizes them, including multiple episodes in one file.
+sidebar:
+  order: 3
+---
+
+Name and arrange movie, TV, and anime files on disk so Lumastra's scanner
+identifies them correctly. This helps when setting up a new library or fixing
+one that isn't matching well. You'll need shell or file-manager access to the
+folders Lumastra scans.
+
+Lumastra scans your library folders, parses each filename, and identifies titles
+against metadata providers (TMDB). It's tolerant of messy layouts, but the
+conventions below give the most reliable results. It is also unusually good at
+**recognizing multiple episodes stored in a single file** (see below).
+
+:::note[Examples use public-domain titles]
+Lumastra ships with no media of its own: you supply your own library. The
+examples below use public-domain films and shows purely to illustrate naming.
+:::
+
+## Libraries and groups
+
+Lumastra's library model has two layers:
+
+- A **library group** is what you see as "a library": a name, an icon, an age
+  ceiling, and a metadata-provider chain.
+- A **library path** is one on-disk root folder. Each path has a single
+  **media type**: `movie`, `tv`, `anime`, `music`, `audiobook`, or one of the
+  personal types (`home_video`, `training`, `educational`, `personal`).
+  Audiobooks are mirrored from AudiobookShelf, not scanned from disk. See
+  [Audiobooks](/guides/audiobooks/).
+
+:::note[One media type per group]
+Because each path carries one media type, keep **one media type per group**:
+create a separate group (or at least a separate path) for Movies, TV, Music, and
+so on. Pointing a Movie path and a TV path at the same group mixes types.
+:::
+
+Lumastra scans both on a schedule (about hourly) and live via a filesystem
+watcher. Scans are incremental: unchanged files are skipped.
+
+## Folder structure
+
+### Movies
+
+A per-movie folder is recommended but not required; the title and year come from
+the filename.
+
+```
+Movies/
+  Night of the Living Dead (1968)/
+    Night of the Living Dead (1968).mkv
+  Metropolis (1927)/
+    Metropolis (1927) {edition-Restored}.mkv
+    Metropolis (1927) {edition-Theatrical}.mkv
+```
+
+Multiple video files in one movie folder are linked as selectable **versions /
+editions** of the same movie.
+
+### TV & Anime
+
+```
+TV/
+  The Adventures of Superman (1952)/
+    Season 01/
+      The Adventures of Superman - S01E01 - Superman on Earth.mkv
+      The Adventures of Superman - S01E02 - The Haunted Lighthouse.mkv
+```
+
+:::caution[The series name comes from the folder]
+For TV, the **show folder** (the folder above `Season XX`) is what Lumastra uses
+to identify the series, not the filename. A good folder name matters more than
+the episode filename. Recognized season folders include `Season 01`, `Season 1`,
+`Staffel 2`, `Saison 3`, `Temporada 4`, and `S01` (case-insensitive).
+:::
+
+### Music
+
+Music has its own naming and tagging rules (tags, compilations, multi-disc, album
+art, lyrics). See the dedicated [Organizing your music](/guides/organizing-music/)
+page.
+
+### Personal & non-entertainment libraries
+
+Lumastra isn't only for movies, TV, and music. It has dedicated media types for
+**home videos**, **training**, **educational**, and **personal** content. These
+**skip provider matching entirely** and build their structure from your folders,
+so they work great for footage that isn't in any metadata database.
+
+The **immediate parent folder becomes the title**, and the folders above it map to
+metadata fields:
+
+| Media type    | Folder level 1 → | Folder level 2 →     |
+| ------------- | ---------------- | --------------------- |
+| `home_video`  | Date / year      | Event                 |
+| `training`    | Department       | Category (the title)  |
+| `educational` | Subject          | Course (the title)    |
+| `personal`    | (flat)           | —                      |
+
+```
+Training/
+  Engineering/            ← department
+    Onboarding/           ← becomes the "course" title; all files grouped here
+      01 - Welcome.mp4
+      02 - Safety.mp4
+```
+
+## Naming conventions
+
+Lumastra normalizes `.`, `_`, space, and `-` separators, strips a leading
+`[Group]` tag, and drops quality/codec junk tokens (`1080p`, `BluRay`, `x265`,
+`DTS`, …) so they never pollute the title.
+
+### Movies
+
+| Filename                                            | Recognized as                    |
+| --------------------------------------------------- | --------------------------------- |
+| `Night of the Living Dead 1968 1080p BluRay.mkv`    | Night of the Living Dead · 1968  |
+| `His Girl Friday (1940).mkv`                        | His Girl Friday · 1940           |
+| `Metropolis (1927) {tmdb-19}.mkv`                   | TMDB id (exact match)            |
+| `Nosferatu.1922.{imdb-tt0013442}.mkv`               | IMDB id tt0013442                |
+
+A parenthesized `(Year)` is preferred and disambiguates remakes. Embedding a
+`{tmdb-NNN}` or `tt#######` id (in the filename **or** parent folder) bypasses the
+fuzzy search entirely.
+
+### TV episodes
+
+The primary pattern is `SxxExx` (case-insensitive; the episode number itself
+has no digit cap: Lumastra never truncates an over-long episode number, since
+shortening it could turn a bad filename into a different, real-looking
+episode). The episode title may appear in the filename:
+
+| Filename                                              | Season / Episode |
+| ------------------------------------------------------ | ----------------- |
+| `The.Adventures.of.Superman.S02E05.mkv`               | 2 / 5             |
+| `Dragnet - S01E01 - The Human Bomb.mkv`               | 1 / 1             |
+| `The.Adventures.of.Superman.S01E13.mkv`               | 1 / 13            |
+
+### Anime / absolute numbering
+
+When there's no `SxxExx`, several anime forms work: `[Fansub] Momotaro - 001
+[1080p].mkv`, `Momotaro 01 - The Peach Boy.mkv`, `Momotaro.Ep01.mkv`, and a `v2`
+version suffix. Absolute-ordered anime is stored as a high episode number under
+season 1 (e.g. `S01E0001`).
+
+:::note[Split-cour anime and TMDB season mismatches]
+Sonarr/TVDB and TMDB sometimes disagree on season structure for split-cour anime
+(e.g. two 25-episode seasons on disk vs. one 50-episode TMDB season). Lumastra
+detects and repairs this automatically after metadata sync. See [Auto-fixing
+split-cour anime season structure](/guides/administration/#media-library-console).
+:::
+
+## Multiple episodes in one file
+
+This is where Lumastra shines. A single file containing several episodes is split
+into one item per episode, all sharing the same file:
+
+| Filename                                                   | Episodes      |
+| ------------------------------------------------------------ | ------------- |
+| `The.Adventures.of.Superman.S01E01E02E03.mkv`               | 1 → 3         |
+| `Dragnet.S01E01-E03.mkv`                                     | 1 → 3         |
+| `Betty Boop - S01E01-02-03 - Snow White + Bimbo + Ha!.mp4`   | 1 → 3         |
+| `Momotaro.S01E0001E0002.mkv`                                 | 1 → 2 (anime) |
+
+Lumastra creates a distinct episode entry for each number in the range and
+attaches the same physical file to all of them. On re-scan, a partially-linked
+combined file self-heals. Quality tokens are protected: `Dragnet.S01E05-1080p.mkv`
+is episode 5 only, **not** a range.
+
+**Per-segment thumbnails:** when frame extraction is enabled, each episode in a
+combined file gets a *different* frame, sampled proportionally. Two episodes get
+frames at 25% and 75% of the file, so the thumbnails aren't identical.
+
+## Specials, editions & multi-part movies
+
+- **Specials / OVA / ONA** without an explicit season are filed under **Season 0**
+  (an explicit `SxxExx` always wins).
+- **Editions** are recognized via Plex-style `{edition-Restored}` /
+  `{edition-4K}` braces, a library-path edition label, or inline patterns.
+  Multiple editions of a movie become selectable versions.
+- **Multi-part movies**: `Part1`/`pt2`/`cd1`/`disc2` are treated as parts of one
+  movie, not separate items. (To store two *episodes* in one file, use the
+  `S01E01-E02` forms above.)
+
+## Sidecar files & extensions
+
+**Video:** `.mkv .mp4 .avi .m4v .mov .wmv .ts .m2ts .webm .ogv .flv .3gp .mpg
+.mpeg` · **Audio:** `.flac .mp3 .m4a .opus .ogg .wav .wma .aac .alac` (only
+ingested in music libraries).
+
+- **Subtitles** (`.srt .ass .ssa .vtt .sub .sup`) are matched by name:
+  `Nosferatu.en.srt`, `Nosferatu.de.forced.srt`, `Nosferatu.pt-BR.srt`,
+  `Nosferatu.en.sdh.srt`.
+- **Artwork** (`folder`/`poster`/`cover`/`backdrop`/`logo`/`banner` images) and
+  **`.nfo`** sidecars (read for authoritative IMDB/TMDB ids) are picked up
+  automatically.
+- **Ignored:** `extras`, `samples`, `trailers`, `featurettes`, disc folders
+  (`VIDEO_TS`, `BDMV`), vendor dirs (`@eaDir`, `$RECYCLE.BIN`), files with
+  `sample` in the name, and anything matched by a per-directory **`.lumastraignore`**
+  file (gitignore-style).
+
+## Troubleshooting
+
+Nothing is dropped: a file that can't be matched is still added as a playable
+**unmatched** item built from its filename, and is retried automatically once
+providers are healthy. Items needing manual attention appear in the admin
+re-identify surface.
+
+**Make identification reliable:**
+
+1. Embed a `{tmdb-NNN}` or `tt#######` id (filename or folder) to skip fuzzy
+   matching.
+2. For TV, name the **show folder** well: it's the series search query.
+3. Use `(Year)` for movies.
+4. Point each path at the correct **media type**.
+
+**Common mistakes** (these patterns are **not** recognized):
+
+| Mistake                                       | Fix                                |
+| ---------------------------------------------- | ----------------------------------- |
+| `The Show 1x05.mkv` (Plex `x` format)         | Use `The Show S01E05.mkv`          |
+| Daily show `The Show 2021.03.14.mkv` (date)   | Use `SxxExx` numbering             |
+| Two episodes as `…pt1.mkv` / `…pt2.mkv`       | Use `S01E01-E02.mkv`               |
+| Episode title used as the show folder         | Folder must be the **show** name   |
+| Music with no tags in a flat folder           | Use `Artist/Album/Track` folders   |
+
+## Next
+
+- [Organizing your music](/guides/organizing-music/): tags, folder rules, and
+  album art for music libraries
+- [Audiobooks](/guides/audiobooks/): the AudiobookShelf-mirrored audiobook
+  library instead
+- [Chapters, skip intro & trickplay](/guides/media-enrichment/): what happens
+  to a file after it's matched
+- [Administering Lumastra](/guides/administration/): the re-identify surface
+  and provider settings

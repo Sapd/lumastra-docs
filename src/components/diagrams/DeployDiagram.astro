@@ -1,0 +1,26 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'clients', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Browsers / apps', sub: 'HLS · SSE · REST', kind: 'viewer', hasSource: true } },
+		{ id: 'edge', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Ingress / Gateway', sub: 'TLS, no affinity needed', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'router', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Router (nginx)', sub: 'keeps a session on one pod', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'web', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'web-0 … web-N', sub: 'StatefulSet', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'worker', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Worker', sub: 'one pod', kind: 'proxy', hasSource: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'PostgreSQL 17+', sub: 'external or CloudNativePG', kind: 'infra', hasTarget: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Valkey', sub: 'tasks + cache', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-clients-edge', source: 'clients', target: 'edge' },
+		{ id: 'e-edge-router', source: 'edge', target: 'router' },
+		{ id: 'e-router-web', source: 'router', target: 'web', label: 'by key' },
+		{ id: 'e-web-pg', source: 'web', target: 'postgres' },
+		{ id: 'e-web-valkey', source: 'web', target: 'valkey' },
+		{ id: 'e-worker-pg', source: 'worker', target: 'postgres' },
+		{ id: 'e-worker-valkey', source: 'worker', target: 'valkey' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Kubernetes components" />

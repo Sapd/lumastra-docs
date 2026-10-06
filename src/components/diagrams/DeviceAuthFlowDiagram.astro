@@ -1,0 +1,26 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'device', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'TV app / CLI client', sub: 'requests + polls', kind: 'viewer', hasTarget: true, hasSource: true } },
+		{ id: 'oauthDevice', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'POST /oauth/device', sub: 'issues device_code · user_code', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'browser', type: 'flow', position: { x: 232, y: 165 }, data: { title: "User's browser", sub: 'opens /device', kind: 'viewer', hasTarget: true, hasSource: true } },
+		{ id: 'lumastra', type: 'flow', position: { x: 232, y: 330 }, data: { title: 'Lumastra', sub: 'consent screen · records approval', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'oauthToken', type: 'flow', position: { x: 0, y: 330 }, data: { title: 'POST /oauth/token', sub: 'polled at `interval`', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'apiv1', type: 'flow', position: { x: 0, y: 495 }, data: { title: '/api/v1 surface', sub: 'Bearer JWT · scope-gated', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-device-request', source: 'device', target: 'oauthDevice', label: '1. client_id · scope' },
+		{ id: 'e-request-device', source: 'oauthDevice', target: 'device', label: 'device_code · user_code' },
+		{ id: 'e-device-browser', source: 'device', target: 'browser', label: '2. shows user_code / QR' },
+		{ id: 'e-browser-lumastra', source: 'browser', target: 'lumastra', label: 'sign in + approve' },
+		{ id: 'e-device-poll', source: 'device', target: 'oauthToken', label: '3. poll device_code' },
+		{ id: 'e-lumastra-poll', source: 'lumastra', target: 'oauthToken', label: 'approval recorded' },
+		{ id: 'e-poll-device', source: 'oauthToken', target: 'device', label: 'access_token + refresh_token' },
+		{ id: 'e-device-api', source: 'device', target: 'apiv1', label: '4. Bearer <access_token>' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="OAuth device authorization" />

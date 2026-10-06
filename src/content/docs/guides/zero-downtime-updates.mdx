@@ -1,0 +1,152 @@
+---
+title: Zero-downtime updates
+description: Roll web updates with session affinity, health checks, and shared storage; handle worker and Live TV restarts.
+---
+
+import ZeroDowntimeDiagram from '../../../components/diagrams/ZeroDowntimeDiagram.astro';
+
+Rolling updates require at least two web instances, sticky routing with failover,
+and a separate singleton worker. Shared transcode storage lets a peer resume playback
+when its owner is replaced; without it, the site stays available but active transcodes
+restart. Updating a single app container causes a brief outage and cancels its streams.
+
+PostgreSQL and Valkey hold authoritative state; migrations are serialized by an
+advisory lock. Run each web instance with `WORKER_MODE=disabled`.
+
+<ZeroDowntimeDiagram />
+
+## The three rules
+
+### 1. Run two or more web instances
+
+Keep at least one healthy instance serving while another is replaced.
+
+### 2. Route with sticky affinity and fail over on error, never round-robin
+
+Per-session HLS/transcode state is tied to the instance a playback session started on.
+The proxy in front of the web tier **must**:
+
+- Pin each playback session to one instance, by session cookie (client-level) or by
+  hashing the playback-session id. Plain round-robin splits a single stream's segment
+  requests across instances and breaks it, even without a deploy.
+- Retry the next instance on a connection error or timeout, so when one instance is
+  briefly down during its replacement, requests routed to it land on a healthy peer
+  instead of returning `502`.
+
+On Kubernetes, the Helm chart's router does this for you: it hashes the stream token,
+then the playback session id, then the client IP, over one upstream line per web pod.
+See [Deploy on Kubernetes → Why there is a router](/guides/deploy-kubernetes/#why-there-is-a-router).
+With your own load balancer, use cookie affinity or a source-IP hash at the layer that
+fans out across the web instances, not at the Kubernetes Service behind an Ingress.
+
+### 3. Replace instances one at a time, gated on health, never all at once
+
+Replace one instance, wait for `GET /api/health/ready` to return `200`, then replace
+the next. This endpoint checks startup and dependencies (orchestrator, PostgreSQL,
+Valkey). `/api/health` checks process liveness only and must not gate replacements.
+
+## How an in-flight video stream survives
+
+Mount `TRANSCODE_TEMP_DIR` (`/tmp/lumastra-transcode` by default) on storage every web
+instance can read and write: a shared host path on Docker, or a `ReadWriteMany` volume
+on Kubernetes.
+
+Sessions persist their seek position in PostgreSQL. After failover, the peer claims
+the session and resumes from shared segments while the player retries. A brief
+re-buffer may occur.
+
+### Hover previews need a shared preview cache too
+
+Preview jobs are not persisted like playback sessions. Share `PREVIEW_CACHE_DIR`
+(`/config/cache/preview` by default) so any web instance can serve finished clips
+from disk. Sharing `/config` already covers the default directory.
+
+Without sharing, a request landing on another instance may show a static backdrop.
+This does not affect full playback. Single-instance installs need no change.
+
+## Live TV is the exception
+
+The separate [stream proxy](/guides/deploy-docker/) holds Live TV channels in memory.
+Leave it running during web updates; a replacement web instance relays the same
+channel. Restarting the proxy drops live viewers, who must reconnect and re-tune.
+Update it only when its version changes and expect an interruption.
+
+## Update the worker in lockstep
+
+Update the singleton worker to the same image as the web tier in the same release.
+Its in-flight jobs pause and resume, but version skew can break schema or task
+contracts. On Docker, recreate it immediately after the web swap. PostgreSQL and
+Valkey updates are separate operations.
+
+## On Kubernetes: mostly native
+
+The [Helm chart](/guides/deploy-kubernetes/#upgrades-and-gitops) provides the router,
+shared storage, and serial StatefulSet rollout. For a hand-written Deployment, use
+at least two replicas, `maxUnavailable: 0`, readiness on `/api/health/ready`, session
+affinity, and shared config/transcode volumes:
+
+```yaml
+spec:
+  replicas: 2 # or more
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # never drop below the desired count mid-roll
+      maxSurge: 1 # bring the new pod up before retiring an old one
+  template:
+    spec:
+      containers:
+        - name: web
+          # …image, env (incl. a unique INSTANCE_ID), config volume…
+          readinessProbe:
+            httpGet: { path: /api/health/ready, port: 3000 }
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - { name: config, mountPath: /config } # ReadWriteMany
+            - { name: transcode-cache, mountPath: /tmp/lumastra-transcode } # ReadWriteMany, for stream survival
+```
+
+A Deployment rollout waits for readiness before removing an old pod. See
+[Deploy on Kubernetes](/guides/deploy-kubernetes/) for the chart's configuration.
+
+## On a single host (Docker): run two, roll by hand or by script
+
+The [Docker guide](/guides/deploy-docker/) runs **one** web container, which means a
+brief outage on update. To get zero-downtime on a single host, run **two** web containers
+on different ports, front them with your reverse proxy, and replace them one at a time.
+
+1. **Two web services**, e.g. bound to `127.0.0.1:8080` and `127.0.0.1:8081`, sharing the
+   same config **and transcode-cache** directories (same host paths), each with a distinct
+   `INSTANCE_ID`. Give each a container healthcheck hitting `/api/health/ready`.
+2. **A reverse proxy over both**, sticky + failover. An nginx sketch:
+
+   ```nginx
+   # Prefer stream_token: it exists before PlaySessionId and stays constant
+   # throughout the session. Fall back to PlaySessionId, then the sticky cookie.
+   map $arg_stream_token $lumastra_key {
+       ""      $arg_PlaySessionId;
+       default $arg_stream_token;
+   }
+   map $lumastra_key $lumastra_route {
+       ""      $cookie_lumastra_sticky;
+       default $lumastra_key;
+   }
+   upstream lumastra {
+       hash $lumastra_route consistent;
+       server 127.0.0.1:8080 max_fails=1 fail_timeout=2s;
+       server 127.0.0.1:8081 max_fails=1 fail_timeout=2s;
+   }
+   server {
+       # …TLS, forward-auth, etc…
+       proxy_next_upstream error timeout;   # retry the healthy peer if one is mid-restart
+       location / { proxy_pass http://lumastra; }
+   }
+   ```
+
+   Caddy (`lb_policy` + `lb_try_duration`) and Traefik (sticky service + `HealthCheck`)
+   provide equivalent routing. Key stickiness on `stream_token`.
+
+3. Pull the image, then run `docker compose up -d --no-deps --wait <service>` for each
+   web service in turn. Its healthcheck must use `/api/health/ready`. Update the worker
+   immediately afterwards.

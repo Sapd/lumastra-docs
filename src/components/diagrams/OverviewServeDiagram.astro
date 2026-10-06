@@ -1,0 +1,25 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'browser', type: 'flow', position: { x: 240, y: 0 }, data: { title: 'Browser / PWA', sub: 'Svelte 5 · HLS player · service worker', kind: 'viewer', hasSource: true } },
+		{ id: 'auth', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Auth layer', sub: 'forward-auth · JWT · PAT · device flow', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'server', type: 'flow', position: { x: 240, y: 170 }, data: { title: 'SvelteKit server', sub: 'API · SSR · services · image proxy', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'proxy', type: 'flow', position: { x: 480, y: 170 }, data: { title: 'Stream Proxy', sub: 'Live TV · HLS', kind: 'default', hasTarget: true } },
+		{ id: 'worker', type: 'flow', position: { x: 360, y: 350 }, data: { title: 'Worker process', sub: 'BullMQ · background jobs', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'external', type: 'flow', position: { x: 240, y: 520 }, data: { title: 'External APIs', sub: 'TMDB · Jellyfin · OpenAI · MDBList', kind: 'ext', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-br-auth', source: 'browser', target: 'auth', label: 'sign in' },
+		{ id: 'e-br-server', source: 'browser', target: 'server', label: 'HTTP · SSE' },
+		{ id: 'e-br-proxy', source: 'browser', target: 'proxy', label: 'HLS' },
+		{ id: 'e-auth-server', source: 'auth', target: 'server', label: 'identity' },
+		{ id: 'e-server-worker', source: 'server', target: 'worker', label: 'enqueue jobs' },
+		{ id: 'e-server-ext', source: 'server', target: 'external', label: 'metadata · images' },
+		{ id: 'e-worker-ext', source: 'worker', target: 'external', label: 'ingest · embeddings' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Components and request flow" />

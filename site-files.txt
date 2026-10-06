@@ -1,0 +1,12 @@
+# Paths that lumastra.org takes from this repository, one per line. A path that
+# ends in / is a directory and is mirrored as a whole (files deleted here are
+# deleted there too). Everything else in this repository is only for the
+# standalone preview build.
+docs.config.mjs
+public/install.md
+scripts/generate-diagrams.mjs
+src/components/DocsFooter.astro
+src/components/diagrams/
+src/content/docs/
+src/lib/diagram-layout.ts
+src/styles/theme.css

@@ -1,0 +1,27 @@
+name: Problem in the docs
+description: Something on a docs page is wrong, outdated or unclear.
+labels: ['docs:fix']
+body:
+    - type: input
+      id: where
+      attributes:
+          label: Which page?
+          description: The URL on lumastra.org, for example https://lumastra.org/guides/backup-recovery/
+      validations:
+          required: true
+    - type: textarea
+      id: problem
+      attributes:
+          label: What's wrong?
+          description: Quote the sentence or command, and say what happens instead.
+      validations:
+          required: true
+    - type: input
+      id: version
+      attributes:
+          label: Lumastra version
+          description: If it's about behavior, the server version you run (Admin → About).
+    - type: textarea
+      id: suggestion
+      attributes:
+          label: Suggested fix (optional)

@@ -1,0 +1,586 @@
+---
+title: Watch Together
+description: >
+  Implement synchronized "watch party" playback against Lumastra: the unified
+  events channel, SSE stream, event-type taxonomy, host/participant roles,
+  buffer-gated resume, and drift correction.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import WatchTogetherResumeDiagram from '../../../components/diagrams/WatchTogetherResumeDiagram.astro';
+import SendToDeviceDiagram from '../../../components/diagrams/SendToDeviceDiagram.astro';
+import DriftCalibrationDiagram from '../../../components/diagrams/DriftCalibrationDiagram.astro';
+
+Watch Together synchronizes playback across devices for developers building a
+**native client or player**: one **host** seeks and moves the party between
+items, any participant can pause or resume, and all participants stay aligned
+through a server-coordinated protocol over **Server-Sent Events**. The server fans events out across replicas via Valkey
+pub/sub, prevents the sender from receiving its own events, and computes a
+clock offset so everyone resumes at the same instant.
+
+This builds on the normal [player](/developers/building-a-player/) flow. Each
+participant still streams the media itself; Watch Together only coordinates
+*when* everyone plays.
+
+:::note[Feature gate]
+Watch Together requires `FEATURE_WATCH_TOGETHER=true` on the server. Check
+`features.watch_together` in [`GET /server/capabilities`](/developers/api/)
+before attempting to create or join a session.
+:::
+
+## You'll need
+
+A bearer token, a per-device `clientId` you generate, and an SSE client that
+can set an `Authorization` header (the browser's built-in `EventSource` cannot,
+so a browser client needs a `fetch`-based streaming reader instead).
+
+## Start here: the smallest correct integration
+
+Implement these four steps first; the rest of this page explains each part.
+
+1. Create a stable, unique `clientId` for each device or tab. Connect to the
+   SSE stream and retain its last event id for reconnects.
+2. The host creates a session; a guest sends `join`. Both then follow the same
+   server-issued playback commands.
+3. On every `buffer_check`, cancel an earlier resume task, pause, seek to
+   `currentTime`, and send `ready` only once the local player has reached that
+   position and buffered enough to continue.
+4. On `all_ready`, seek again if necessary and play **no earlier than**
+   `resumeAt`, and only when the local player is still at the target and
+   ready. A newer `buffer_check` always wins over an older `all_ready`.
+
+:::caution[The four rules that prevent desynchronization]
+- Never play just because local buffering finished; only the server's `sync`,
+  `all_ready`, or `resume` event authorizes playback.
+- Treat `buffer_check.seekInitiated: true` as target-authoritative, including
+  on the host.
+- Re-anchor any drift estimator at `all_ready.currentTime` and discard its old
+  samples.
+- Cancel pending resume timers on a newer barrier, pause, stall, navigation, or
+  session end.
+:::
+
+## Protocol reference
+
+### Transport: one channel for everything
+
+All client-to-server messages go through **one endpoint**:
+
+```http
+POST /api/v1/watch-together/{code}/events
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "clientId": "client_1704891234567_k8m3x9f2q", "type": "seek", "payload": { "currentTime": 142.5 } }
+```
+
+| Event type | Status | Body |
+|---|---|---|
+| `join` | `200` | `{ "session": { … } }` |
+| `position` | `200` | `{ "resyncing": boolean }` |
+| everything else | `202` | `{ "accepted": true }` |
+
+The event itself reaches other clients on the **SSE stream**, not in this
+response. All server-to-client events arrive on:
+
+```http
+GET /api/v1/watch-together/{code}/events?clientId=<clientId>[&lastEventId=<seq>]
+Authorization: Bearer <token>
+```
+
+`clientId` is required: the server uses it for echo prevention (you never
+receive your own events). The server keeps a capped replay ring of the last 50
+events per session (4-hour TTL). On reconnect, pass the last sequence you saw
+either as the standard `Last-Event-ID` header or as `?lastEventId=`. The
+header wins if you send both.
+
+:::caution[Browser Bearer authentication]
+`EventSource` cannot attach an `Authorization` header. A browser client needs an
+SSE reader built on `fetch`; native clients can use their normal HTTP streaming
+API. Do not put a bearer token in the URL.
+:::
+
+### `clientId` vs `userId`
+
+| Field | Identifies | Example |
+|---|---|---|
+| `userId` | the person (account) | `"user-uuid-abc123"` |
+| `clientId` | a specific device / tab | `"client_1704891234567_k8m3x9f2q"` |
+
+**The host is a `clientId`, not a `userId`.** The same user on a phone and a
+TV are two separate participants, and only the host *device* can seek or
+navigate: `amIHost = session.hostClientId === myClientId`.
+
+### Session lifecycle
+
+```text
+1. Host:  POST /api/v1/watch-together                → session { code }
+2. Guest: POST .../events {type:"join"}               → 200 {session} + buffer_check to all
+3. All:   GET  .../events?clientId=…                  (SSE)
+4. Any:   POST .../events {type:"sync"}  (play/pause) · Host: {type:"seek"}
+5. All:    POST .../events {type:"position"} every ~10 s · Host: {type:"heartbeat"} every ~5 s
+6. Drift: server broadcasts buffer_check → clients POST ready → server broadcasts all_ready
+7. Stall: POST {type:"stall"} → all pause · POST {type:"stall-ready"} → resume
+8. End:   host POST {type:"disband"} · guest POST {type:"leave"}
+          (disband is how a session ends; there is no DELETE on the public API)
+9. Host gone: no host SSE connection and no host heartbeat for ~10 min
+          → server sends session_ended to everyone
+```
+
+### When the server ends a party
+
+Besides the host's `disband`, the server ends a party on its own when the host is
+gone: the host has no open SSE stream and has sent no `heartbeat` for
+`WATCH_TOGETHER_HOST_ABSENT_MINUTES`. The default is 10 minutes; a server admin can
+change it under Admin > Settings or with the environment variable (1 to 1440 minutes).
+Every participant receives `session_ended`.
+
+The server checks once a minute, so a party ends up to a minute after the limit. A
+host whose app crashed can still look connected for about 90 seconds, until its
+stream's keepalives stop counting.
+
+For a host client this means:
+
+- Keep the SSE stream open while hosting, and send `heartbeat` every ~5 s while playing.
+- A host that leaves the app for a short while (a TV's Home button, switching apps on
+  a phone) keeps the party, as long as it comes back within that time.
+- After `transfer-host`, or when the server promotes a new host because the host left,
+  the new host's time starts from that moment.
+
+### Event catalog
+
+The `type` field is a closed enum. The host-only types are `navigate`,
+`version`, `visibility`, `transfer-host`, `disband`, and `activity`; the
+handler returns `403` if a non-host client sends one. `seek` is also host-only:
+the service rejects a guest's seek with `403`. `sync` is open to every
+participant, so any participant can pause or resume the party.
+
+| `type` | Who | Payload | SSE event emitted |
+|---|---|---|---|
+| `seek` | host-only | `{ currentTime, isPlaying }` | `buffer_check` → `all_ready` |
+| `sync` | any | `{ currentTime, isPlaying, playbackRate? }` | `sync` |
+| `position` | any | `{ position }` | `buffer_check` if drift detected |
+| `navigate` | host-only | `{ itemId, mediaType, title, posterUrl?, fileId? }` | `navigate` |
+| `version` | host-only | `{ fileId }` | `version_change`: switch to another file (version) of the current item |
+| `visibility` | host-only | `{ isPublic }` | `visibility_changed`: list or unlist the party |
+| `activity` | host-only | `{ activity, message? }` | `host_activity`: tell guests what the host is doing (`watching`, `searching`, or `browsing`) |
+| `transfer-host` | host-only | `{ newHostUserId }` | `host_changed` |
+| `disband` | host-only | `{}` | `session_ended` |
+| `join` | any | `{}` | `participant_joined` + `buffer_check` |
+| `leave` | any (idempotent) | `{}` | `participant_left` |
+| `ready` | any | `{ checkId, currentTime? }` | `all_ready` when last client signals ready |
+| `stall` / `stall-ready` | any | `{ stallId }` | `stall` / `resume` |
+| `heartbeat` | any | `{ currentTime, isPlaying }` | `host_position` when sent by the host, otherwise none |
+| `reaction` / `effect` | any | `{ emoji }` / `{ effect }` | `reaction` / `screen_effect` |
+
+Lumastra's own clients also block guest seeks in the UI. Do the same in a
+third-party player: show the party's position and disable the seek bar for
+guests. On `ready`, `currentTime` is read only from the host.
+
+:::caution[A host seek does not emit a standalone `seek` frame]
+`POST {type:"seek"}` runs the full `buffer_check` → `ready` → `all_ready`
+barrier so everyone re-buffers and resumes together; it never broadcasts a
+plain `seek` event. Handle host seeks entirely through that barrier and
+re-anchor your drift reference to the `all_ready` position (see
+[Re-anchor after every barrier](#re-anchor-after-every-barrier)).
+:::
+
+**`heartbeat` vs `position`:** `heartbeat` silently updates the server's record
+of where this client is: no broadcast, no drift check. `position` also
+triggers drift detection; when drift is large the server broadcasts
+`buffer_check`. Use `position` for the periodic 10-second report; use
+`heartbeat` every 5 seconds. **A host heartbeat must carry the host's live
+`isPlaying`.** The server persists it (host-only), so the play state a joining
+guest is told to adopt self-heals to the host's reality every few seconds.
+Build the heartbeat from the live player state each time. Never send a cached
+flag.
+
+An explicit `sync`, or a host `seek` that carries `isPlaying`, pins that play
+state for 3 seconds. A host heartbeat that contradicts it inside that window is
+ignored, because it was sampled before the press. The next heartbeat, 5 seconds
+later, still corrects a play state that a missed `sync` left wrong.
+
+### SSE frame reference (server → client)
+
+| Event type | Data fields |
+|---|---|
+| `connected` | `session`, `serverTime` (ms), `bufferCheck` (see below) |
+| `sync` | `state: {currentTime, isPlaying, playbackRate, timestamp}`, `userId` |
+| `buffer_check` | `checkId`, `currentTime`, `initiator`, `isPlaying`, `seekInitiated` |
+| `all_ready` | `checkId`, `currentTime`, `resumeAt` (ms), `isPlaying`, `serverTime` (ms) |
+| `stall` / `resume` | `userId`, `username`, `clientId` / *(empty)* |
+| `host_position` | `position`, `timestamp` (ms), `isPlaying`, `playbackRate` |
+| `session_ended` | `hostUserId`, `hostUsername` |
+
+#### The `connected` snapshot
+
+Besides `session` and `serverTime`, the `connected` frame carries `bufferCheck`:
+the barrier that is pending right now, or `null`. It has `checkId`,
+`currentTime`, `isPlaying`, and `seekInitiated`. A client that connects or
+reconnects while a barrier is pending must treat it like a `buffer_check`:
+pause, seek to the target, buffer, and send `ready` with that `checkId`.
+
+#### Playback is gated on `isPlaying`, never on your own buffer
+
+`isPlaying` on `sync`, `buffer_check`, and `all_ready` means "should playback
+resume *after* this sync completes." A guest must **never** start playback just
+because its buffer filled. Any participant can pause or resume the party with
+`sync`. The host reports its live state on `host_position` every ~5 s, so a
+guest may additionally honor it to self-correct.
+
+#### Explicit seeks are target-authoritative
+
+`buffer_check.seekInitiated` distinguishes a deliberate host seek (`true`) from
+a join or drift re-sync (`false`). For an explicit seek, the server's
+`currentTime` is authoritative for **every** client, including the host. Do
+not replace it with a locally reported position, or a rapid backward seek
+turns into a resume at the old position. For join/drift barriers (`false`), a
+host may retain a clearly newer local position as a guard against a stale
+server snapshot; keep that exception narrow.
+
+#### Error frames
+
+```
+event: error
+data: {"code":"dependency_unavailable","error":"Cache service unavailable"}
+```
+
+On a transient `error` frame, close the stream and reconnect with your current
+last event id. There is one exception. When the session ends, the server sends
+`session_ended` and then an `event: error` frame with the message
+`Session disbanded by host`. Treat that as the end: close cleanly, leave the
+party UI, and do not reconnect.
+
+## Complete JavaScript reference
+
+```js
+const clientId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+function connectSSE(code, lastEventId) {
+	const params = new URLSearchParams({ clientId });
+	if (lastEventId) params.set('lastEventId', String(lastEventId));
+	const es = openAuthenticatedSSE(`/api/v1/watch-together/${code}/events?${params}`,
+		{ headers: { Authorization: `Bearer ${token}` } });
+
+	let clockOffset = 0, lastSeq = lastEventId ? Number(lastEventId) : 0, resumeGeneration = 0, ended = false;
+
+	async function resumeWhenReady(target, resumeAt, generation) {
+		await new Promise((r) => setTimeout(r, Math.max(0, (resumeAt - clockOffset) - Date.now())));
+		const deadline = Date.now() + 10_000;
+		while (generation === resumeGeneration && Date.now() < deadline) {
+			const atTarget = Math.abs(video.currentTime - target) <= 1;
+			if (atTarget && !video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+				return video.play();
+			}
+			await new Promise((r) => setTimeout(r, 200));
+		}
+	}
+
+	function enterBarrier(check) {
+		resumeGeneration += 1; // cancels any stale all_ready resume task
+		video.pause();
+		checkBufferAt(check.currentTime).then(() =>
+			sendEvent('ready', { checkId: check.checkId, currentTime: check.currentTime }));
+	}
+
+	es.onmessage = (event) => {
+		if (event.lastEventId) lastSeq = Number(event.lastEventId);
+		const data = JSON.parse(event.data);
+		switch (data.type) {
+			case 'connected':
+				clockOffset = data.serverTime - Date.now();
+				if (data.bufferCheck) enterBarrier(data.bufferCheck); // same handling as buffer_check
+				break;
+			case 'sync': data.state.isPlaying ? video.play() : video.pause(); break;
+			case 'buffer_check': enterBarrier(data); break;
+			case 'all_ready':
+				video.currentTime = data.currentTime;
+				if (data.isPlaying) resumeWhenReady(data.currentTime, data.resumeAt, resumeGeneration);
+				break;
+			case 'stall': video.pause(); break;
+			case 'resume': video.play(); break;
+			case 'session_ended': ended = true; es.close(); break;
+		}
+	};
+	es.addEventListener('error', () => {
+		es.close();
+		if (!ended) setTimeout(() => connectSSE(code, lastSeq), 2000); // never after session_ended
+	});
+	return es;
+}
+```
+
+## Create a session (host)
+
+```http
+POST /api/v1/watch-together
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "itemId": "550e8400-…", "mediaType": "movie", "title": "Casablanca", "currentTime": 0, "clientId": "client_…" }
+```
+
+`mediaType` is one of `movie`, `episode`, `series`. A series id has no
+playable item of its own, so resolve it to an episode first and create the
+party for the concrete movie or episode that Play would start. Treat `series`
+as "resolve to an episode first". Response is a bare
+`{ session: WatchTogetherSession }`. `session.code` is the shareable session
+code (e.g. `"MOVIE-7X3K"`) used in all subsequent requests, and carries
+`hostClientId` (the host device, see `clientId` vs `userId` above),
+`isPublic`, `participants[]`, and `createdAt`/`lastSync`.
+
+## Join a session (guest)
+
+```http
+POST /api/v1/watch-together/MOVIE-7X3K/events
+{ "clientId": "client_…", "type": "join", "payload": {} }
+```
+
+Response is `200 { session }`. The server simultaneously broadcasts
+`buffer_check` to **all** current participants, including the joiner, so
+everyone pauses and synchronizes before the new guest starts playing. If the
+guest's SSE stream connects after that broadcast, it picks the barrier up from
+`connected.bufferCheck`. If a barrier never completes, the server resolves it
+after a timeout of about 5 seconds, so a guest may wait up to ~5 s on join.
+
+## Barrier details: buffer-gated resume
+
+On a seek, a join, or large drift the server broadcasts `buffer_check`. Every
+client pauses, seeks to the target position, buffers, verifies it has actually
+reached the target, and only then sends `ready`. Once **all** participants
+have reported ready, the server broadcasts `all_ready` with a **`resumeAt`
+timestamp about 1.5 seconds ahead of the server clock** so everyone un-pauses
+together.
+
+<WatchTogetherResumeDiagram />
+
+Schedule the resume against the server clock, but treat the timestamp as an
+*earliest* play time, not permission to play an old player position. At that
+time, verify again that the player is near `currentTime`, is not seeking, and
+has future media data; poll briefly and cancel the older resume task if a newer
+`buffer_check` arrives. Do not fall back to an unconditional `play()` after a
+timeout.
+
+If the host has paused when a guest joins, `buffer_check.isPlaying` is `false`;
+everyone still syncs to the target position via `all_ready`, but no one
+resumes.
+
+### Re-anchor after every barrier
+
+If you run [drift correction](#optional-drift-correction), you keep a local
+estimate of the host's live position: the last `host_position` (or `sync`)
+value, extrapolated by elapsed time. **When an `all_ready` barrier completes,
+overwrite that anchor with the barrier's `currentTime` and reset your drift
+compensator.** This matters because a **host seek arrives only as the
+barrier**: it carries no fresh `host_position`. Skip the re-anchor and your
+next drift tick extrapolates from the stale pre-seek anchor, sees a phantom
+drift, and hard-seeks the guest right back off the position everyone just
+synced to.
+
+### Navigating between items (host)
+
+On `navigate` the server sets the party to `currentTime` 0 and `isPlaying`
+false, with no barrier. The `navigate` frame goes to every participant except
+the sender. Guests switch to the new item and wait. The host does not start
+the next item locally either. The party waits at the start of the new item
+until someone presses Play, and that `sync` starts everyone.
+
+When the host moves to another item (`navigate`) or ends playback, **stop
+position/heartbeat reporting and drift correction the instant navigation
+begins**, and never report a position read from a torn-down player: it reads
+`currentTime: 0`, and a stray report at that moment broadcasts
+`host_position: 0` to everyone, hard-seeking a guest still on the old item back
+to the start. Guests should suppress drift hard-seeks while a `navigate` is in
+flight.
+
+### Pause, resume, and the position a guest sends
+
+Any participant can pause or resume the party with `sync`. When a guest pauses
+a **playing** party, send the guest's real `currentTime`. The server accepts it
+only if it is at most 1 s behind or up to 10 s ahead of the host's last
+heartbeat. Otherwise it keeps the host's position, so a guest whose player
+still sits at 0 cannot rewind the party. For `isPlaying: true` from a guest,
+the position is ignored. In every other case only the host sets the position.
+
+### Echo suppression
+
+After you apply a remote play, pause, or seek, your own player changes state
+and your code sees it. Do not send that change back. Suppress only a change
+toward the state the remote command asked for. A user press the other way,
+inside the same window, is a real action and must be sent. A blanket time
+window after every remote command swallows a host's Play pressed right after a
+join.
+
+### Starting an item
+
+Never auto-play on load inside a party. The session decides how a new item
+starts. This applies to guests after every reload, and to the host on first
+load and after `navigate`. Load the item paused, then follow `sync` and
+`all_ready`.
+
+### End of an item as a guest
+
+When your own media ends, do not close the player and do not send `leave`.
+Stay in the session and wait for the host's `navigate` or for `session_ended`. If the
+host has gone away, the server ends the party after about 10 minutes (see
+[When the server ends a party](#when-the-server-ends-a-party)), so a guest never waits
+forever.
+
+## Reference state machine
+
+| State | Meaning | Entered on |
+|---|---|---|
+| `IDLE` | Not in a session | Initial, or after `leave`/`session_ended` |
+| `PAUSED` | In session, not playing | `sync` with `isPlaying: false` |
+| `PLAYING` | In session, playing | `sync`, or `all_ready` once the local target is ready |
+| `BUFFERING` | Waiting for every participant to be ready | `buffer_check` received |
+| `STALLED` | Group paused for a slow participant | `stall` received |
+
+## Optional: drift correction
+
+Guests report position every ~10 s (`type:"position"`). Between hard re-syncs,
+close small drift by nudging `playbackRate` over a target window rather than
+seeking:
+
+```text
+drift    = hostPosition − guestPosition    (positive = guest behind)
+syncTime = min(targetSyncTime ≈ 300 s, hostRemaining)
+guestRate = originalRate × (syncTime + drift) / syncTime
+```
+
+A 10-second lag over a 5-minute window produces a ~3.3% rate change:
+imperceptible, but enough to catch up. Reserve a hard seek for large drift or
+an explicit host seek, and stop adjusting in the last minute of the media.
+Lumastra's web client hard-seeks beyond 3 s of drift and the Apple clients
+beyond 8 s. Below that, the playback rate is capped at ±5%, so on an Apple
+client a 5 s gap takes about 100 s to close. That is expected behavior. **Reset the estimator on every `all_ready`** (see
+[Re-anchor after every barrier](#re-anchor-after-every-barrier)).
+
+### Advanced: calibrated drift compensation
+
+Lumastra's own clients use a calibrated variant instead of a fixed dead-zone,
+moving through three states per participant:
+
+<DriftCalibrationDiagram />
+
+- **MEASURING**: gather drift samples for the first 5 s after join (≥3 samples).
+- **CALIBRATING**: compute the target-sync-time rate from those samples.
+- **LOCKED**: rate is applied. Recalibrates on an exponential backoff
+  (10 s → 20 s → 40 s → 60 s max) rather than continuously, and returns to
+  MEASURING on a drift past the hard-seek threshold or a host seek.
+
+Simpler clients can skip this and use the fixed-rate dead-zone above. Both
+converge on the same outcome; this variant just changes rate less often.
+
+## What a third-party player must send
+
+- A stable per-device `clientId` on the SSE URL and in every event.
+- Host: a `heartbeat` every ~5 s with `{ currentTime, isPlaying }` read from the
+  live player, and a `position` every ~10 s. Stop both on `navigate` and on
+  teardown.
+- `ready` only when the player is actually at the target and buffered, with
+  the `checkId` of the barrier.
+- `stall` and `stall-ready` around real rebuffering, not startup buffering.
+- Never broadcast state you did not cause (see
+  [Echo suppression](#echo-suppression)).
+- An explicit `leave` (or `disband` for the host) when the user exits. Send
+  nothing when the app goes to the background or the user switches apps.
+
+## Optional: reactions and screen effects
+
+**Reactions** (`type:"reaction"`): `😂` `😮` `😢` `😍` `🔥` `👏` `😱` `🤯`.
+**Screen effects** (`type:"effect"`): `shake` `confetti` `snow` `hearts`
+`flash` `zoom` `spin` `rage` `matrix` `vhs`. Both are available to any
+participant.
+
+## Related feature: Send to Device
+
+A companion feature for pushing content to another of the user's own devices
+without manual navigation, e.g. tapping "watch on the living room TV" from a
+phone. Two action types: `join_party` (join a Watch Together session) and
+`play_media` (start a movie/episode directly, no session involved).
+
+<SendToDeviceDiagram />
+
+:::note[`{id}` is the device *session*, not the device-code id]
+`{id}` in the endpoints below is the `device_session_id` claim from your JWT,
+not the `device_id` you generated for the device-code request. `/heartbeat`
+and `GET /actions` enforce `{id} === deviceSessionId` and `403` otherwise; PAT
+and service tokens lack the claim entirely and cannot call these.
+:::
+
+```http
+POST /api/v1/devices/{id}/heartbeat
+{ "deviceName": "Living Room TV", "deviceType": "tv", "supportsWatchTogether": true }
+```
+
+Send every 2–3 minutes while foregrounded; online status expires 10 minutes
+after the last heartbeat. `GET /api/v1/devices?scope=mine` lists the caller's
+devices with online status for a device picker.
+
+<Tabs>
+<TabItem label="Send an action">
+```http
+POST /api/v1/devices/{targetDeviceId}/actions
+{ "type": "join_party", "sessionCode": "MOVIE-7X3K" }
+```
+or `{ "type": "play_media", "itemId": "…", "startPosition": 0 }`.
+</TabItem>
+<TabItem label="Receive (poll ~5 s)">
+```http
+GET /api/v1/devices/{id}/actions
+```
+Returns `{ items, page }` of pending actions. Accept or dismiss:
+```http
+PATCH /api/v1/devices/{id}/actions/{actionId}
+{ "status": "accepted" }   // or "dismissed"
+```
+</TabItem>
+</Tabs>
+
+**Security invariants:** a user may only send actions to their **own**
+devices. Ownership is verified from `deviceSessionId` on the JWT, never from
+client input. Pending actions expire after 5 minutes; online status expires
+after 10 minutes without a heartbeat.
+
+## Endpoint reference
+
+| Method | Path | Who | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/watch-together` | user | Current user's active session (or `null`) |
+| `POST` | `/api/v1/watch-together` | user | Create a session (host) |
+| `GET` | `/api/v1/watch-together/{code}` | user | Get a session by code |
+| `POST` | `/api/v1/watch-together/{code}/events` | user | Send an event |
+| `GET` | `/api/v1/watch-together/{code}/events?clientId=` | user | SSE event stream |
+| `POST` | `/api/v1/devices/{id}/heartbeat` | user | Report device online status |
+| `GET`/`POST`/`PATCH` | `/api/v1/devices/{id}/actions[/{actionId}]` | user | Poll, send, accept/dismiss Send to Device |
+
+All Watch Together endpoints require a valid bearer token. The SSE endpoint
+additionally returns `403` if the caller is not a participant, and `404` if
+the feature is off or the session does not exist.
+
+## Implementation checklist
+
+- Generate a stable per-device `clientId`; pass it on the SSE URL and in every
+  `POST /events` body.
+- Check `features.watch_together` before showing the feature.
+- Compute `clockOffset = serverTime - Date.now()` from the `connected` frame.
+- Implement `buffer_check → ready → all_ready`; treat `seekInitiated: true` as
+  target-authoritative, including on the host.
+- Cancel a pending `all_ready` resume on a newer `buffer_check`; never use an
+  unconditional timeout resume.
+- Correct small drift via `playbackRate` (±5% at most); hard seek only for
+  large drift (3 to 8 s depending on the client).
+- Re-anchor your host-position estimate on every `all_ready`.
+- Stop position/heartbeat reporting the moment you start navigating away.
+- Reconnect with `Last-Event-ID` (or `?lastEventId=`) on SSE disconnect, but
+  never after `session_ended`.
+- Enter the barrier in `connected.bufferCheck` and send `ready`.
+- Never auto-play on load; stay in the session when your own media ends.
+
+## Next
+
+- [Local development](/developers/local-development/): running the stack to
+  test this yourself.
+- [Architecture decisions](/developers/architecture-decisions/): why the
+  Developers surface is shaped the way it is.

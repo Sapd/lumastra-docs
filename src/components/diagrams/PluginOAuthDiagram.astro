@@ -1,0 +1,22 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'browser', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Browser', sub: 'clicks "Sign in with …"', kind: 'viewer', hasSource: true } },
+		{ id: 'host', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'Lumastra host', sub: 'owns state, cookie, txData', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'plugin', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'Auth plugin', sub: 'beginLogin / completeLogin', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'idp', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'External IdP', sub: 'Discord · company SSO', kind: 'ext', hasTarget: true, hasSource: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-browser-host', source: 'browser', target: 'host', label: 'clicks sign-in' },
+		{ id: 'e-host-plugin', source: 'host', target: 'plugin', label: 'beginLogin(state)' },
+		{ id: 'e-plugin-idp', source: 'plugin', target: 'idp', label: 'redirectUrl (https)' },
+		{ id: 'e-idp-browser', source: 'idp', target: 'browser', label: 'authenticates user' },
+		{ id: 'e-browser-host-2', source: 'browser', target: 'host', label: 'callback: code + state' },
+		{ id: 'e-host-plugin-2', source: 'host', target: 'plugin', label: 'completeLogin(params, txData)' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Plugin sign-in flow" />

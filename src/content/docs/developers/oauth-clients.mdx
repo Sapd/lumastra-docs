@@ -1,0 +1,547 @@
+---
+title: OAuth device-flow clients
+description: >
+  A practical, end-to-end guide to implementing the OAuth 2.0 Device
+  Authorization Grant (RFC 8628) for TV apps, CLI tools, and other
+  limited-input clients: request, poll, store, refresh, and call the API.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import DeviceAuthFlowDiagram from '../../../components/diagrams/DeviceAuthFlowDiagram.astro';
+
+This guide walks developers through implementing the **OAuth 2.0 Device
+Authorization Grant** (RFC 8628) end to end: requesting a device code, prompting the
+user to approve it, polling for a token, storing and refreshing it, and calling the
+API. It's aimed at developers building a TV app, a CLI tool, or any other client that
+can't easily present a browser-based login form.
+
+:::note[Where this fits]
+For the full contract (resource model, all three HTTP surfaces, error format, and
+every token kind), see [API & tokens](/developers/api/). For enabling the flow on
+the server side (feature flag, reverse-proxy bypass), see
+[Authentication](/guides/authentication/).
+:::
+
+## What this flow is and isn't
+
+Lumastra implements the **Device Authorization Grant only**: no authorization-code
+grant, no `/.well-known/openid-configuration`, no JWKS endpoint, and no client
+registration or secret. See [API & tokens](/developers/api/#oauth-20-device-authorization-flow)
+for the full "is/isn't" breakdown.
+
+The server-side prerequisites are `FEATURE_DEVICE_AUTH` (on by default since v0.1) and
+a `JWT_SECRET` (derived from `LUMASTRA_MASTER_KEY` when unset) on the Lumastra instance. If a client gets consistent errors from
+`/oauth/*`, that's the first thing to check with the instance's operator.
+
+## The whole flow at a glance
+
+<DeviceAuthFlowDiagram />
+
+## Quick start
+
+<Steps>
+1. `POST /oauth/device` → `device_code` + `user_code` + `verification_uri`
+2. Show the `user_code` (or a QR code) → the user approves at `/device` in a browser
+3. Poll `POST /oauth/token` → `access_token` (JWT) + `refresh_token`
+4. `Authorization: Bearer <token>` → call `/api/v1/*`
+5. `POST /oauth/token` (refresh) → new `access_token` + rotated `refresh_token`
+</Steps>
+
+## Step 1: request a device code
+
+```bash
+curl -X POST https://lumastra.example.com/oauth/device \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "my-tv-app",
+    "device_name": "Living Room Apple TV",
+    "scope": "media"
+  }'
+```
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | Yes | A free-form identifier for your app (e.g. `"apple-tv-app"`). No registration needed. |
+| `device_name` | string | No | Human-readable device name shown to the user during approval. |
+| `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**. See [What your token can do](#what-your-token-can-do). Max 256 characters. |
+
+**Response (200 OK):**
+
+```json
+{
+  "device_code": "7f7e9466b069c6a497affd39abfe613217f948fa020d35ab64437e9165113b9b",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://lumastra.example.com/device",
+  "verification_uri_complete": "https://lumastra.example.com/device?code=WDJB-MJHT",
+  "expires_in": 600,
+  "interval": 5
+}
+```
+
+| Field | Description |
+|---|---|
+| `device_code` | Secret code your client polls with. Never display it to the user. |
+| `user_code` | Short code the user enters manually. Display this prominently. |
+| `verification_uri` | The page where the user approves the request. |
+| `verification_uri_complete` | Same URL with the code pre-filled. Encode this as a QR code. |
+| `expires_in` | Seconds until both codes expire (default 600). |
+| `interval` | Minimum seconds your client must wait between polling requests. |
+
+This endpoint is rate-limited to **10 requests per minute per IP**.
+
+---
+
+## Step 2: prompt the user to approve
+
+Show the user how to authorize the device. Two options, and most clients offer
+both:
+
+- **QR code (recommended for TVs).** Encode `verification_uri_complete` as a QR
+  code. Scanning it takes the user straight to a pre-filled approval page on
+  their phone.
+- **Manual entry.** Display `verification_uri` and `user_code` for the user to
+  type in on any device.
+
+The user visits that page in a browser while **signed in** (via whichever
+authentication method the instance has enabled: forward auth, built-in
+login, or OIDC) and confirms the code. Nothing else is required on your
+client's side during this step. Keep polling in the background (Step 3).
+
+---
+
+## Step 3: poll for the token
+
+While the approval screen is displayed, poll the token endpoint at the
+`interval` returned in Step 1:
+
+```bash
+curl -X POST https://lumastra.example.com/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+    "device_code": "7f7e9466b069c6a497affd39abfe613217f948fa020d35ab64437e9165113b9b",
+    "client_id": "my-tv-app"
+  }'
+```
+
+`application/x-www-form-urlencoded` is also accepted, for off-the-shelf OAuth
+libraries that assume it.
+
+**Polling rules:**
+
+- Wait at least `interval` seconds between requests.
+- Stop polling once `expires_in` seconds have elapsed since Step 1. Restart
+  the flow from scratch if you need a new code.
+- Handle every response below; don't treat unrecognized errors as fatal
+  without checking `error_description`.
+
+**Responses:**
+
+| HTTP | `error` | Meaning | What to do |
+|---|---|---|---|
+| 200 | *(none)* | Success | Store the tokens (Step 4) and stop polling. |
+| 400 | `authorization_pending` | User hasn't approved yet | Keep polling at the same interval. |
+| 400 | `slow_down` | Polling too frequently for this device code | Add 5 seconds to your interval and keep polling. |
+| 429 | `slow_down` | Per-IP rate limit (30 requests/minute on `/oauth/token`) | Honour `Retry-After` (60 s) before polling again. |
+| 400 | `access_denied` | User rejected the request | Stop polling; offer to restart the flow. |
+| 400 | `expired_token` | The device code expired | Stop polling; request a new device code. |
+
+Example pending / success bodies:
+
+```json
+{ "error": "authorization_pending", "error_description": "Authorization pending" }
+```
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "a1b2c3d4e5f6...",
+  "scope": "media"
+}
+```
+
+`/oauth/*` responses use the plain RFC 8628 `{ error, error_description }`
+shape rather than the `application/problem+json` format used elsewhere on the
+API, because off-the-shelf OAuth client libraries hard-code those field
+names.
+
+---
+
+## Step 4: store tokens securely
+
+| Token | Lifetime | Purpose |
+|---|---|---|
+| `access_token` | ~1 hour (`JWT_ACCESS_TOKEN_TTL_SECONDS`, instance-configurable) | Bearer credential for `/api/v1/*` requests. Stateless JWT, not revocable individually before expiry. |
+| `refresh_token` | 90 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`), rotated on every use | Used to mint a new access token without re-running the device flow. |
+
+- Store both in secure, platform-appropriate storage (Keychain,
+  `EncryptedSharedPreferences`, or equivalent), never in plain application
+  preferences or logs.
+- **Refresh tokens rotate on every use.** Each refresh call returns a *new*
+  refresh token and immediately revokes the old one. Persist the new token
+  before making any other request. Presenting an already-consumed refresh
+  token is treated as a theft signal and revokes the entire device session,
+  forcing the user to re-approve from scratch.
+
+---
+
+## Step 5: make API requests
+
+Use the access token as a standard bearer credential against the `/api/v1/*`
+token surface:
+
+```bash
+curl https://lumastra.example.com/api/v1/sessions \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+For player surfaces that can't set request headers (some native HLS players),
+pass the token as a query parameter instead:
+
+```
+/api/v1/playback/{id}/hls?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+The full route catalog (catalog browsing, playback, watch state, playlists,
+notifications, and more) lives in [API & tokens](/developers/api/) and the
+interactive [API reference](/reference/). Third-party integrations should
+target endpoints marked `x-stability: stable` in the OpenAPI spec.
+
+---
+
+## Step 6: refresh the access token
+
+Refresh before the access token expires (or reactively on a `401`):
+
+```bash
+curl -X POST https://lumastra.example.com/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "refresh_token",
+    "refresh_token": "a1b2c3d4e5f6..."
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "NEW_REFRESH_TOKEN_HERE",
+  "scope": "media"
+}
+```
+
+**Important:** the response always contains a **new** refresh token. Save it
+and use it for the *next* refresh. The one you just sent is now revoked.
+
+---
+
+## Complete example (TypeScript)
+
+A minimal client that runs the whole flow and auto-refreshes on demand:
+
+```typescript
+interface TokenResponse {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    token_type: string;
+}
+
+interface DeviceCodeResponse {
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    verification_uri_complete: string;
+    expires_in: number;
+    interval: number;
+}
+
+class LumastraClient {
+    private baseUrl: string;
+    private clientId: string;
+    private accessToken?: string;
+    private refreshToken?: string;
+    private tokenExpiry?: Date;
+
+    constructor(baseUrl: string, clientId: string) {
+        this.baseUrl = baseUrl;
+        this.clientId = clientId;
+    }
+
+    // Step 1: start device authorization
+    async startDeviceAuth(deviceName: string): Promise<DeviceCodeResponse> {
+        const response = await fetch(`${this.baseUrl}/oauth/device`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_id: this.clientId,
+                device_name: deviceName,
+                scope: 'media',
+            }),
+        });
+        return response.json();
+    }
+
+    // Step 3: poll for token
+    async pollForToken(deviceCode: string, interval: number): Promise<TokenResponse> {
+        for (;;) {
+            await this.sleep(interval * 1000);
+
+            const response = await fetch(`${this.baseUrl}/oauth/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+                    device_code: deviceCode,
+                    client_id: this.clientId,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.error === 'authorization_pending') {
+                continue; // keep polling
+            } else if (data.error === 'slow_down') {
+                if (response.status === 429) {
+                    // Per-IP rate limit — honour Retry-After (60 s) rather than
+                    // nudging the interval, which would keep tripping the limit.
+                    const retryAfter = Number(response.headers.get('Retry-After')) || 60;
+                    await this.sleep(retryAfter * 1000);
+                } else {
+                    interval += 5; // per-device-code: back off a little
+                }
+                continue;
+            } else if (data.error) {
+                throw new Error(data.error_description || data.error);
+            }
+
+            // success
+            this.setTokens(data);
+            return data;
+        }
+    }
+
+    // Step 6: refresh
+    async refreshAccessToken(): Promise<void> {
+        if (!this.refreshToken) throw new Error('No refresh token');
+
+        const response = await fetch(`${this.baseUrl}/oauth/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                grant_type: 'refresh_token',
+                refresh_token: this.refreshToken,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Token refresh failed');
+        }
+
+        const data = await response.json();
+        this.setTokens(data);
+    }
+
+    // Authenticated request helper, with auto-refresh
+    async api<T>(path: string, options: RequestInit = {}): Promise<T> {
+        if (this.tokenExpiry && new Date() >= this.tokenExpiry) {
+            await this.refreshAccessToken();
+        }
+
+        const response = await fetch(`${this.baseUrl}/api/v1${path}`, {
+            ...options,
+            headers: {
+                ...options.headers,
+                Authorization: `Bearer ${this.accessToken}`,
+            },
+        });
+
+        if (response.status === 401) {
+            await this.refreshAccessToken();
+            return this.api(path, options);
+        }
+
+        return response.json();
+    }
+
+    private setTokens(data: TokenResponse) {
+        this.accessToken = data.access_token;
+        this.refreshToken = data.refresh_token; // IMPORTANT: always the new one
+        this.tokenExpiry = new Date(Date.now() + (data.expires_in - 60) * 1000);
+    }
+
+    private sleep(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+}
+
+// Usage
+async function main() {
+    const client = new LumastraClient('https://lumastra.example.com', 'my-tv-app');
+
+    const deviceAuth = await client.startDeviceAuth('Living Room TV');
+    console.log(`Go to: ${deviceAuth.verification_uri}`);
+    console.log(`Enter code: ${deviceAuth.user_code}`);
+
+    await client.pollForToken(deviceAuth.device_code, deviceAuth.interval);
+    console.log('Authorized!');
+
+    const sessions = await client.api('/sessions');
+    console.log('Active sessions:', sessions);
+}
+```
+
+---
+
+## Error reference
+
+All `/oauth/*` errors share the same shape:
+
+```json
+{ "error": "error_code", "error_description": "Human readable message" }
+```
+
+| `error` | HTTP | Meaning |
+|---|---|---|
+| `invalid_request` | 400 | Missing or malformed required parameter. |
+| `invalid_grant` | 400 | Unknown or already-consumed `device_code` / `refresh_token`. |
+| `authorization_pending` | 400 | User hasn't approved yet. Keep polling. |
+| `slow_down` | 400 | Polling too fast for this device code. Increase your interval. |
+| `slow_down` | 429 | Per-IP rate limit exceeded. Back off for `Retry-After` seconds (60). |
+| `access_denied` | 400 | User denied the request. |
+| `expired_token` | 400 | The device or refresh token expired. |
+| `unsupported_grant_type` | 400 | `grant_type` isn't one of the two supported values. |
+| `server_error` | 500 | Internal error. Safe to retry with backoff. |
+
+---
+
+## What your token can do
+
+The grant is **fixed by the server**, keyed off the `scope` you requested in Step 1,
+never off who approved it. Two closed-form grants exist:
+
+| Requested `scope` | Resulting grant |
+|---|---|
+| `"media"` (or omitted, or anything unrecognized) | Read **and** write |
+| `"media:read"` | Read **only** |
+
+A device-flow token from either grant carries:
+
+| Scope | In `media` grant | In `media:read` grant | What it covers |
+|---|---|---|---|
+| `media:read` | ✓ | ✓ | Browse the library, read metadata and images |
+| `media:write` | ✓ | — | Ratings, watchlist, playback progress |
+| `sessions:read` | ✓ | ✓ | Read your own play sessions |
+| `requests:read` | ✓ | ✓ | See your own media requests |
+| `tasks:read`, `runs:read` | ✓ | ✓ | Read-only task/run status |
+
+If your client only ever reads (a companion "now playing" display, a read-only
+dashboard), request `"media:read"`. The resulting token cannot write even if the
+approving account could.
+
+### A device token is never an admin token
+
+**Even when the approving user is a server administrator**, the issued token
+carries no administrative capability, regardless of the `scope` you requested. This
+is deliberate: a TV is a shared-room device, frequently left signed in, with no lock
+screen. Nobody should be able to walk up to a living-room remote and rescan libraries
+or edit access groups.
+
+Concretely, these all fail for a device-flow token regardless of the user's
+role:
+
+| Request | Response |
+|---|---|
+| `POST /api/v1/libraries/scan` | `403` `scope_required` (`tasks:run`) |
+| `POST /api/v1/libraries/ingest` | `403` `forbidden` |
+| `/api/v1/access/groups` (CRUD) | `403` `scope_required` (`access:admin`) |
+| Any other admin endpoint | `403` `forbidden` |
+
+The approval screen shows the user what your client requested, what the token
+will actually be granted, and an explicit "no administrative access" note,
+before they authorize.
+
+### Not everything is gated by scope
+
+Some endpoints are gated by a **per-user permission** that is independent of
+token scopes, so you cannot predict access from the scope list alone.
+
+Submitting media requests is the common case. `POST /api/v1/requests` and
+`POST /api/v1/requests/{id}/dismiss` require an authenticated user and are
+**not** scope-gated: there is no `requests:write` scope, and the `requests:read`
+in your grant is not what permits them. Request submission is gated by
+`hasRequestPermission`, derived from the user's group membership
+(`REQUEST_GROUPS`). A device token can submit requests whenever that user
+could from the web UI.
+
+When it is denied you get:
+
+```json
+403 { "code": "forbidden",
+      "error": "You do not have permission to submit media requests. Contact an administrator." }
+```
+
+Note this is a **per-user** condition, not a per-token one: re-authorizing or
+requesting different scopes will not change it, and the same user will be
+denied in every client. Surface it as "your account can't request media", not
+as a device or session problem. `?scope=all` on `GET /requests` is the only
+part of this area that is scope-gated (`requests:admin`), and a
+device token will never have it.
+
+**Treat these failures as permanent.** They are a property of the credential
+kind, not a transient state: do not retry, and do not trigger re-authorization.
+If your app needs an administrative action, it needs a different credential (a
+`pat_` or `svc_` token), not a different scope on this one.
+
+:::note[`401 invalid_token` always means re-authenticate, never a capability gap]
+Capability failures are **always `403`**, never `401`. Endpoints that
+authenticate inside the handler used to reject a perfectly valid device token
+with `401` + `error: "invalid_token"`, which clients reasonably read as "this
+session is dead, log the user out." That was wrong and is fixed: a valid
+device-flow token that may not perform an action now gets `403`.
+
+So you can rely on the split:
+
+- **`401` `invalid_token`**: the token is bad or expired. Refresh it
+  (step 6), and only sign the user out if the refresh also fails.
+- **`403`**: the credential is fine and the user is who they say they are. This
+  action is not available to a device token. Never sign the user out on it.
+:::
+
+`GET /api/v1/events` is **not** an admin endpoint despite delivering some
+admin-ish frames. It is the caller's own SSE stream and is available to
+device tokens. It is where cast hints (`device.action_pending`) arrive.
+
+---
+
+## Token kinds you may encounter
+
+Device-flow JWTs aren't the only credential accepted on `/api/v1/*`. If your
+client interoperates with tokens created elsewhere (e.g. a companion web
+session, or a token a user pastes in from Settings), you may see:
+
+| Kind | Prefix | Typical origin |
+|---|---|---|
+| Device-flow access token | *(none, compact JWT)* | This flow. |
+| Personal Access Token | `pat_` | Created by a user in the Settings UI. |
+| Service token | `svc_` | Created by an admin for server-to-server automation. |
+| Stream token | `stream_` | Minted per playback session; short-lived, query-param only, used on HLS endpoints. |
+
+All non-JWT tokens (`pat_`, `svc_`, `stream_`) are shown to the user **once**
+at creation time and stored server-side only as SHA-256 hashes. There's no
+way to retrieve the plaintext value later. See [API & tokens](/developers/api/)
+for the full breakdown of scopes and lifetimes for each kind.
+
+## Next
+
+- [Plugins](/developers/plugins/)
+- [Building a player](/developers/building-a-player/)
+- [Authentication](/guides/authentication/)

@@ -1,0 +1,20 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'tv', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'TV app / script', sub: 'no keyboard · polls for a token', kind: 'viewer', hasSource: true, hasTarget: true } },
+		{ id: 'user', type: 'flow', position: { x: 0, y: 170 }, data: { title: "User's phone / browser", sub: 'visits /device · approves', kind: 'viewer', hasSource: true } },
+		{ id: 'lumastra', type: 'flow', position: { x: 232, y: 85 }, data: { title: 'Lumastra', sub: '/oauth/device · /oauth/token', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'apiv1', type: 'flow', position: { x: 464, y: 85 }, data: { title: '/api/v1 surface', sub: 'bearer access token', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-tv-device', source: 'tv', target: 'lumastra', label: '1. POST /oauth/device' },
+		{ id: 'e-user-approve', source: 'user', target: 'lumastra', label: '2. approve at /device' },
+		{ id: 'e-tv-poll', source: 'tv', target: 'lumastra', label: '3. POST /oauth/token (poll)' },
+		{ id: 'e-tv-api', source: 'tv', target: 'apiv1', label: '4. Bearer token' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Device authorization" />

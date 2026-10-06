@@ -1,0 +1,105 @@
+---
+title: Connecting third-party apps
+description: Server addresses, credentials, and limits for Jellyfin, Subsonic, and native apps.
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Jellyfin-compatible apps
+
+Use this server address, with `/j` and **no trailing slash**:
+
+```text
+https://your-lumastra-instance.example.com/j
+```
+
+No separate Jellyfin server is required. Generate a dedicated client password rather
+than using your browser login password:
+
+<Steps>
+
+1. Sign in to Lumastra in your browser.
+2. Open **Jellyfin Connect** from the footer menu or **Users & Sessions → API tokens**.
+3. Select **Generate password** and save it; it is shown only once.
+4. Enter your **Lumastra username** and that password in the Jellyfin app.
+
+</Steps>
+
+Reset the password from the same page. Clients with **Quick Connect** can instead pair
+by code: approve the client's code at `/device` in your browser.
+
+Library browsing, search, playback, progress sync, ratings, favorites, Watch Together,
+and configured Live TV are supported. Server administration through clients isn't.
+
+### Concurrent streams
+
+Two concurrent `/j` streams are included **across the whole server**. A third video
+stream plays a limit notice; music clients show an error. Stale sessions release their
+slots after a couple of minutes. Lumastra's web, iPhone, iPad, and Apple TV apps don't
+count towards this limit.
+
+Additional `/j` streams belong to the supporter module, free during early access; see
+[Editions & Licensing](/guides/licensing/).
+
+### Token access
+
+For automations, use a PAT with `jellyfin_compat` or `jellyfin_compat_read` from
+**Users & Sessions → API tokens**. These scopes work only with `/j`; ordinary
+`read`/`write`/`admin` scopes don't grant `/j` access. Seerr setup wizards using
+`/j/Auth/Keys` receive a PAT automatically.
+
+## Subsonic music clients
+
+Your administrator must enable OpenSubsonic compatibility first.
+
+<Steps>
+
+1. Sign in to Lumastra and open **Subsonic Connect** from the footer menu.
+2. Select **Generate token** and save it; it is shown only once.
+3. Enter these values in your music app:
+
+   | Field | Value |
+   |---|---|
+   | Server URL | `https://your-lumastra-instance.example.com` |
+   | Username | Your Lumastra username |
+   | Password | The generated token; display spaces can be omitted. |
+
+</Steps>
+
+Standard clients append `/subsonic/rest/` themselves. Use token authentication when the
+client offers it; password mode also accepts the generated token. Apps supporting the
+OpenSubsonic `apiKey` extension can use that token as their API key.
+
+Browsing, search, streaming, transcoding, playlists, bookmarks, queues, scrobbling,
+favorites, and ratings are supported. Internet radio, podcasts, jukebox, and sharing
+aren't implemented.
+
+Lumastra's Sound Search, Music Map, Song Paths, Mixing Desk, personalised discovery rows,
+and smart queue stay in its own apps. Scrobbled plays from Subsonic apps still feed your
+listening history and recommendations.
+
+## TV apps and device-authorization login
+
+Native Lumastra apps and other clients supporting device login show a code or QR code.
+Open the displayed address in your browser, sign in, and approve the code. The app
+completes login automatically.
+
+For client implementation, see [OAuth device-flow clients](/developers/oauth-clients/)
+and [Building a player](/developers/building-a-player/).
+
+## Connection problems
+
+Ask your administrator to check these if a client cannot connect:
+
+| Symptom | Check |
+|---|---|
+| `/j` returns 404 | Jellyfin compatibility is enabled (`FEATURE_JELLYFIN_COMPAT`). |
+| Subsonic is unavailable | `FEATURE_SUBSONIC_COMPAT=true`; it is off by default. |
+| Client receives a browser login page | The proxy must bypass forward auth for `/j/` or `/subsonic/`; clients authenticate their own requests. |
+| Device login fails | Device auth is enabled; `/oauth/` and `/api/v1/` bypass forward auth while `/device` remains protected. |
+| Subsonic connects but shows an empty library | The proxy must preserve query strings, including empty searches used by some clients to index the library. |
+
+Proxy configuration is covered in [Authentication](/guides/authentication/) and
+[Single sign-on with Authentik](/guides/sso-authentik/).

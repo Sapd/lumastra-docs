@@ -1,0 +1,532 @@
+---
+title: Task system
+description: How Lumastra's background task subsystem works, covering the orchestrator, workers, scheduling, pipeline coverage, and reliability.
+sidebar:
+  order: 2
+---
+
+import TaskExecDiagram from '../../../components/diagrams/TaskExecDiagram.astro';
+import TaskStateDiagram from '../../../components/diagrams/TaskStateDiagram.astro';
+import BullMqRetryDiagram from '../../../components/diagrams/BullMqRetryDiagram.astro';
+
+The task subsystem schedules and executes background work across replicas.
+PostgreSQL owns durable state; Valkey provides live state and coordination;
+BullMQ delivers jobs to workers.
+
+<TaskExecDiagram />
+
+## Overview
+
+The task system pairs two persistent stores with a BullMQ queue layer:
+
+- **PostgreSQL** is the **source of truth** for every run, its state, and per-item
+  pipeline coverage. The `task_history` row is inserted into Postgres before the
+  Valkey run-state hash is seeded or the BullMQ job is enqueued. This ordering
+  isn't absolute: for a task with `exclusiveWith`, the identity dedup key is
+  claimed in Valkey via a `SETNX` *before* that Postgres insert, so Valkey is
+  touched first in that case.
+- **Valkey** is the **hot cache**: live run-state hashes (TTL'd), leader locks,
+  identity dedup keys, log buffers, and progress heartbeats.
+- **BullMQ** is the **delivery mechanism**, not the state owner: worker crashes,
+  queue resets, and container restarts are safe because Postgres holds the real state.
+
+Stale BullMQ state is always reconcilable from Postgres, never the reverse.
+
+## Process model
+
+The same Docker image runs two roles, selected by `WORKER_MODE`:
+
+| Role | `WORKER_MODE` | Runs |
+|------|---------------|------|
+| Web server | `disabled` | API routes, SSR, image proxy, admin UI |
+| Worker | `enabled` | BullMQ workers + orchestrator + scheduler |
+
+Both roles boot the **orchestrator** and **registry**; only the worker boots the
+BullMQ `Worker` instances that actually execute tasks. For small deployments the
+default `auto` mode enables both roles in one container.
+
+:::note[Separate worker recommended for production]
+For any serious library size, run a dedicated worker container
+(`WORKER_MODE=enabled`) so background jobs don't contend with web request
+concurrency. See [Deployment](/guides/deployment/).
+:::
+
+## Core components
+
+### Registry
+
+`registry.ts` loads every task definition at startup, validates manifests, and
+resolves pipeline DAGs topologically via Kahn's algorithm. After startup it's
+read-only.
+
+| Type | Helper | Lifecycle |
+|------|--------|-----------|
+| Background task | `defineTask` | Queue-driven via BullMQ |
+| Metadata provider | `defineProvider` | Synchronous, called from request handlers |
+| Trickplay provider | `defineTrickplay` | Synchronous, called from the trickplay HTTP handler |
+| Watch sync | `defineWatchSync` | Auto-registers `<id>-push` and `<id>-pull` tasks |
+| Feature (HTTP routes) | `defineFeature` | Mounted at startup |
+| Webhook / IPC integration | `defineIntegration` | Handles inbound webhooks, sends notifications |
+
+### Orchestrator
+
+`orchestrator.ts` is the single entry point for starting runs. It handles leader
+election, state transitions, identity dedup, backpressure, the circuit breaker, and
+the scheduler subsystem.
+
+```ts
+await orchestrator.startRun(
+  'tmdb-metadata-sync',
+  { libraryGroupId },
+  { trigger: { kind: 'in-process', sourceRoute: 'media-lifecycle.service' } }
+);
+```
+
+### Runner
+
+`runner.ts` creates one BullMQ `Worker` per resource class. When a job is picked up,
+the runner:
+
+1. Checks the `processing_version` guard to refuse stale enqueues from rolling
+   restarts.
+2. Claims ownership via an atomic Lua script (`claim-run.lua`).
+3. Transitions the run `pending → active` in both Postgres and Valkey.
+4. Builds a `TaskContext` with capability gates and calls the plugin's `execute()`.
+5. Writes the terminal state on return, or lets the watchdog auto-fail on timeout.
+
+## Resource classes
+
+Every task declares a `resourceClass`. The runner spawns one BullMQ worker per
+class, so a slow class can never block a fast one.
+
+| Class | Default concurrency | Queue depth cap | Typical job duration | Examples |
+|-------|---------------------|-----------------|----------------------|---------|
+| `cpu` | auto: `floor(cores / 2)`, clamped 1–6 | 500 | seconds–minutes | trickplay frame extraction, ffmpeg-based work (the class pegs cores, hence the auto-scale) |
+| `io` | auto: cores clamped 4–12 | 2,000 | seconds | file scan, artwork matching (Match Local Artwork), watch-sync, EPG refresh |
+| `ingest` | 2 | 50,000 | seconds | Read Media File Details, Fetch Chapter Markers, per-item ingest fast path |
+| `embedding` | 1 | 10,000 | minutes | library and music embeddings (OpenAI calls dominate wallclock, so one slot keeps the rate limiter saturated) |
+| `maintenance` | 1 | 100 | seconds | Clean Recommendation Cache, history retention, stage-sweep (periodic, schedule-driven, not per-item) |
+| `bulk` | 3 | 2,000 | minutes–hours | Import Trending & Popular from TMDB, Fetch MDBList Ratings, Fetch Artist Popularity (Last.fm) |
+| `analysis` | 1 | 500 | minutes–hours | Detect Intros & Credits (chromaprint over a season) |
+| `discovery` | 1 | 10,000 | minutes–hours | discovery-embeddings catalog backfill, isolated so it can never starve library/music embeddings sharing `embedding` |
+
+Override concurrency with `LUMASTRA_CONCURRENCY_<CLASS>` and queue caps with
+`LUMASTRA_QUEUE_DEPTH_CAP_<CLASS>`. `RESOURCE_CLASSES` in the plugin SDK is the
+shared class registry.
+
+Under per-task queues (`FEATURE_PER_TASK_QUEUES`, on by default) `ingest` and `bulk`
+fold into the `io` pool and `analysis` into `cpu`: the physical budgets are the summed
+caps (`IO + INGEST + BULK`, `CPU + ANALYSIS`), and each folded task keeps a per-task cap
+equal to its declared class's setting, so a `bulk` task runs at most
+`LUMASTRA_CONCURRENCY_BULK` jobs at once. See
+[Performance tuning](/guides/performance-tuning/#background-job-parallelism).
+
+Choose classes by workload duration and resource use. Long-running work sharing
+a pool with short jobs can delay them; task priorities control pickup order.
+
+Each task can also set a `taskPriority` (`1 | 2 | 3 | 5 | 7`, lower is more urgent) to
+jump or sink within its class's queue, resolved at `startRun` as `opts.priority ??
+task.taskPriority ?? priorityFromTrigger(trigger.kind)`.
+
+### Queue topology
+
+Each resource class is a separate BullMQ queue, keyed `bull:task:<class>:*`
+(BullMQ rejects `:` inside queue names, so the class name is kept bare). The job ID
+format is `<taskId>~~<identity>#<runId>`, for example
+`trickplay-generation~~item-abc#run_01XYZ`. This is also what BullMQ uses to
+reject a duplicate in-flight enqueue.
+
+Waiting jobs live in a `prioritized` ZSET scored by priority. **Lower score pops
+first**: `priority: 1` (operator retry) jumps the queue and `priority: 7`
+(background work like music analysis) waits behind everything else. See [Footguns](#footguns).
+
+## Scheduling
+
+Tasks fire through two mechanisms, both via `orchestrator.startRun`:
+
+**Static schedule**, declared on the task definition:
+
+```ts
+schedule: { every: '15m', envOverride: 'SYNC_MY_TASK_INTERVAL' }
+```
+
+The scheduler ticks every 10 seconds and races for a `SET NX EX 30` Valkey lock
+(`lock:scheduler:<taskId>:<bucket>`) so that only one replica fires per bucket
+in a multi-replica deployment.
+
+**Dynamic schedule**: a loader function returns rows with per-row cadences. Used by
+Live TV (`refresh-epg`, `refresh-m3u`) where each source has its own interval.
+
+**Boot catch-up**: if more than one full interval elapsed since `scheduler_state.last_fired_at`,
+the scheduler fires one catch-up run on boot.
+
+**Event-driven**: services and route handlers call `orchestrator.startRun` directly
+with `trigger.kind: 'in-process'` or `'webhook'`. The media lifecycle service uses
+this to kick off metadata sync immediately after a new item is ingested.
+
+## Run state machine
+
+Every run progresses through a strict state machine enforced by Lua scripts in
+Valkey. Invalid transitions are rejected with an explicit error.
+
+```
+pending → active → completed
+pending → active → failed
+pending → active → cancelling → cancelled
+pending → cancelling → cancelled   (cancel before pickup)
+active  → cancelling → cancelled
+```
+
+Within a run, each declared stage has its own state:
+
+```
+waiting → active → completed
+waiting → active → failed
+waiting → skipped   (pipeline.when predicate returned false)
+```
+
+All transitions are atomic Lua scripts loaded at startup via `EVALSHA` with `EVAL`
+fallback. Scripts carry a `-- @version N` header and are version-pinned in
+`lua/SCRIPT_VERSIONS.ts`.
+
+## Where state lives
+
+<TaskStateDiagram />
+
+### PostgreSQL
+
+The `task_history` table is authoritative. Key columns:
+
+| Column | Purpose |
+|--------|---------|
+| `id` | `run_<ulid>`: the canonical run identifier |
+| `task_id` | Which task definition |
+| `state` | Current run state |
+| `stages` | Stage states, progress, and timings (denormalized JSONB) |
+| `heartbeat_at` | Last heartbeat from the worker |
+| `owner_instance_id` | Which replica is running this |
+| `cost_breakdown` | Per-kind cost units accumulated via `ctx.spend()` |
+| `error` | Terminal error with `kind` (transient / permanent / fatal) |
+
+Supporting tables: `task_quota_usage` (daily run counters), `task_circuit_state`
+(circuit breaker state), `scheduler_state` (last-fired persistence),
+`media_item_stage_state` (per-item pipeline coverage, see below).
+
+### Valkey
+
+| Key pattern | Type | TTL | Purpose |
+|-------------|------|-----|---------|
+| `task:run:active:<runId>` | hash | 15 min (refreshed on heartbeat) | Live run state and stage progress |
+| `task:run:terminal:<runId>` | hash | 1 hour | Snapshot for the cancel/retry UI window |
+| `task:identity:<formula>` | string (SETNX) | 24 hours | Cross-time dedup key |
+| `lock:orch:<class>` | string (SET NX EX 5) | 5 s, renewed every 2 s | Per-class orchestrator leader lock |
+| `lock:scheduler:<taskId>:<bucket>` | string (SET NX EX 30) | 30 s | Scheduler fire claim (one replica wins) |
+| `task:log:<runId>` | list | 24 hours | Live log buffer per run (capped at 1 000 entries) |
+| `task:cancel:<runId>` | pub/sub | n/a | Cancellation signal propagated to the worker |
+
+:::caution[Do not flush task:* keys manually]
+The `task:*` keyspace is managed exclusively by the orchestrator. Flushing these
+keys with `FLUSHDB` or a pattern `DEL` during normal operation will cause in-flight
+runs to be misclassified as orphans at the next reconciler tick. Use the admin UI to
+cancel or retry runs instead.
+:::
+
+## Multi-replica coordination
+
+Each replica competes for a **per-class leader lock** (`lock:orch:<class>`) using
+`SET NX EX 5` with a 2-second renewal loop. Only the leader subscribes to
+`QueueEvents` and drives state transitions for that class. If the leader loses the
+lock, it unsubscribes and re-enters the race with jittered backoff.
+
+Non-leader replicas can still enqueue runs: `startRun` writes Postgres and Valkey
+directly and doesn't require leadership, so enqueue and transition can't deadlock
+against each other.
+
+Each replica emits a heartbeat to Valkey every 10 seconds
+(`cluster:node:<instanceId>`, TTL 30 s); the admin cluster view reads these for a
+live node roster.
+
+## Identity and dedup
+
+Each task definition declares an `identityFor(input)` function returning a dedup
+key, used three ways:
+
+- **Within BullMQ**, the job ID (`<taskId>~~<identity>#<runId>`) rejects a
+  duplicate enqueue atomically.
+- **Cross-time**, a `SETNX` on `task:identity:<taskId>:<formula>` (TTL 24 h)
+  prevents re-enqueueing the same work after a queue reset or restart.
+- **In-flight**, a partial unique index on `task_history.idempotency_key` gates
+  concurrent `pending`/`active`/`cancelling` runs within 24 hours.
+
+Terminal runs aren't a dedup match: the same identity can start fresh after the
+previous run completes.
+
+## Pipeline coverage (`media_item_stage_state`)
+
+For tasks that process individual media items, Lumastra maintains a
+`media_item_stage_state` table with one row per `(media_item_id, stage_id)`. This
+answers "which items still need which processing steps?"
+
+Each task definition optionally declares `coversStages`, with **eligibility
+declared exactly once** per stage:
+
+```ts
+coversStages: [{
+  id: 'music-analysis',
+  appliesTo: ['track'],
+  eligibility: {
+    // native tasks: a positive SQL fragment over the media_items row (`mi`)
+    sql: (sql) => sql`
+      EXISTS (SELECT 1 FROM media_file_items mfi JOIN media_files mf ON mf.id = mfi.file_id
+               WHERE mfi.media_item_id = mi.id AND NOT mf.is_missing)`,
+    // reasons that allow a heal even for a row already marked ineligible
+    recoverWhenAdditionalReasons: ['no-file-linked'],
+  },
+  invalidatedBy: ['file-content', 'file.attached', 'file.contentChanged'],
+  enqueueable: true,
+}]
+```
+
+One `eligibility.sql` expression drives all three lifecycle uses:
+
+- New rows seed `pending`.
+- The stage-sweep's dispose pass demotes rows where the SQL is false to
+  `skipped_permanent` (`'ineligible'`) before the enqueue pass runs.
+- The same expression heals a wrongly-skipped row the instant it becomes
+  eligible again, independent of invalidation events.
+
+Plugins without host `sql` access instead declare `eligibility.appliesTo(item)`,
+a plain predicate over immutable snapshot fields (`has_file`, `has_audio`,
+`media_type`, `provider_*`, …). Gating on a *probe-derived* field there instead
+of an immutable one is a known data-loss footgun.
+
+Stage row statuses:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Eligible, not yet run; the stage-sweep task will enqueue it |
+| `running` | A run is in flight |
+| `completed` | Terminal success |
+| `failed_transient` | Retriable failure; `next_eligible_at` holds the backoff deadline |
+| `failed_permanent` | Non-retriable (e.g. input validation error) |
+| `skipped_permanent` | Eligibility currently false. Despite the name, never truly permanent for an eligibility skip: written only by the sweep's dispose pass (not at seed time) and healed automatically once the eligibility expression becomes true again |
+| `skipped_transient` | Ineligible/blocked for now (e.g. an unconfigured integration) but retried after `next_eligible_at` |
+| `obsolete` | Task `processingVersion` changed; will be re-run as `pending` |
+
+**Stage-sweep** is a built-in `maintenance`-class task (`stage-sweep.ts`) that runs
+every 60 seconds, leader-elected. Each tick:
+
+- **Self-heals** items with no coverage row at all (seeded, capped at 50/tick).
+- **Scans per-stage**, pulling up to 100 FIFO candidates (oldest
+  `next_eligible_at` first) for each `enqueueable` stage.
+- **Enqueues**: one enqueue per tick for global-identity tasks, one per
+  candidate for per-item tasks (idempotency-keyed
+  `coverage:<stage_id>:<media_item_id>`).
+
+Throttles: 100 candidates/stage/tick, a per-class queue-depth threshold that skips
+a saturated class for the tick, and a global ceiling of 500 enqueues/tick.
+Season-scoped analyzers additionally require the season stable (no episode
+added/removed) for 30 minutes before scanning.
+
+Not every stage participates in coverage tracking. `PIPELINE_COVERAGE_AUTHORITATIVE_STAGES`
+lists which stages use the coverage-table model; stages left out fall back to legacy
+timer-based scheduling. `trickplay-params-sync` is excluded by default because the
+coverage table's `(media_item, stage_id)` granularity can't represent multi-file
+items: the first file's completion flips the whole row, hiding later files from
+the backlog query. Opt in only for single-file libraries.
+
+A stage row wedged in `running` for more than 10 minutes with no active owning run
+is reclaimed to `failed_transient` (with a fresh backoff) by the boot-recovery pass
+and by the reconciler.
+
+**Invalidation events** flow through an `event_outbox` table: triggers on
+`media_file_items`, `media_files.probed_at`, `external_ids`, and metadata columns
+write events transactionally. A dispatcher drains the outbox every 30 seconds (`FOR
+UPDATE SKIP LOCKED`) and resets eligible `skipped_*`/`obsolete` rows back to
+`pending`; `completed` and in-flight rows are left alone. Failed dispatches back
+off exponentially and dead-letter after 8 attempts. Staleness window: about 90
+seconds (one sweep tick plus one dispatcher tick) between a file change and its
+stage resetting. User-initiated rescans that need to feel instant enqueue eagerly
+instead of waiting on the outbox.
+
+:::caution[Keep UI mirrors aligned]
+The browser cannot import the server-only registry. Update its media-type and
+resource-class display mappings whenever task definitions change. An ESLint rule
+checks the mirrors against definitions.
+:::
+
+## Reliability mechanisms
+
+### Orphan classification
+
+At boot (and every 30 seconds via the reconciler), the system checks for `active`,
+`cancelling`, or `pending` runs whose worker has gone silent, and marks genuine
+orphans `failed` with a diagnostic error code so they become eligible for retry
+through the normal backpressure path or the admin UI.
+
+`RunLivenessAuthority` uses heartbeat age and the Valkey run-state hash:
+
+| Check | Rule |
+|---|---|
+| Heartbeat age | Older than the boot threshold (2 min) or reconciler threshold (5 min) |
+| State-hash guard | `HEXISTS task:run:active:<runId> state` distinguishes live state from a stray heartbeat write that recreated a deleted hash |
+
+For `pending` runs, `isPendingRunQueued` additionally performs one BullMQ `getJob`
+lookup. Instance heartbeats are not a general orphan-classification signal.
+
+**Typical recovery timeline after a worker crash:**
+
+| Time after crash | Event |
+|-----------------|-------|
+| +2 min | Stall watchdog logs a warning (heartbeat age past `LUMASTRA_RUN_STALL_WARN_MS`) |
+| +5 min | Reconciler queries stale candidates and runs the liveness check. The run is typically marked `failed` around here, either by this pass, or by the BullMQ `failed` event listener resolving a `claimRun` conflict first (see [BullMQ retry interaction](#bullmq-retry-interaction)) |
+| +10 min | Stall watchdog auto-fails the run if it hasn't been reclaimed yet |
+
+### BullMQ retry interaction
+
+When a worker dies after claiming a run, BullMQ doesn't know the job died with it.
+After BullMQ's own stalled-job detector expires the lock (lock duration +
+stalled interval, both pinned to `LUMASTRA_BULLMQ_LOCK_DURATION_MS`, default
+5 min, not a fixed ~30 s), the job moves back to `wait` and a new worker picks
+it up. But `claim-run.lua` (the Valkey script backing `claimRun`) rejects it
+with `state mismatch: expected pending got active`, because the Valkey run
+hash's state is already `active` from the dead worker's claim. The runner
+throws a transient error, BullMQ retries until attempts are exhausted, then
+emits a `failed` event. The orchestrator's `QueueEvents` listener for that
+event writes the terminal `failed` state. This is often the path that
+actually resolves a zombie run, sometimes before the reconciler gets to it.
+
+<BullMqRetryDiagram />
+
+An error message like `claimRun failed for ... state mismatch: expected pending got
+active` in the run history is this resolution path doing its job, not a new bug.
+The underlying bug was the worker dying.
+
+### Watchdogs
+
+Two watchdogs run on every 30-second heartbeat tick:
+
+- A **stall watchdog** warns past `LUMASTRA_RUN_STALL_WARN_MS` (~2 min) and
+  auto-fails past `LUMASTRA_RUN_STALL_FAIL_MS` (~10 min), catching handlers
+  wedged on blocking calls where the heartbeat `setInterval` can't fire.
+- A **wall-clock timeout watchdog** enforces `task.timeout.hard` even when the
+  handler periodically yields but never completes.
+
+### Reconciler
+
+A leader-elected 30-second sweep (`reconciler.ts`) performs four steps on each tick:
+
+1. Queries stale `active`/`cancelling` runs (heartbeat > 5 min old) and runs the
+   orphan classifier (`RunLivenessAuthority`) on them.
+2. Drains parents stuck in BullMQ `waiting-children` state after all their pipeline
+   dependencies have completed.
+3. Flushes the pending-write drain buffer: terminal state writes that failed due
+   to a transient Postgres error are buffered in a Valkey list and replayed here.
+4. Resets `running` stage rows in `media_item_stage_state` that are more than 10
+   minutes old and whose owning run is no longer active.
+
+### Circuit breaker
+
+A per-task circuit breaker (`circuit-breaker.ts`) auto-quarantines a task after:
+
+- `LUMASTRA_CIRCUIT_FAILURE_THRESHOLD` consecutive failures (default 5), or
+- 10 failures within 30 minutes.
+
+The circuit moves through `closed → open → half-open` states with an exponential
+backoff schedule of `[1 min, 5 min, 30 min, 2 h]`, saturating at 2 hours. An open
+circuit prevents new enqueues for that task. Operators can force-enable a circuit-broken
+task from the admin UI; the override expires after `LUMASTRA_CIRCUIT_FORCE_ENABLE_TTL_MS`
+(default 24 h).
+
+### Backpressure
+
+Each resource class has a configurable queue-depth cap
+(`LUMASTRA_QUEUE_DEPTH_CAP_<CLASS>`). Tasks can declare a `backpressure` policy:
+`drop` (silently skip), `fail-fast` (HTTP 503 + `Retry-After`), or `shed-oldest`
+(remove lowest-priority waiting jobs).
+
+### Pending-write drain
+
+Terminal writes that fail on a transient Postgres error are buffered in a bounded
+Valkey list (10 000 entries) and replayed by the reconciler every 5 seconds;
+entries failing 10+ times move to a poison list for operator triage.
+
+### Cancellation and hard-kill
+
+A run cancels via a per-run pub/sub channel (`task:cancel:<runId>`): the
+orchestrator publishes, and the runner's job loop subscribes and wires an
+`AbortController` into the plugin's execution. If a graceful cancel doesn't
+complete within 60 seconds, hard-kill escalates:
+
+1. Write `state='cancelled'` to Postgres first, guarded so a later BullMQ `failed`
+   event can't overwrite it.
+2. Try the graceful BullMQ path (`job.moveToFailed`) if the job is active and its
+   lock token is valid.
+3. Fall back to an atomic Lua script removing the job from every queue and
+   deleting its lock directly. This handles a dead worker whose lock token is gone.
+4. Mirror the transition into the Valkey run-state hash.
+
+## Observability
+
+**Logs**: a live buffer at `task:log:<runId>` (Valkey list, 1 000 entries, TTL
+24 h), also streamed over SSE at `GET /api/v1/runs/{runId}/logs`.
+
+**Progress**: plugins call `ctx.reportProgress(processed, total?, currentItem?)`;
+writes coalesce at 250 ms and force every 30 seconds, feeding the admin runs
+view's progress bar and ETA.
+
+**Cost tracking**: `ctx.spend(kind, units)` records external API usage (tokens,
+CPU seconds, call counts), written to `task_history.cost_breakdown` and rolled up
+daily to `task_quota_usage`.
+
+**Metrics**: six Prometheus metrics at `/metrics` (bearer-token gated):
+`lumastra_task_runs_total`, `_run_duration_seconds`, `_queue_depth`,
+`_circuit_state`, `_active_runs`, `_cost_units_total`.
+
+**CloudEvents webhooks**: the orchestrator emits CloudEvents 1.0 envelopes
+(`dev.lumastra.task.run.*`) for run lifecycle transitions, HMAC-SHA256 signed
+(`X-Lumastra-Signature: t=<unix-seconds>,v1=<hex>`), delivered via an outbox table
+with exponential retry and a dead-letter queue visible in the admin UI.
+
+## Footguns
+
+Known sharp edges when writing or operating tasks:
+
+- **Priority is inverted from intuition.** Lower number wins: `priority: 1` jumps
+  the queue, `priority: 7` is lowest. See [Queue topology](#queue-topology).
+- **Diamond pipeline DAGs are unsupported.** `A → B, A → C, B + C → D` is rejected
+  at registration time. Factor the shared predecessor into its own task that
+  writes a result the downstream stages read, instead.
+- **A hand-rolled `TaskContext` object silently breaks at runtime, not
+  construction.** SDK context fields drift over time. Build context through the
+  SDK helpers rather than a literal.
+- **`pipeline.when` predicates must be synchronous.** An async one silently
+  re-enables a stage that should have stayed skipped. Put async fetches inside
+  `execute()` itself.
+- **An empty idempotency key normalizes to `undefined`, not deduplicated.** The
+  unique index only applies when the key is present.
+- **Queue depth caps are per resource class, not per task.** One runaway task can
+  fill its class's queue and starve every other task sharing it.
+- **The `appliesTo`/`resourceClass` UI mirrors can drift** from the real task
+  definitions. See "mirror tables can drift" under Pipeline coverage, above.
+- **Lua scripts are vendored and version-pinned.** Bump the version in the same
+  commit. Rolling deploys fall back from `EVALSHA` to `EVAL` on a mismatch.
+
+## Admin UI
+
+See [Monitoring tasks and pipelines](/guides/task-monitoring/) for task health,
+run logs, backlog diagnostics, and the relevant admin screens.
+
+## Environment variables
+
+See the [environment variable reference](/reference/environment-variables/) for
+concurrency and topology settings, and [Performance tuning](/guides/performance-tuning/)
+for sizing and CPU limits. Queue caps, circuit-breaker thresholds, and watchdog
+settings are described under [Reliability mechanisms](#reliability-mechanisms).
+
+## Next
+
+- [Monitoring tasks and pipelines](/guides/task-monitoring/)
+- [Troubleshooting the task system](/guides/task-troubleshooting/)
+- [Background tasks on day one](/guides/task-basics/)
+- [Environment variable reference](/reference/environment-variables/)

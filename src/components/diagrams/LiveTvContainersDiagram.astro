@@ -1,0 +1,25 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'clients', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'Clients', sub: 'browser · Jellyfin / Streamyfin apps', kind: 'viewer', hasSource: true } },
+		{ id: 'app', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Lumastra app', sub: 'web container · channel resolve · access & stream policy', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'proxy', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'Stream Proxy', sub: 'separate container · multiplex · FFmpeg', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 0, y: 340 }, data: { title: 'Postgres', sub: 'channels · EPG · backup groups', kind: 'infra', hasTarget: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 232, y: 340 }, data: { title: 'Valkey', sub: 'proxy heartbeat · cluster · cache', kind: 'infra', hasTarget: true } },
+		{ id: 'upstream', type: 'flow', position: { x: 464, y: 340 }, data: { title: 'Upstream IPTV', sub: 'live streams · failover', kind: 'ext', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-cl-app', source: 'clients', target: 'app', label: 'select channel' },
+		{ id: 'e-cl-proxy', source: 'clients', target: 'proxy', label: 'HLS playback', animated: true },
+		{ id: 'e-app-proxy', source: 'app', target: 'proxy', label: 'hand off · STREAM_PROXY_SECRET' },
+		{ id: 'e-app-pg', source: 'app', target: 'postgres' },
+		{ id: 'e-app-vk', source: 'app', target: 'valkey' },
+		{ id: 'e-proxy-vk', source: 'proxy', target: 'valkey', label: 'heartbeat' },
+		{ id: 'e-proxy-up', source: 'proxy', target: 'upstream', label: 'pull · failover', animated: true },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Live TV container connections" />

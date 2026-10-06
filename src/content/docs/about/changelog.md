@@ -1,0 +1,43 @@
+---
+title: Changelog
+description: What changed in each release of the Lumastra server and the iPhone, iPad and Apple TV apps.
+sidebar:
+    order: 2
+---
+
+Lumastra has two release lines. The server is versioned on its own; the iPhone, iPad and
+Apple TV apps have their own version numbers. Whatever the number, both are early
+releases.
+
+## Server
+
+The full changelog is in the repository:
+[CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
+[GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
+
+### 0.1.0 (2026-10-09)
+
+The first public release, with movies and series, music, audiobooks through
+Audiobookshelf, Live TV, Watch Together, single sign-on on every device, and a
+documented API. See [all features](https://lumastra.org/#all-features), the
+[quick start](/start/quick-start/) and the
+[known limitations](/reference/known-limitations/).
+
+## iPhone, iPad and Apple TV apps
+
+The apps are in public TestFlight. New builds show their notes in TestFlight under
+"What to test".
+
+### 1.0.1
+
+The first public TestFlight version of both apps.
+
+- Movies, series, music and audiobooks, with Watch Together on the Apple TV.
+- Offline downloads on iPhone and iPad.
+- Continue on Apple TV: hand a movie or episode, with its position, from iPhone to
+  Apple TV.
+- Smart Queue for music.
+- When the server refuses playback, for example because a stream limit is reached, the
+  app says why.
+- More reliable seeking and scrubbing.
+- Send Diagnostics in Settings, with a note, so problems can be traced on your server.

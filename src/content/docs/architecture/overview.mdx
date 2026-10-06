@@ -1,0 +1,117 @@
+---
+title: Architecture Overview
+description: A high-level view of how Lumastra's subsystems fit together.
+sidebar:
+  order: 1
+---
+
+import OverviewServeDiagram from '../../../components/diagrams/OverviewServeDiagram.astro';
+import OverviewDataDiagram from '../../../components/diagrams/OverviewDataDiagram.astro';
+
+Lumastra is a single SvelteKit full-stack application (SSR pages plus API routes)
+backed by PostgreSQL + pgvector and Valkey, with a separate worker process for
+background jobs. It aggregates media metadata from multiple sources, runs
+AI-powered recommendations, and serves a reactive UI built from server-driven
+page sections instead of hardcoded layouts. Here's how a request travels
+through it, what stores the data, and where the optional pieces plug in.
+
+The first diagram shows the **components and request flow**; the
+[data tier](#the-layers) they share is shown separately below.
+
+<OverviewServeDiagram />
+
+## The layers
+
+- **Browser / client**: the SvelteKit UI (Svelte 5 runes), local search, an
+  installable PWA service worker, and an HLS media player. Pages aren't
+  hardcoded: the server returns arrays of page sections that the client renders
+  generically, so different users can see different layouts with no code
+  changes.
+- **SvelteKit server**: API routes and SSR pages, authentication (forward auth
+  headers for browsers; JWT/PAT tokens for `/api/v1`), an image proxy, and a
+  services layer (catalog, media, image proxy, task orchestration). A request
+  flows `hooks.server.ts → auth middleware → route handler → service layer →
+  query module → database`; routes issuing SQL directly is a lint warning, not
+  a hard rule, so a handful of routes (e.g. the migration-status health check)
+  still do.
+- **Data & infrastructure**: PostgreSQL 18 + pgvector (catalog, users, sessions,
+  task history, embeddings, watch state), Valkey 9 (cache, task queues, locks,
+  pub/sub), a BullMQ **worker** for background jobs, and an optional stream proxy
+  for Live TV / HLS.
+
+Both the web server and the worker share the same two stores, Postgres as the
+source of truth and Valkey as the cache and queue:
+
+<OverviewDataDiagram />
+
+## Subsystems at a glance
+
+- **Database** follows a three-tier pattern: pure SQL in query modules,
+  transactional logic in services and service managers. Key tables include
+  `media_items` (movies, series, seasons, episodes, music), `media_files` (file
+  paths linked to items), `users`, `watch_history`, `embeddings` (pgvector
+  vectors), and `task_history`. See
+  [Architecture decisions](/developers/architecture-decisions/) for why the
+  three-tier split exists instead of an ORM. Similarity queries always use the
+  `<=>` (cosine distance) operator; `<->` (L2) and `<#>` (inner product) are
+  never used, so every kNN query stays HNSW-eligible.
+- **Task system**: a distributed, BullMQ-backed background system (orchestrator +
+  worker) handles metadata sync, image and frame extraction, and embedding
+  generation, with health and attention surfaces in the admin UI.
+- **Cluster**: multiple replicas coordinate via Valkey heartbeats (TTL keys for
+  live state) with transitions recorded in Postgres. Give each replica a stable
+  `INSTANCE_ID`.
+- **AI**: per-item embeddings (OpenAI or Voyage, bring-your-own-key) stored in
+  pgvector drive similarity-based recommendations and the RAG chat assistant.
+
+### Valkey's roles
+
+Beyond caching hot media metadata and search results, Valkey backs the task
+queues (BullMQ job storage, split across resource classes), per-resource-class
+orchestrator leader locks, per-run log buffers streamed to the admin UI, and
+pub/sub for real-time admin updates. The shipped single-instance default runs
+Valkey under `noeviction` with no memory cap, so task-system keys are never
+evicted while cache entries expire on their own. If you need a hard memory limit,
+an optional second Valkey takes the cache under `allkeys-lru`, and the task
+keyspace stays on the `noeviction` one (`TASK_CACHE_URL`).
+
+### External integrations
+
+Lumastra serves media from local library paths; every integration below is
+optional and augments the catalog rather than sitting in the playback path.
+
+| Integration | Role | Config |
+| --- | --- | --- |
+| Jellyfin | Background sync source for movies, TV, and music (never in the playback path) | `JELLYFINURL`, `JELLYFINAPIKEY` |
+| TMDB | Metadata enrichment: posters, descriptions, cast | `TMDB_API_KEY` |
+| MDbList | Curated lists and rankings | `MDBLIST_API_KEY` |
+| OpenAI | Text embeddings (`text-embedding-3-*`) for recommendations | `OPENAI_API_KEY` |
+| Voyage AI | Text embeddings (`voyage-3*`), alternative provider | `VOYAGE_API_KEY` |
+| Sonarr | TV series management | `SONARRURL`, `SONARRAPIKEY` |
+| Seerr | Media requests | `SEERRURL`, `SEERRAPIKEY` |
+
+### Auth & identity
+
+Auth methods and forward-auth headers are canonical to
+[Authentication](/guides/authentication/). This page only needs the one-line
+summary: browsers sign in via forward auth, built-in username/password, or OIDC;
+third-party clients authenticate to `/api/v1` via the OAuth 2.0 Device Authorization
+flow, a personal access token, or a service token. See
+[Authentication](/guides/authentication/) for the full setup (including the
+dev-only `devUser`/`DEFAULT_USER` overrides) and
+[API & tokens](/developers/api/) for the token surface.
+
+### Configuration
+
+Configuration merges three layers at runtime, in ascending priority: compiled
+defaults, the mounted `/config/settings.json` file, and environment variables.
+Not every setting has an environment-variable equivalent: some admin UI
+settings (like trickplay generation) live only in `settings.json`. See
+[Configuration](/guides/configuration/) for the full reference.
+
+## Next
+
+- [Architecture decisions](/developers/architecture-decisions/)
+- [Task system](/architecture/task-system/)
+- [API & tokens](/developers/api/)
+- [Quick start](/start/quick-start/)

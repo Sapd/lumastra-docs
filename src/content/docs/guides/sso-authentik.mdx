@@ -1,0 +1,304 @@
+---
+title: Single sign-on with Authentik
+description: Set up forward authentication so users sign in to Lumastra through Authentik.
+sidebar:
+  order: 2.5
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Set up [forward authentication](/guides/authentication/#forward-authentication) using
+**Authentik** as the identity provider. If you'd rather not use a forward-auth proxy, see
+[Single sign-on with OIDC](/guides/sso-oidc/) instead. You'll
+need a running Authentik instance and a reverse proxy (Nginx, Traefik, or Caddy)
+terminating TLS in front of Lumastra.
+
+The flow: a reverse proxy in front of Lumastra asks Authentik to authenticate each
+request, and on success passes the username and groups to Lumastra as HTTP headers.
+
+:::note[Not the only option]
+Authelia and Traefik Forward Auth follow the same header-passing pattern. Built-in
+login keeps working alongside forward auth. Prefer SSO without a forward-auth proxy?
+Use [OIDC](/guides/sso-oidc/) instead. Authentik works as an OIDC provider too.
+:::
+
+## 1. Create the provider and application in Authentik
+
+<Steps>
+1. **Providers → Create → Proxy Provider**, in **Forward auth (single application)**
+   mode. Set the **External host** to your Lumastra URL (e.g.
+   `https://lumastra.example.com`).
+2. **Applications → Create**, and bind it to that provider.
+3. Add the provider to an **Outpost** (the built-in *authentik Embedded Outpost* is
+   fine).
+4. **Directory → Groups → Create** a group for admins (for example `admin`), and add
+   your admin users to it.
+</Steps>
+
+## 2. Wire up the reverse proxy
+
+The proxy authenticates each request against the Authentik outpost and forwards the
+`X-authentik-username` and `X-authentik-groups` headers to Lumastra. Every `location`
+that proxies to Lumastra also forwards `X-Forwarded-For` and `X-Real-IP`, as shown
+below. Without them, and without `TRUSTED_PROXY_IPS` set to your proxy's own address,
+Lumastra sees every visitor as connecting from the proxy itself. It then treats every
+visitor as the operator, and shows the operator's setup/first-run guidance instead of
+the ordinary sign-in page.
+
+<Tabs>
+<TabItem label="Nginx">
+
+```nginx
+# In the `http` block (outside any `server` block — usually /etc/nginx/nginx.conf):
+# turn an empty groups value into a sentinel instead of letting nginx drop the
+# header. Conditioned on $user (the username the outpost set below), not on
+# $groups alone: an anonymous request has no username, and it must never get a
+# synthesized groups value either — only a request that already carries an
+# identity has its empty groups promoted to the sentinel.
+map $user $authentik_no_groups {
+    "" "";
+    default "|";
+}
+map $groups $authentik_groups_sent {
+    "" $authentik_no_groups;
+    default $groups;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name lumastra.example.com;
+    ssl_certificate /etc/ssl/lumastra.example.com/fullchain.pem;
+    ssl_certificate_key /etc/ssl/lumastra.example.com/privkey.pem;
+
+    # PWA install assets must stay reachable WITHOUT auth. Browsers fetch the web
+    # manifest (and the icons it references) credential-less, so behind auth_request
+    # they get redirected to the login page — and the "Install app" prompt falls back
+    # to a generic/scraped icon instead of yours. These are non-sensitive static
+    # branding files; serving them publicly is safe. Blanking the identity headers
+    # here (see "Every location must run auth_request or blank the identity
+    # headers" below) stops a client from forging them on this bypassed path.
+    location ~* ^/(manifest\.json|favicon\.(png|ico)|apple-touch-icon(-precomposed)?\.png|icon-(192|512)(-maskable)?\.png)$ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    # Jellyfin-compat and Subsonic clients authenticate themselves per request
+    # (Emby token / api_key query param, or Subsonic u/t/s params) — they can't
+    # complete an auth_request redirect, so these paths must bypass Authentik
+    # entirely. See "Connecting third-party apps" for what each surface expects.
+    location ^~ /j/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    location ^~ /subsonic/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    # Bearer/PAT/service-token clients (TV apps, scripts, the OAuth device flow) —
+    # see Authentication → Programmatic & TV access. These also self-authenticate
+    # and must never be redirected to a login page.
+    location ^~ /api/v1/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    location ^~ /oauth/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    location / {
+        auth_request /outpost.goauthentik.io/auth/nginx;
+        error_page 401 = @authentik_signin;
+
+        # pass the identity from the outpost to Lumastra
+        auth_request_set $user   $upstream_http_x_authentik_username;
+        auth_request_set $groups $upstream_http_x_authentik_groups;
+        proxy_set_header X-authentik-username $user;
+        # nginx drops a header whose value is empty, so a user Authentik just
+        # removed from every group would otherwise arrive with the username
+        # header but NO groups header at all — see "Removed-from-every-group
+        # users" below. $authentik_groups_sent (the maps at the top of this
+        # file) sends the sentinel "|" instead, which Lumastra parses as "no
+        # groups".
+        proxy_set_header X-authentik-groups   $authentik_groups_sent;
+
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    # the outpost endpoint must be reachable without auth
+    location /outpost.goauthentik.io {
+        proxy_pass http://your-authentik:9000/outpost.goauthentik.io;
+        proxy_set_header Host $host;
+        proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
+    }
+
+    location @authentik_signin {
+        internal;
+        return 302 /outpost.goauthentik.io/start?rd=$scheme://$http_host$request_uri;
+    }
+}
+```
+
+</TabItem>
+<TabItem label="Traefik">
+
+Use a `forwardAuth` middleware pointing at
+`http://<outpost>:9000/outpost.goauthentik.io/auth/traefik` with
+`X-authentik-username` and `X-authentik-groups` in `authResponseHeaders`. Apply the
+same bypass rules as the Nginx tab: routers for `/j/`, `/subsonic/`, `/api/v1/`, and
+`/oauth/` must skip the `forwardAuth` middleware entirely. See Authentik's
+proxy-provider docs for the full Traefik snippet.
+
+</TabItem>
+</Tabs>
+
+:::caution[Every location must run auth_request or blank the identity headers]
+Any proxy `location` that forwards requests to Lumastra must either run
+`auth_request` (as `location /` does above) or explicitly blank the identity headers
+(`proxy_set_header X-authentik-username "";` and `proxy_set_header
+X-authentik-groups "";`, as the bypass locations above do). A location that does
+neither passes through whatever the client sent verbatim, including headers the
+client made up itself, so it must do one or the other, never neither.
+:::
+
+:::caution[Keep the PWA manifest + icons unauthenticated]
+The browser fetches the web manifest **without credentials** when building the
+"Install app" prompt, and the in-manifest icon downloads don't carry the session
+cookie either. If `manifest.json` and the icon files sit behind `auth_request`, the
+proxy redirects those fetches to the login page, so the installed app shows a generic
+or stale icon instead of yours. Exempt them as shown above (or set
+`crossorigin="use-credentials"` on the manifest link if you can't). Apply the same
+exemption with any other proxy (Traefik, Caddy, …).
+:::
+
+:::caution[Bypass locations are required, not optional]
+`/j/`, `/subsonic/`, `/api/v1/`, and `/oauth/` must ALL bypass the `auth_request` gate.
+Gating the whole domain behind Authentik (the default pattern most tutorials show)
+silently breaks Jellyfin clients, Subsonic clients, TV apps, and PATs/service tokens.
+
+It also breaks **AirPlay and Chromecast casting, even for browser users whose SSO
+works perfectly**. When you cast, the receiver (a HomePod, an Apple TV, a Chromecast)
+fetches the stream itself, from its own device, with none of your browser's session.
+It reaches `/api/v1/…` carrying a token in the URL because it cannot send an
+`Authorization` header, so a login redirect there is fatal to it. This is the one
+symptom on this list that looks like an app bug rather than a proxy problem: the web
+player works, music plays, everything looks healthy, and only casting fails.
+This applies regardless of proxy choice (Authelia, Traefik, Caddy); only the
+`auth_request` mechanics shown above are Authentik/nginx-specific. See
+[Connecting third-party apps](/using/third-party-players/) and
+[Authentication → Programmatic & TV access](/guides/authentication/#programmatic--tv-access).
+:::
+
+## 3. Configure Lumastra
+
+Tell Lumastra which headers carry the identity, which group grants admin, and which
+peer it may trust the headers from:
+
+```dotenv
+# Match the headers Authentik sends
+USERHEADER=X-authentik-username
+GROUPHEADER=X-authentik-groups
+
+# A user in this group becomes an admin (default: admin)
+ADMIN_GROUPS=admin
+
+# Trust identity headers ONLY from your reverse proxy (required — fail-closed)
+TRUSTED_PROXY_IPS=127.0.0.1,::1
+```
+
+:::caution
+If `TRUSTED_PROXY_IPS` doesn't match the address your proxy connects from, Lumastra
+**rejects** the identity headers and forward-auth sign-in fails (anti-spoofing). Set it
+to your proxy's IP/CIDR. See [Authentication → proxy trust](/guides/authentication/#proxy-trust-fail-closed).
+:::
+
+:::tip[Match Jellyfin usernames]
+If you use Jellyfin sync, a user's Authentik username must match their Jellyfin
+username. The match is case-insensitive, so `Alice` and `alice` line up fine, but the
+names themselves still need to correspond.
+:::
+
+### Removed-from-every-group users: fix the empty groups header
+
+nginx doesn't forward a header whose value is empty. The `auth_request_set` +
+`proxy_set_header` config in the Nginx tab above passes through whatever the outpost
+sets, but when Authentik removes a user from every group, the outpost still *sets*
+`X-authentik-groups`, just to an empty value, and nginx drops it before it reaches
+Lumastra. From Lumastra's point of view that's indistinguishable from a proxy route
+that never sends groups at all, so without one of the two fixes below it leaves that
+user's stored groups (including admin, if they had it and aren't pinned) untouched.
+Traefik's `forwardAuth` passes a present-but-empty header through unchanged, so it
+isn't affected (this guide makes no claim about Caddy).
+
+There are two fixes. Either one is enough on its own; applying both is harmless.
+
+**Proxy-side, recommended.** The Nginx tab's snippet above already has it: the two
+`map` directives (place them in the `http` block, outside any `server` block) turn an
+empty groups value into the sentinel `"|"`, which Lumastra parses as "no groups," and
+`location /` sends `$authentik_groups_sent` instead of the raw header. The sentinel
+map is conditioned on the username on purpose. An anonymous request has no username
+either, and it must never get a synthesized groups value, so only a request that
+already carries an identity has its empty groups promoted to the sentinel.
+
+**App-side, for proxies you can't change.** Turn on
+**`FORWARD_AUTH_GROUPS_ALWAYS_SENT`** (Admin → Settings → Authentication → "Proxy
+Always Sends the Groups Header"; default off, read fresh on every request, no
+restart needed; the environment variable takes precedence over a `settings.json`
+value if both are set). With it on, a trusted request that carries the username header but no
+groups header is treated as "this user has no groups": their stored groups are
+cleared, and an admin who isn't pinned loses admin, on API tokens, devices, and
+Jellyfin-compatible clients too, not just the browser session. Pinned admins are
+unaffected either way. Only turn this on if **every** proxy location that forwards
+the username also forwards the groups header. A route that forwards one but not the
+other would then wipe that user's groups, including any `age-*` rating group, the
+next time they use it.
+
+## 4. First run
+
+Open Lumastra in a browser. On an empty install it redirects to the **`/setup`
+wizard**, which detects the forwarded identity and shows the username and groups it
+sees. The first user must be in an `ADMIN_GROUPS` group to become the admin. After
+that, users **auto-provision** on first login and Authentik's groups normally decide
+everyone's admin status. An admin can still override that from **Admin → Users** by
+pinning a specific user's admin status. Pinning keeps that user's admin flag fixed in
+Lumastra regardless of later Authentik group changes, until unpinned.
+
+## Next
+
+- [Authentication](/guides/authentication/)
+- [Single sign-on with OIDC](/guides/sso-oidc/)
+- [Deploy with Docker](/guides/deploy-docker/)
+- [Deploy on Kubernetes](/guides/deploy-kubernetes/)

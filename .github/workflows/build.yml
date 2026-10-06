@@ -1,0 +1,38 @@
+name: Build
+
+# Builds the docs on every pull request and on main. The build fails on a broken
+# internal link (starlight-links-validator).
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: build-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+            - run: npm ci
+            - name: Diagrams are up to date
+              run: |
+                  npm run diagrams
+                  git diff --exit-code -- src/components/diagrams/layouts.json || {
+                    echo "::error::layouts.json is out of date. Run 'npm run diagrams' and commit the result."
+                    exit 1
+                  }
+            - run: npx astro build

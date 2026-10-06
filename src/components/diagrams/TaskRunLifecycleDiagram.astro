@@ -1,0 +1,25 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'pending', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'pending', sub: 'queued, waiting for a slot', kind: 'default', hasSource: true } },
+		{ id: 'active', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'active', sub: 'running', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'cancelling', type: 'flow', position: { x: 232, y: 160 }, data: { title: 'cancelling', sub: 'Stop requested, waiting to exit', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'completed', type: 'flow', position: { x: 464, y: -80 }, data: { title: 'completed', sub: 'terminal', kind: 'default', hasTarget: true } },
+		{ id: 'failed', type: 'flow', position: { x: 464, y: 80 }, data: { title: 'failed', sub: 'terminal', kind: 'default', hasTarget: true } },
+		{ id: 'cancelled', type: 'flow', position: { x: 464, y: 240 }, data: { title: 'cancelled', sub: 'terminal', kind: 'default', hasTarget: true } },
+		{ id: 'forcestop', type: 'flow', position: { x: 0, y: 160 }, data: { title: 'Force stop', sub: 'abandons the job immediately, mid-write', kind: 'ext', hasSource: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-pending-active', source: 'pending', target: 'active', label: 'a worker picks it up' },
+		{ id: 'e-active-completed', source: 'active', target: 'completed', label: 'finishes' },
+		{ id: 'e-active-failed', source: 'active', target: 'failed', label: 'throws' },
+		{ id: 'e-active-cancelling', source: 'active', target: 'cancelling', label: 'Stop' },
+		{ id: 'e-cancelling-cancelled', source: 'cancelling', target: 'cancelled', label: 'task notices, exits cleanly' },
+		{ id: 'e-forcestop-cancelled', source: 'forcestop', target: 'cancelled', label: 'skips cleanup — only enabled once cancelling' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Task state transitions" />

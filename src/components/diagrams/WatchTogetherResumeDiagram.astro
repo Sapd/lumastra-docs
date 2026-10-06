@@ -1,0 +1,24 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'host', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Host', sub: 'playing', kind: 'viewer', hasSource: true } },
+		{ id: 'guest', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Guest', sub: 'joining', kind: 'viewer', hasSource: true } },
+		{ id: 'server', type: 'flow', position: { x: 232, y: 85 }, data: { title: 'Server', sub: 'broadcasts buffer_check', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'pause', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'All pause + seek + buffer', sub: 'each sends ready', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'allready', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'all_ready', sub: 'resumeAt = now + ~1.5 s', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'resume', type: 'flow', position: { x: 464, y: 340 }, data: { title: 'All resume', sub: 'play at resumeAt if still at target', kind: 'default', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-host-server', source: 'host', target: 'server', label: 'POST join' },
+		{ id: 'e-guest-server', source: 'guest', target: 'server', label: 'POST join' },
+		{ id: 'e-server-pause', source: 'server', target: 'pause', label: 'buffer_check' },
+		{ id: 'e-pause-server', source: 'pause', target: 'server', label: 'POST ready (×N)' },
+		{ id: 'e-server-allready', source: 'server', target: 'allready', label: 'all ready' },
+		{ id: 'e-allready-resume', source: 'allready', target: 'resume', label: 'resumeAt' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Buffer-gated resume" />

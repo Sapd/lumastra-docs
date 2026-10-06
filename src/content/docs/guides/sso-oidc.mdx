@@ -1,0 +1,186 @@
+---
+title: Single sign-on with OIDC
+description: Run Lumastra as an OpenID Connect client so users sign in through your provider, no forward-auth proxy required.
+sidebar:
+  order: 2.6
+---
+
+Lumastra can act as an **OpenID Connect relying party**: users click a "Sign in
+with…" button, authenticate at your provider, and land back in Lumastra with a normal
+session. Unlike [forward auth](/guides/sso-authentik/), this needs **no reverse-proxy
+auth layer**. Lumastra runs the whole Authorization Code + PKCE flow itself.
+
+Use OIDC when you want SSO and central user management but would rather not put a
+forward-auth proxy in front of every app. (If you already run forward auth, that works
+just as well: see [Authentication](/guides/authentication/) for how to choose.)
+
+:::note[Prerequisites]
+A standard OIDC provider (Authentik, Authelia, Keycloak, Entra, Google, Okta, Dex, …),
+Lumastra reachable over **HTTPS** (so the session cookie is marked `Secure`), and
+`ORIGIN` set to your public URL. Built-in and forward auth keep working alongside OIDC.
+:::
+
+## 1. Register an application at your provider
+
+Create an **OAuth2 / OpenID Connect** application (Authorization Code flow, PKCE
+enabled; Lumastra always sends S256). Configure:
+
+- **Redirect / callback URI:** `https://your-domain/auth/oidc/callback` (exact match).
+- **Scopes:** `openid profile email`. Add `groups` if your provider needs an explicit
+  scope to emit group membership.
+- **Client type:** confidential (with a secret) or public (PKCE only: leave the
+  secret empty in Lumastra).
+
+Note the **issuer URL** the provider shows. Lumastra appends
+`/.well-known/openid-configuration` to it for discovery.
+
+## 2. Configure Lumastra
+
+```dotenv
+AUTH_OIDC_ENABLED=true
+AUTH_OIDC_ISSUER=https://idp.example.com/application/o/lumastra/
+AUTH_OIDC_CLIENT_ID=your-client-id
+AUTH_OIDC_CLIENT_SECRET=your-client-secret      # omit for a public client
+AUTH_OIDC_SCOPES=openid profile email groups    # default: openid profile email
+AUTH_OIDC_GROUPS_CLAIM=groups                    # claim carrying group membership
+AUTH_OIDC_PROVIDER_NAME=Authentik                # shown on the "Sign in with…" button
+
+# A user in this group becomes an admin (shared with forward auth; default: admin)
+ADMIN_GROUPS=lumastra-admins
+
+# Your public origin, so the session cookie gets its Secure flag
+ORIGIN=https://your-domain
+```
+
+`.env.example` already lists `ADMIN_GROUPS` (commented out). Edit that line rather than
+adding a second one: with two, the last one silently wins.
+
+### Private or self-signed CA
+
+Lumastra's server calls the issuer directly (discovery, token exchange), so it must
+trust the provider's TLS certificate. If the provider uses a private CA, mount the CA
+file and point Node at it:
+
+```yaml
+services:
+  lumastra:
+    environment:
+      NODE_EXTRA_CA_CERTS: /certs/idp-ca.crt
+    volumes:
+      - ./certs/idp-ca.crt:/certs/idp-ca.crt:ro
+```
+
+The file must be readable by the app user (uid 1000), so `chmod 644` it. The issuer's
+hostname must also resolve **inside the container** to the provider, not just in your
+browser. A `*.localhost` name never does, because it always means the container itself.
+Use a real name, and add `extra_hosts:` if it isn't in DNS. If the setup wizard's
+**Test connection** fails, the error names the cause (untrusted certificate, unknown
+host, connection refused).
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AUTH_OIDC_ENABLED` | `false` | Master switch. Also requires issuer + client ID. |
+| `AUTH_OIDC_ISSUER` | *(none)* | Discovery base URL (provider's issuer). |
+| `AUTH_OIDC_CLIENT_ID` / `AUTH_OIDC_CLIENT_SECRET` | *(none)* | Client credentials. Empty secret means a public/PKCE-only client. |
+| `AUTH_OIDC_SCOPES` | `openid profile email` | Space-separated; must include `openid`. |
+| `AUTH_OIDC_GROUPS_CLAIM` | `groups` | Claim (dot-path for nested) carrying groups, matched against `ADMIN_GROUPS`. |
+| `AUTH_OIDC_PROVIDER_NAME` | `Single Sign-On` | Button label ("Sign in with …"). |
+| `AUTH_OIDC_REDIRECT_URI` | *(auto)* | Override only if the auto-derived `…/auth/oidc/callback` is wrong. |
+| `AUTH_OIDC_LINK_BY_VERIFIED_EMAIL` | `true` | Link a first OIDC login to an existing account on a **verified** email match. |
+| `AUTH_OIDC_LINK_BY_USERNAME` | `false` | Link by username. Less safe; use it for native→OIDC migration. |
+| `AUTH_OIDC_USERINFO` | `false` | Also call the UserInfo endpoint when groups/email are missing from the ID token. |
+| `AUTH_OIDC_ALLOW_INSECURE` | `false` | Allow a non-HTTPS issuer. **Local test IdPs only**: it disables TLS verification. |
+| `AUTH_OIDC_BACKCHANNEL_LOGOUT_CASCADE` | `false` | On a user-wide (`sub`) [back-channel logout](#back-channel-logout-single-logout), also revoke the user's device tokens (TV/mobile), not just the browser session. |
+
+## 3. Behind a forward-auth proxy?
+
+If a reverse-proxy auth layer also fronts Lumastra, **allowlist** the OIDC paths so
+the login round-trip and the [back-channel logout](#back-channel-logout-single-logout)
+callback aren't intercepted:
+
+- `/auth/oidc/login`
+- `/auth/oidc/callback`
+- `/auth/oidc/backchannel-logout` *(only if you enable back-channel logout)*
+
+In Authentik, add them to the proxy provider's *unauthenticated paths*. Other proxies
+have an equivalent bypass/allow rule.
+
+## Provider notes
+
+- **Authentik**: add `groups` as a property mapping on the provider so it lands in the
+  ID token. Set `AUTH_OIDC_ISSUER` to the provider's issuer (e.g.
+  `https://authentik.example.com/application/o/<slug>/`).
+- **Keycloak**: groups usually arrive as `realm_access.roles`. Set
+  `AUTH_OIDC_GROUPS_CLAIM=realm_access.roles` and `AUTH_OIDC_SCOPES=openid profile email roles`,
+  and enable the roles mapper on the client.
+- **Google**: standard tokens carry **no** groups claim, so Google-SSO users come in
+  as non-admin. Promote them manually in **Admin → Users** (the manual toggle pins
+  them).
+- **Local testing**: the repo ships a self-contained example at
+  `docs/examples/oidc-sso-dex/`, a Docker Compose stack with **Dex** as a throwaway
+  IdP, a ready `.env.example`, and the exact client/redirect registration.
+
+## How sign-in works
+
+1. The user clicks **"Sign in with &lt;provider&gt;"** on `/login` (or `/setup`), which
+   hits `/auth/oidc/login`.
+2. Lumastra generates PKCE + `state` + `nonce`, stores a short-lived transaction, and
+   redirects to your provider.
+3. After the user authenticates, the provider redirects to `/auth/oidc/callback`;
+   Lumastra verifies the code, signature, issuer, audience, nonce, and PKCE.
+4. It resolves the identity (`(issuer, sub)`), provisions or links the account, applies
+   admin from the groups claim, and sets the session cookie.
+
+On a **fresh install**, the first OIDC sign-in becomes the admin only if that account
+is in an `ADMIN_GROUPS` group; otherwise the wizard rejects it and creates nothing.
+
+## Back-channel logout (single logout)
+
+By default, signing out at your provider does **not** end the user's Lumastra session.
+The local session cookie lives until it expires. With **OpenID Connect Back-Channel
+Logout 1.0**, your provider notifies Lumastra the moment a user logs out (or an admin
+terminates their session), and Lumastra revokes the matching local session.
+
+Lumastra exposes a receiver at:
+
+```
+https://your-domain/auth/oidc/backchannel-logout
+```
+
+Point your provider's **back-channel logout URL** at that endpoint (no trailing slash).
+In **Authentik**, edit the OAuth2 provider and set the **Back-channel Logout URI** field.
+No Lumastra config is required to enable the receiver. It's active whenever OIDC is on.
+
+It's a `POST` with `Content-Type: application/x-www-form-urlencoded` and a single
+`logout_token` field. It returns `200` on success, `400` on an invalid token, `404` if
+OIDC is disabled, or `503` (with a `Retry-After` header) on a transient outage reaching
+the provider's JWKS/discovery endpoint or the database. Retry on a `503`.
+
+When a logout arrives, Lumastra verifies the provider's signed `logout_token`:
+signature against the provider JWKS, issuer, audience, expiry, the back-channel-logout
+`events` member, that `nonce` is *absent* (the spec forbids it on logout tokens), that
+`sub` or `sid` is present, and replay protection. Then:
+
+- if the token identifies a **specific session** (`sid`), it ends just that session;
+- otherwise it ends **all** of that user's OIDC sessions (`sub`).
+
+```dotenv
+# Optional: on a user-wide (sub) logout, also revoke the user's device tokens
+# (TV / mobile apps signed in via the device flow), for a full sign-out everywhere.
+# Default false — device clients are authorized separately and keep their own
+# lifecycle. Never applies to a single-session (sid) logout.
+AUTH_OIDC_BACKCHANNEL_LOGOUT_CASCADE=false
+```
+
+:::note
+Back-channel logout is a server-to-server call from your provider to Lumastra, so the
+endpoint must be reachable from your provider. If a forward-auth proxy also fronts
+Lumastra, allowlist `/auth/oidc/backchannel-logout` (see [step 3](#3-behind-a-forward-auth-proxy)).
+The endpoint authenticates the request by the token signature alone. No cookie is sent.
+:::
+
+## See also
+
+- [Authentication](/guides/authentication/): all three methods, the setup wizard, tokens
+- [Single sign-on with Authentik](/guides/sso-authentik/): the forward-auth path
+- [Deploy with Docker](/guides/deploy-docker/) · [Deploy on Kubernetes](/guides/deploy-kubernetes/)

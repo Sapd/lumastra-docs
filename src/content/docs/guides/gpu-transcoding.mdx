@@ -1,0 +1,286 @@
+---
+title: Hardware (GPU) transcoding
+description: "Offload video transcoding and HDR tone-mapping to a GPU: backends, environment variables, and Docker device passthrough."
+sidebar:
+  order: 4.3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Lumastra transcodes video with **jellyfin-ffmpeg**. By default it uses **software
+encoding** (`libx264`/`libx265`). This works on any host with no configuration, but
+it's CPU-bound. On a machine with a supported GPU you can offload encoding (and
+HDR→SDR tone-mapping) to hardware.
+
+You'll need a supported GPU passed through to the container (see the backend table
+below). Software encoding needs nothing extra and is the default.
+
+:::note[Software is the safe default]
+Only enable a GPU backend if you have the hardware **and** have passed the device
+through to the container. Setting `GPU_ACCELERATION` without exposing the device
+falls back to software with a warning: it doesn't crash, you just get no
+acceleration.
+:::
+
+## Two steps
+
+<Steps>
+1. **Pick a backend**: set `GPU_ACCELERATION` (and any backend-specific vars) in your
+   `.env`.
+2. **Expose the device** to the container: add the matching block to your
+   `docker-compose.yml` (commented examples ship in `docker-compose.example.yml`).
+</Steps>
+
+Then restart and [verify](#verifying).
+
+## Supported backends
+
+| `GPU_ACCELERATION` | Hardware                     | Host requirement                          | Container exposure                          |
+| ------------------ | ---------------------------- | ----------------------------------------- | ------------------------------------------- |
+| `none` (default)   | n/a (software libx264/libx265) | none                                      | none                                        |
+| `nvenc`            | NVIDIA (NVENC/NVDEC)         | NVIDIA driver + NVIDIA Container Toolkit  | device reservation with `capabilities: [gpu, video]` |
+| `qsv`              | Intel Quick Sync             | Intel iGPU/Arc, kernel `i915`             | `/dev/dri` passthrough                      |
+| `vaapi`            | Intel/AMD on Linux (VA-API)  | `/dev/dri/renderD128`, mesa/intel drivers | `/dev/dri` passthrough                      |
+| `amf`              | AMD on **Windows**           | AMD driver (Windows host)                 | not available in Linux Docker               |
+| `videotoolbox`     | Apple Silicon / Intel Mac    | macOS **bare metal**                      | not available in Linux Docker               |
+
+:::caution
+`videotoolbox` and `amf` are for bare-metal or Windows hosts. They do **not** work
+inside a Linux Docker container. Use a Linux backend (`nvenc`/`qsv`/`vaapi`) in Docker.
+:::
+
+## Environment variables
+
+```dotenv
+# Pick one backend (default: none)
+GPU_ACCELERATION=nvenc
+
+# --- NVIDIA (nvenc) ---
+NVENC_PRESET=p4        # p1 (fastest) … p7 (best quality)
+NVENC_TUNE=            # '' | hq | ll | ull | lossless
+NVENC_RC=auto          # auto | constqp | vbr | cbr
+NVENC_CQ=23            # 0–51, lower = better (used with constqp/vbr)
+
+# --- Intel QSV (qsv) ---
+QSV_DEVICE=            # empty = auto-detect
+
+# --- VA-API (vaapi) ---
+VAAPI_DEVICE=/dev/dri/renderD128
+
+# --- AMD (amf, Windows host) ---
+AMF_QUALITY=balanced   # quality | balanced | speed
+```
+
+:::note[QSV tone-map tuning]
+Two advanced, QSV-only knobs fine-tune the *look* of the automatic hardware
+tone-map (they don't turn it on or off: see [HDR tone-mapping](#hdr-tone-mapping)
+below): `VPP_TONEMAPPING_BRIGHTNESS` (default `16`, recommended 0–16, validated
+0–100) and `VPP_TONEMAPPING_CONTRAST` (default `1.0`, validated 0.1–10). VA-API
+tone-mapping ignores both.
+:::
+
+Encoder selection is automatic by default (`VIDEO_CODEC_AUTO=true`): Lumastra probes
+ffmpeg for available encoders and picks the best for your GPU (GPU encoders first,
+software last), ordered by `VIDEO_ENCODER_PREFERENCE`. Set `VIDEO_CODEC_AUTO=false` to
+force a specific `VIDEO_CODEC`.
+
+### NVENC concurrent-session cap
+
+NVIDIA's driver caps how many simultaneous NVENC encode sessions a consumer GeForce GPU
+accepts. Data-center and workstation cards (Quadro, Tesla, RTX A-series, RTX Ada and RTX PRO, L4/L40,
+A10/A100, H100) have no cap.
+The cap depends on the **driver version**, not the GPU model:
+
+| Driver | GeForce session cap |
+| --- | --- |
+| 550 or newer (Linux 550.40, Windows 551.23, January 2024) | 8 |
+| 530–549 (from March 2023) | 5 |
+| Older | 3 |
+
+The GTX 1630 stays at 3 on every driver. Lumastra estimates the cap from the detected
+driver and GPU model and shows it in the GPU panel. The estimate is for display only:
+Lumastra doesn't enforce it, and it doesn't change the driver's own limit. On an RTX 3090
+with driver 617, five 4K HDR transcodes ran at once at 3.5× real time or more each. The
+decoder (NVDEC) was the bottleneck, not the session cap. You can override the estimate:
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `NVENC_MAX_SESSIONS` | auto-detected from the driver version and GPU model (8 on current or undetected drivers, 0 = uncapped for data-center cards) | Overrides the auto-detected session estimate when set. |
+
+## Docker setup
+
+### NVIDIA (`nvenc`)
+
+Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+on the host, then add to the `lumastra` service:
+
+```yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # or device_ids: ['0']
+              capabilities: [gpu, video] # 'video' is REQUIRED for NVENC/NVDEC
+```
+
+:::caution[The `video` capability is mandatory]
+Without it the GPU is visible to `nvidia-smi`, but the NVENC/NVDEC engines aren't
+exposed and ffmpeg silently falls back to software.
+:::
+
+:::note[AV1 NVENC needs Ada Lovelace]
+AV1 encoding on NVIDIA requires an RTX 40-series or newer (or datacenter L4/L40). On
+older GPUs `av1_nvenc` is listed by ffmpeg but fails at runtime. Lumastra detects the
+GPU generation and automatically falls back to HEVC/H.264 NVENC, so auto codec
+selection won't hit a hard failure.
+:::
+
+#### Windows / Docker Desktop (WSL2)
+
+Docker Desktop's WSL2 backend does **not** use the NVIDIA Container Toolkit runtime.
+Use Compose's `gpus` shorthand and **do not** set `runtime: nvidia`:
+
+```yaml
+services:
+  lumastra:
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all # includes 'video' (NVENC/NVDEC)
+      GPU_ACCELERATION: nvenc
+```
+
+The `lumastra` service in the example compose file already has an `environment:` block:
+add the three lines to it rather than a second `environment:` key, which Compose
+rejects (`mapping key "environment" already defined`). Putting them in `.env` works too.
+
+:::caution[`runtime: nvidia` looks like it works but doesn't, on WSL2]
+`nvidia-smi` succeeds inside the container, but on Docker Desktop/WSL2 `runtime: nvidia`
+only mounts the management library, not the encode/decode libraries. NVENC then fails
+at encode time with `Cannot load libnvidia-encode.so.1` and a misleading "minimum
+required Nvidia driver" message (your host driver is fine). `gpus: all` mounts the full
+WSL2 driver set, so NVENC/NVDEC work. Needs a recent NVIDIA Windows driver with WSL2
+GPU support.
+:::
+
+### Intel QSV / VA-API, AMD VA-API (`qsv` / `vaapi`)
+
+Pass the render node through and grant access to the `video`/`render` group:
+
+```yaml
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "video" # or the numeric GID that owns /dev/dri/renderD128 on the host
+```
+
+Find the GID with `getent group render video` or `stat -c '%g' /dev/dri/renderD128` on
+the host, and point `VAAPI_DEVICE` / `QSV_DEVICE` at the node you exposed.
+
+## HDR tone-mapping
+
+When a client can't display the source HDR, Lumastra tone-maps **HDR10 / HLG /
+Dolby Vision → SDR** during transcode. Where that runs depends on the backend:
+
+| Backend | HDR tone-mapping |
+| ------- | ---------------- |
+| `nvenc` | Hardware (`tonemap_cuda`) |
+| `qsv` | Hardware (`vpp_qsv`) |
+| `vaapi` on **Intel** | Hardware (`tonemap_vaapi`) |
+| `vaapi` on **AMD** | **Software** (CPU): AMD's Mesa `radeonsi` driver has no HDR VPP |
+| `none` | Software (CPU) |
+
+:::note[AMD VA-API tone-maps in software, automatically]
+AMD's open-source VA-API driver (`radeonsi`) can't hardware tone-map HDR
+(`tonemap_vaapi` reports *"VAAPI driver doesn't support HDR"*). Lumastra detects this
+with a one-time probe before the first transcode and tone-maps HDR in **software**, then
+uploads the SDR result to the GPU for encoding. HDR and Dolby Vision playback still
+works on AMD, with no config. For these HDR→SDR transcodes the CPU decodes and
+tone-maps, and the GPU encodes. A 4K HDR film runs at about 2.5–5× real time on a
+6-core Ryzen 5 8600G and uses most of its cores, so expect two or three of these at
+once. HDR→HDR (an HEVC-capable client) and SDR transcodes stay entirely on the GPU.
+The active mode is shown in **Users & Sessions → Active sessions** (the GPU panel:
+*HDR tone-mapping: Hardware / Software*).
+:::
+
+HDR **pass-through** (HDR→HDR for capable clients) and direct play / remux never
+tone-map. The source HDR, including full Dolby Vision, is preserved. See
+[Codec & client support → HDR](/reference/codec-support/#hdr) for which clients get
+pass-through vs SDR.
+
+## Source-codec decode fallback
+
+GPUs can **encode** far more than they can **decode**, and a few common source codecs
+have no hardware decoder on some GPUs:
+
+- **MPEG-4 ASP (Xvid / DivX)** and **VC-1**: no decoder on Intel Arc or AMD VA-API.
+- **10-bit H.264 (Hi10P)**: no decoder on any GPU (NVIDIA, AMD or Intel). 8-bit H.264
+  is fine.
+
+For these, Lumastra **decodes in software and feeds the frames to the GPU encoder**
+automatically, so an old Xvid AVI or a Hi10P file still transcodes on the GPU instead
+of hard-failing. It's learned per host: the first time a codec proves undecodable it's
+recorded (and remembered across restarts), so later plays skip straight to the working
+path. After a GPU or driver change you can re-probe by clearing the cache in **Users & Sessions →
+Active sessions**: the GPU panel lists the learned codecs with a **Reset** button.
+
+## Tested hardware
+
+Before the 0.1 release we tested the release image on these GPUs, with H.264, 10-bit
+H.264, 4K HEVC HDR10, Dolby Vision profiles 5 and 8, 4K AV1 HDR10, and PGS subtitles
+burned in. Speeds are for one stream, 4K source transcoded to 720p or 1080p.
+
+| GPU | Host | Driver | What runs on the GPU | Speed |
+| --- | --- | --- | --- | --- |
+| NVIDIA GeForce RTX 3090 | Windows 11, Docker Desktop (WSL2), `gpus: all` | 617.14 | Decode, HDR tone-mapping and encode for every format tested. 10-bit H.264 decodes on the CPU. | 10–25× real time; five 4K HDR streams at once ran at 3.5× or more each |
+| AMD Radeon 760M (Ryzen 5 8600G) | Linux (Proxmox 9.1, kernel 6.17), Docker in an LXC with `/dev/dri` | Mesa 25.2 (in the image) | H.264, HEVC and AV1 encode. SDR and HDR→HDR transcodes run entirely on the GPU. HDR→SDR decodes and tone-maps on the CPU. | SDR 15×, HDR→HEVC 6–8×, HDR→H.264 2.5–5× |
+| Intel Arc A380 | Linux, Docker | Intel media driver | Decode, HDR tone-mapping and encode | Not measured in this round; it runs the developers' own server |
+
+Burning in PGS subtitles moves decoding (and HDR tone-mapping) to the CPU on every GPU,
+and an HDR source comes out as SDR even for an HEVC client. The encode stays on the GPU
+unless `HLS_BURN_IN_HDR_STRATEGY=software` is set, which keeps HDR and encodes on the
+CPU. 4K HDR with burned-in subtitles ran at 3× real time or faster on both GPUs. The
+first segment arrived within 1–4 seconds in every case. Lumastra picks HEVC for
+clients that can play it (keeping HDR10 when the client supports it) and H.264
+otherwise.
+
+## Verifying
+
+After restarting:
+
+<Steps>
+1. **The container sees the GPU.**
+   - NVIDIA: `docker exec <container> nvidia-smi` lists the GPU.
+   - VA-API/QSV: `docker exec <container> ls -l /dev/dri` shows `renderD128`.
+2. **ffmpeg has the encoders.**
+   `docker exec <container> /config/bin/ffmpeg -encoders | grep -E 'nvenc|qsv|vaapi'`
+3. **Start a transcoded playback** and watch the app logs. The chosen encoder (e.g.
+   `hevc_nvenc`) is logged when a transcode starts (*Full mode: GPU-accelerated
+   (h264_vaapi)*), and `nvidia-smi` / `intel_gpu_top` should show encoder utilization.
+   On AMD, `radeontop` doesn't show the video engine, so rely on the log line.
+4. **Check the GPU panel** in **Users & Sessions → Active sessions**: it shows the GPU status, the HDR
+   tone-mapping mode (hardware / software), and any learned decode fallbacks.
+5. **Run the config doctor** for a quick sanity check: `curl http://localhost:3000/api/health/config`.
+</Steps>
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+| ------- | ------------------ |
+| Logs say "falling back to software" | Device not passed through, or host driver/toolkit missing. Re-check the compose block and host driver. |
+| `nvidia-smi` works but NVENC unused | Missing `video` capability in the `deploy` block. |
+| `Cannot load libnvidia-encode.so.1` despite a current driver (Docker Desktop/WSL2) | You used `runtime: nvidia`. Switch to `gpus: all`. |
+| AV1 unused on an RTX 30-series (or older) GPU | Expected. Pre-Ada GPUs have no AV1 encoder; Lumastra auto-uses HEVC/H.264 NVENC. |
+| `/dev/dri` exists but transcode fails with permission errors | Add the correct `group_add` GID for the render node. |
+| High CPU despite `GPU_ACCELERATION` set | The encoder isn't available in ffmpeg (check step 2); auto-select fell back to software. Note that HDR→SDR on AMD VA-API (decode and tone-mapping) and undecodable source codecs use the CPU by design (see below). |
+| `videotoolbox` / `amf` set in Docker but ignored | Not supported inside Linux containers. Use a Linux backend or run bare metal. |
+| HDR plays but uses a lot of CPU on AMD VA-API | Expected when the client gets SDR. AMD has no hardware HDR VPP, so decoding and tone-mapping run in software and only the encode uses the GPU. Confirm *HDR tone-mapping: Software* in Users & Sessions → Active sessions. |
+| Old Xvid / DivX, VC-1, or 10-bit H.264 won't start, or did once then recovered | Handled by the software-decode fallback. If it was mis-learned after a GPU/driver change, clear the decode cache in Users & Sessions → Active sessions. |
+| Fewer than expected concurrent NVENC transcodes on a consumer NVIDIA GPU | Driver-enforced session cap. Check the estimate against your actual card and override with `NVENC_MAX_SESSIONS` if it's wrong. |
+
+## Next
+
+- [Codec & client support](/reference/codec-support/): which formats need transcoding at all
+- [Playback decisions](/architecture/playback-decisions/): how the encoder choice fits into the wider decision
+- [Deploy with Docker](/guides/deploy-docker/): the compose file you add these blocks to

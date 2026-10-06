@@ -1,0 +1,18 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'measuring', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'MEASURING', sub: '5 s, ≥3 samples', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'calibrating', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'CALIBRATING', sub: 'rate computed', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'locked', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'LOCKED', sub: 'recalibrates on backoff', kind: 'default', hasTarget: true, hasSource: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-measuring-calibrating', source: 'measuring', target: 'calibrating', label: 'samples ready' },
+		{ id: 'e-calibrating-locked', source: 'calibrating', target: 'locked', label: 'rate applied' },
+		{ id: 'e-locked-measuring', source: 'locked', target: 'measuring', label: 'drift > hard-seek threshold, or host seeks' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Drift calibration" />

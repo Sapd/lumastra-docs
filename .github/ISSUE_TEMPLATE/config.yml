@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+    - name: Bug in Lumastra itself
+      url: https://github.com/Sapd/lumastra/issues/new/choose
+      about: Problems with the software, the apps or the API go to the main repository.
+    - name: Question or help
+      url: https://github.com/Sapd/lumastra/discussions/categories/q-a
+      about: Setup, configuration and "how do I" questions belong in the Q&A discussions.
+    - name: Security vulnerability
+      url: https://github.com/Sapd/lumastra/security/advisories/new
+      about: Report privately via a GitHub security advisory. Don't open a public issue.

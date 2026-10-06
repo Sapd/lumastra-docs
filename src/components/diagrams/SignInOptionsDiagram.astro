@@ -1,0 +1,22 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'apps', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'iPhone, iPad, Apple TV', sub: 'show a code, get their own token', kind: 'viewer', hasSource: true } },
+		{ id: 'browser', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'You, in a browser', sub: 'web app, setup wizard, code approval', kind: 'viewer', hasSource: true, hasTarget: true } },
+		{ id: 'idp', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Your identity provider', sub: 'Authentik · Authelia · Keycloak', kind: 'ext', hasSource: true, hasTarget: true } },
+		{ id: 'native', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Built-in accounts', sub: 'username and password', kind: 'infra', hasSource: true, hasTarget: true } },
+		{ id: 'lumastra', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Lumastra', sub: 'same account, whichever way', kind: 'app', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-apps-browser', source: 'apps', target: 'browser', label: 'approve the code' },
+		{ id: 'e-browser-idp', source: 'browser', target: 'idp', label: 'forward auth or OIDC' },
+		{ id: 'e-browser-native', source: 'browser', target: 'native', label: 'built-in login' },
+		{ id: 'e-idp-lumastra', source: 'idp', target: 'lumastra', label: 'user and groups' },
+		{ id: 'e-native-lumastra', source: 'native', target: 'lumastra', label: 'password' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Ways to sign in" />

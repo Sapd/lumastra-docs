@@ -1,0 +1,21 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'huggingface', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'HuggingFace', sub: 'microsoft/msclap weights · first load only', kind: 'ext', hasSource: true } },
+		{ id: 'file', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Audio file', sub: 'in your music library', kind: 'source', hasSource: true } },
+		{ id: 'sidecar', type: 'flow', position: { x: 232, y: 85 }, data: { title: 'Sonic embedder', sub: 'CLAP-2023 · Python sidecar · CPU or GPU', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'pgvector', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'PostgreSQL + pgvector', sub: '1024-dim vector per track', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'surfaces', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'Map · Collections · Sound Search · smart queue', sub: 'nearest-neighbour lookup', kind: 'viewer', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-hf-sidecar', source: 'huggingface', target: 'sidecar', label: 'downloads weights' },
+		{ id: 'e-file-sidecar', source: 'file', target: 'sidecar', label: 'embeds' },
+		{ id: 'e-sidecar-pgvector', source: 'sidecar', target: 'pgvector', label: 'writes vector' },
+		{ id: 'e-pgvector-surfaces', source: 'pgvector', target: 'surfaces', label: 'similarity search' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Music discovery pipeline" />

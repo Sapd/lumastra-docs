@@ -1,0 +1,21 @@
+---
+// Starlight footer override: keeps the default footer and adds the legal links,
+// so the imprint and privacy policy are reachable from every docs page.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+<p class="legal-links">
+	<a href="/imprint">Imprint</a> · <a href="/privacy">Privacy</a>
+</p>
+
+<style>
+	.legal-links {
+		margin-top: 1.5rem;
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+	}
+	.legal-links a {
+		color: inherit;
+	}
+</style>

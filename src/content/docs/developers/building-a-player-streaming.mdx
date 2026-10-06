@@ -1,0 +1,249 @@
+---
+title: Streaming a player
+description: >
+  Mint a stream token, open the HLS URL from the playback plan, handle seeking
+  and errors, pick audio/subtitle tracks, and use the two preview lanes:
+  ambient hover previews and self-contained Top Shelf URLs.
+---
+
+This continues [Building a player](/developers/building-a-player/) once you have
+a playback plan from `GET /api/v1/playback/{id}/info`. It covers everything
+between "I know which URL to open" and "the video is on screen."
+
+## 1. Mint a stream token
+
+A device JWT expires in ~1 h, and AVPlayer/ExoPlayer cannot inject headers into
+HLS segment requests. Solve both with a `stream_` token:
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/playback/stream-tokens \
+  -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" \
+  -d '{"mediaId":"550e8400-e29b-41d4-a716-446655440000","expiryHours":24}'
+```
+
+`mediaId` is required. `expiryHours` is optional, `1`–`72`, defaults to a
+server-configured value (typically 24). Rate-limited to 10 mints per minute per
+user.
+
+```jsonc
+// 201 Created
+{ "token": "stream_abc123…", "sessionId": "uuid", "expiresAt": "…", "maxDurationMinutes": 480 }
+```
+
+The token is item-scoped and IP-locked. The server embeds it in every segment
+URL in the HLS master playlist, so AVPlayer fetches segments without setting
+headers.
+
+**Lifecycle:**
+
+```bash
+GET    /api/v1/playback/stream-tokens/{id}            # → { valid, secondsUntilExpiry }
+POST   /api/v1/playback/stream-tokens/{id}/refresh     # → new token; old stays valid briefly
+DELETE /api/v1/playback/stream-tokens/{id}             # idempotent → 204
+```
+
+A known-but-dead token still returns `200` with `valid: false` and a `state` of
+`expired` | `inactive` | `ended` | `wrong_item` | `wrong_ip`. An **unknown**
+token id returns `404 not_found`. Dead tokens never `401`/`403`, so the endpoint
+can't be used to probe for token existence.
+
+## 2. Open the stream
+
+Use the pre-built URL from `play_methods[recommended].url`. For tvOS/AVPlayer,
+append the stream token:
+
+```
+GET /api/v1/playback/{id}/hls
+    ?PlaySessionId=<session-uuid>&stream_token=stream_abc123…
+    [&fileId=<file-uuid>][&AudioStreamIndex=<absoluteIndex>]
+    [&SubtitleStreamIndex=<index>&SubtitleMethod=Encode][&seek=<seconds>]
+```
+
+:::caution[Generate `PlaySessionId` yourself, then reuse it for `POST /play-sessions`]
+`PlaySessionId` is a **client-generated UUID**. Mint it *before* opening the
+stream, put it in the HLS URL above, and pass that **same** UUID as `session_id`
+in the `POST /play-sessions` body on
+[Progress & state](/developers/building-a-player-state/). If the two diverge,
+the HLS endpoint mints its own id server-side, that row never receives a
+heartbeat, and it lingers as a stuck "buffering" ghost until the stale-session
+reaper reaps it.
+:::
+
+The `/hls` endpoint returns an HLS master playlist with per-audio-track
+`#EXT-X-MEDIA` renditions, video `#EXT-X-STREAM-INF` (with `VIDEO-RANGE=PQ` for
+HDR output), WebVTT subtitle tracks, an I-frame playlist for tvOS scrubbing, and
+a trickplay image stream for Roku. Every segment URL already carries the
+`stream_token`.
+
+```javascript
+// HLS.js (browser)
+const hls = new Hls({
+  xhrSetup: (xhr) => xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`),
+});
+const streamUrl = new URL(playbackInfo.play_methods.audio_transcode.url, location.origin);
+streamUrl.searchParams.set('PlaySessionId', playSessionId); // same uuid as POST /play-sessions
+hls.loadSource(streamUrl.toString());
+hls.attachMedia(videoElement);
+```
+
+## 3. Seeking & errors
+
+The manifest is a full **VOD playlist**, so you can seek freely within the
+timeline. A forward seek of less than ~90 s waits for the transcoder to catch
+up; beyond that (or any backward seek) the server kills and restarts it at the
+new position. A segment that has aged out of the rewind window returns
+`410 Gone`. Reload the manifest from the current position on that response.
+
+| Operation | Timeout |
+|---|---|
+| Master playlist (initial startup) | 30 s |
+| Segment, normal sequential playback | 10 s |
+| Segment, immediately after a seek | 45 s |
+
+```jsonc
+// 503 — transcoder didn't produce the manifest in time
+{ "error": "transcode_timeout", "fallback": "/api/v1/playback/{itemId}/hls?..." }
+// retry at the fallback URL
+```
+
+:::caution[Stream-start can return 403 (admin kick)]
+Any stream-start can return `403` with `{ "error": "kicked", "remainingSeconds": 87 }`
+when an admin has kicked the user. Surface the message and **do not retry**
+until the cooldown elapses.
+:::
+
+## 4. Audio & subtitle tracks
+
+**Audio: select by `absoluteIndex`**, the wire value on every API (`&AudioStreamIndex=`
+on the HLS URL, `audio_stream_index` on the heartbeat). Mixing it up with the
+display-only `index` is the classic "wrong audio language" bug.
+
+**Subtitles: select by `index`.** Text tracks arrive as WebVTT embedded in the
+HLS playlist; sidecar files appear in `externalSubtitles[]` with a ready
+`deliveryUrl`. Each `tracks.subtitles[]` entry carries a `method`:
+
+| `method` | Action |
+|---|---|
+| `external_vtt` | Fetch `GET /api/v1/playback/subtitles/{itemId}/{index}?format=vtt` |
+| `burn_in` | Add `&SubtitleStreamIndex={index}&SubtitleMethod=Encode` to the HLS URL |
+| `client_render` | Draw it yourself: PGS/VobSub images, or ASS/SSA text |
+
+### Bitmap subtitles (PGS / VobSub)
+
+Blu-ray (PGS) and DVD (VobSub) subtitles are pictures, not text. In order of
+preference: **server-rendered images** (fetch a cue manifest at
+`GET /api/v1/playback/{itemId}/subtitles/{index}/rendered?fileId=…`, then each
+PNG by id, with no client decoder and no re-encode needed), **raw bitmap track** (fetch
+`format=pgssub`/`sub` and decode with something like `libpgs-js`), or **burn-in**
+(forces a full transcode). The first request for a track is slow (a minute or
+two on a two-hour remux, since nothing is pre-rendered); afterwards it is served
+in well under a second and kept long-term. DVBSub and XSUB have no rendered
+form; burn them in.
+
+:::note[HLS subtitles are pre-sanitized]
+When delivered through `/hls`, the server already fixes fMP4 timestamp offsets,
+converts ASS/SSA styling tags to WebVTT, and strips legacy tags. AVPlayer's error
+**-12783** on malformed WebVTT is almost never a client-side bug.
+:::
+
+## 5. Preview sessions (ambient hover previews)
+
+A **preview** is a short, muted, throwaway clip for browse UI. It is a **separate
+lane from real playback**: it opens no play session, writes no watch state, and
+never moves the resume position.
+
+```bash
+# Create — mediaId is the only required field
+curl -X POST https://lumastra.example.com/api/v1/previews \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{ "mediaId": "0f8b…" }'
+# → 201 { "id": "…", "streamUrl": "…/index.m3u8", "hlsStartPosition": 0 }
+
+curl -X PATCH .../api/v1/previews/{id}   # keep alive, every ~10 s while focused → 204
+curl -X DELETE .../api/v1/previews/{id}  # release the moment focus moves away → 204
+```
+
+:::tip[Do not send `startPositionSeconds`]
+Omit it and the server picks a runtime-proportional start that skips studio
+idents. Hard-coding a small constant is the single most common mistake: a
+fixed 30 s lands squarely inside the opening credits on most films. Send an
+explicit value only for a resume position; `0` is honoured verbatim for
+trailers and Live TV.
+:::
+
+Play at the returned `hlsStartPosition` (the playlist is already seeked
+server-side), and wait for **~1.5–2 s of dwell** before creating a preview. If
+your browse UI auto-advances, the dwell must exceed the rotation interval, or an
+unattended carousel spends one create→play→delete cycle per slide indefinitely.
+Prefer holding a session briefly (under the 30 s heartbeat timeout) over
+deleting it the instant focus leaves, since `streamUrl` embeds a per-session id
+and re-creating it re-downloads bytes the device already has.
+
+| Limit | Default | Behaviour |
+|---|---|---|
+| Concurrent previews per user | 6 | Creating one more evicts the coldest |
+| Heartbeat timeout | 30 s | No `PATCH` → reaped |
+| Absolute session TTL | 5 min | Reaped regardless of heartbeats |
+| Clip length | 60 s | Server-capped |
+
+`POST /api/v1/previews` returns `404` when `FEATURE_MEDIA_HOVER_VIDEO_PREVIEW`
+is off (Live TV previews additionally need
+`FEATURE_MEDIA_HOVER_VIDEO_PREVIEW_LIVETV`). Degrade to the backdrop image
+instead of treating it as a hard failure.
+
+## 6. Self-contained preview URLs (Top Shelf & carousels)
+
+The hover-preview lane above needs a live app process. Some platform surfaces,
+tvOS **Top Shelf** among them, hand two plain URLs to a **system player** that
+cannot set headers, cannot heartbeat, and opens no session. This lane serves
+that case with **one self-authenticating, heartbeat-free MP4 URL** baked into
+the snapshot.
+
+```bash
+curl "https://lumastra.example.com/api/v1/media/{id}/topshelf-preview" -H "Authorization: Bearer $TOKEN"
+```
+
+```jsonc
+{
+  "status": "ready",
+  "previewVideoUrl": "/api/v1/media/{uuid}/topshelf-preview/file/preview.mp4?expires=…&sig=…",
+  "cinemagraphUrl":  "/api/v1/media/{uuid}/topshelf-preview/file/cinemagraph.mp4?expires=…&sig=…",
+  "expiresAt": "2026-07-24T10:00:00Z"
+}
+```
+
+| `status` | HTTP | What to do |
+|---|---|---|
+| `ready` | 200 | Bake the URLs into the platform snapshot |
+| `pending` | 202 | Render is warming: use artwork this cycle, don't tight-poll |
+| `unavailable` | 200 | No renderable source, artwork only |
+
+The URLs are **path-relative, HMAC-signed**: no `api_key`/`Bearer`/`stream_token`
+needed, valid until `expiresAt` (~48 h). Gate on
+`capabilities.features.top_shelf_previews`; re-mint on every snapshot rewrite,
+since repeat mints reuse the cached artifact.
+
+:::caution[Different lane from preview sessions]
+`POST /api/v1/previews` and `GET /api/v1/media/{id}/topshelf-preview` are
+**separate features with separate flags** (`video_previews` vs
+`top_shelf_previews`). Neither writes watch state.
+:::
+
+## 7. Trickplay, chapters & skip markers
+
+The plan's `trickplay` block gives `interval` (ms between thumbs) and tile
+dimensions; images are also in the master playlist as
+`#EXT-X-IMAGE-STREAM-INF` (Roku) and `#EXT-X-I-FRAME-STREAM-INF` (Apple TV), or
+fetched directly at `GET /api/v1/playback/{id}/trickplay/{width}`.
+
+`GET /api/v1/media/{id}/chapters` returns `chapters[]` and `mediaSegments[]` of
+type `Intro` / `Outro` / `Recap` with `startTime`/`endTime` in **seconds**.
+Wire these to a "Skip Intro" button.
+
+## Next
+
+- [Progress & state](/developers/building-a-player-state/): play sessions,
+  watch state, and the live event stream.
+- [Offline downloads](/developers/offline-downloads/): original files and
+  transcoded renditions.
+- [Live TV playback](/developers/live-tv-playback/): the same streaming model
+  over a live channel.

@@ -1,0 +1,292 @@
+---
+title: Playback decisions
+description: How Lumastra decides to direct-play, remux, or transcode a file for each client, covering codecs, HDR, and subtitles.
+sidebar:
+  order: 4
+---
+
+import PlaybackDecisionDiagram from '../../../components/diagrams/PlaybackDecisionDiagram.astro';
+
+Every time you press play, Lumastra decides the cheapest way to get the file onto
+your screen: **direct play** if the client can handle it, **remux** if only the
+container is wrong, or **transcode** if a stream has to be re-encoded. The goal is
+to transcode as little as possible. It's the only expensive option. HLS transcoding
+requires `FFMPEG_PATH` to be configured; without it, only direct file serving is
+available and every file that isn't natively compatible can't play.
+
+For the concrete per-client support tables, see
+[Codec & client support](/reference/codec-support/).
+
+<PlaybackDecisionDiagram />
+
+## The server is the sole authority
+
+The client detects what it can decode and reports it; the **server planner** makes
+the actual decision and the client follows it. This avoids clients second-guessing
+codec support and getting it subtly wrong.
+
+1. **The client probes its capabilities**, using the browser media APIs
+   (`MediaSource.isTypeSupported`, `mediaCapabilities`, `canPlayType`), to work out
+   which video codecs, audio codecs, containers, and HDR formats it supports. It does
+   this **per delivery path**, because the same browser supports different codecs
+   through a direct `<video>` element, through hls.js (MSE), and through Safari's
+   native HLS.
+2. **The server plans** from those reported capabilities (or static defaults if none
+   were sent), choosing a delivery path and a play method.
+3. **The client obeys** the plan. It doesn't re-evaluate compatibility.
+
+The decision engine that implements this is split across four layers, each with a
+single responsibility:
+
+| Layer | Responsibility |
+| --- | --- |
+| 1. Compatibility check | Pure functions: can this device play this media, given its reported (or default) capabilities? No config reads, no database access. |
+| 2. Delivery path selection | Which transport carries it: direct file, native HLS, or MSE HLS? |
+| 3. Playback plan creation | Builds the immutable plan object (method, codecs, HDR output, subtitle handling) and stores it in Valkey with a 30-minute TTL |
+| 4. FFmpeg argument building | Translates the plan into actual FFmpeg CLI arguments |
+
+A separate, Jellyfin-profile-based decision engine backs the `/j` compatibility
+routes for third-party Jellyfin clients, since those clients expect Jellyfin-shaped
+responses. An observability bridge runs both engines and logs a warning whenever
+they land on different outcomes (direct vs. transcode). The much more common
+remux-vs-audio-transcode disagreement is expected and silenced.
+
+## Choosing a delivery path
+
+The planner picks the first path that fits, in this order:
+
+| Path | Chosen when |
+| ---- | ----------- |
+| **Direct file** | Video codec, primary audio codec, **and** container are all supported |
+| **Native HLS** | Safari only: video + audio are supported (HLS handles the container) |
+| **MSE HLS** | Always available: the fallback that carries any remux/transcode |
+
+The planner then **narrows the capability set to the chosen path** before checking
+compatibility. A codec that direct-plays from a file isn't necessarily appendable
+through hls.js, so each path is judged on its own. Concretely, capabilities are
+modeled per path (direct file / native HLS / MSE HLS), and when a client doesn't
+report its own capabilities the server falls back to conservative, path-scoped
+defaults:
+
+| | Direct file | Native HLS (Safari) | MSE HLS (hls.js) |
+| --- | --- | --- | --- |
+| Generic browser default | H.264, AV1, VP9 / AAC, MP3, Opus / MP4, WebM, M4V, MOV | *(empty: non-Safari has no native HLS)* | H.264, AV1, VP9 / AAC, MP3, Opus |
+| Native app default (tvOS, etc.) | H.264, HEVC, AV1 / AAC, MP3, Opus, AC-3, E-AC-3, FLAC / MP4, MKV, M4V, MOV | H.264, HEVC, AV1 / AAC, AC-3, E-AC-3 | H.264, HEVC, AV1 / AAC, MP3, Opus |
+
+This narrowing runs even when a client sends nothing. It's what stops the planner
+from recommending a video copy onto an HLS path that can't decode that codec (AV1
+is a good example: it direct-plays from a file, but Lumastra disables it over
+hls.js by default because of a known parser bug, so the same source can transcode
+on the web path while direct-playing elsewhere).
+
+## Choosing the method
+
+Within the path, the method is decided in priority order. The first match wins:
+
+1. **Dolby Vision** on a non-DV client → full transcode (see HDR below).
+2. **Video codec not supported**, or a constraint exceeded (level, profile,
+   resolution, bitrate) → full transcode.
+3. **Audio** has too many channels for the client, or no track is playable →
+   transcode the audio (to AAC).
+4. Some audio tracks are incompatible but at least one works over HLS → **remux**.
+5. **Container** unsupported but the codecs are fine → **remux**.
+6. Multiple audio tracks the client can't switch between in direct file → **remux**.
+7. Everything fits → **direct play**.
+
+Only video re-encoding is "expensive"; remux and audio-only transcode are cheap. The
+compatibility check itself runs the same priority order internally: tonemapping
+need, then video codec (10-bit H.264 always fails, no client can decode it), then
+video constraints (level/profile/resolution/bitrate), then audio channel count, then
+per-track audio codec compatibility (with an HLS-specific fallback), then container
+compatibility (handling ffprobe's comma-separated format strings like `mov,mp4,m4a`),
+then multi-audio-switching support.
+
+**Concrete triggers**: any one of these is enough to force a transcode:
+
+| Trigger | Typical cause |
+| --- | --- |
+| HEVC / AV1 / VP9 source | Client or browser lacks decode support |
+| 10-bit H.264 (Hi10P) | No client can decode this profile at all |
+| Dolby Vision Profile 5/7 | No client-side DV support; needs tone-mapping |
+| Video level or profile exceeded | e.g. H.264 Level 5.2 on a Level 5.1 device |
+| Resolution or bitrate exceeded | e.g. 4K on a 1080p-max device |
+| Audio channels exceeded | e.g. 7.1 on a stereo device |
+| Subtitle burn-in required | DVB-sub, XSUB, or an explicit burn-in request |
+| MKV container | Browsers can't play MKV natively (remux, not transcode, unless codecs also fail) |
+| Multiple audio tracks, no in-file switching | Needs an HLS remux to expose track switching |
+| Fixed quality below source bitrate | User selected a lower quality preset |
+| Auto ABR below source bitrate | Bandwidth too low for the original bitrate |
+
+**Server-side examples** (container / video / audio → method):
+
+| Container | Video | Audio | Method |
+| --- | --- | --- | --- |
+| MP4/MOV | H.264 | AAC | direct |
+| MP4/MOV | H.264 | DTS | audio transcode |
+| MKV | H.264 | AAC | remux |
+| MKV | H.265 | DTS | full transcode |
+| MP4 | HEVC | AAC | direct (Safari) / full transcode (other browsers) |
+| Any | 10-bit H.264 | any | full transcode |
+
+## Encoder selection
+
+When video must be transcoded, Lumastra picks the encoder by what's available, in
+two passes. The two passes use **opposite priority orders**, because a GPU
+encoder is fast regardless of codec while a CPU encoder is not:
+
+1. **Hardware first**: of the codecs the client can decode, prefer whichever the
+   server's GPU can encode efficiently, checked in order AV1 → HEVC → H.264.
+2. **Software fallback**: checked **H.264 → HEVC → AV1** instead. This is
+   speed-first, because `libx264` is far faster than `libx265`/`libsvtav1` at the
+   same quality tier, and the CPU pass needs to hold real time on modest hardware.
+   The order is configurable (`SOFTWARE_CODEC_PREFERENCE`).
+3. If neither pass finds an eligible codec, Lumastra falls through to H.264
+   unconditionally. That's the terminal choice, not a verified guarantee that the
+   server can encode it: if it can't, a warning is logged and playback fails
+   downstream. On the software pass specifically, sources wider than
+   `SOFTWARE_ENCODE_MAX_WIDTH` (default `1920`, anything above 1080p, which covers
+   4K) are locked to H.264, since `libx265`/`libsvtav1` can't hold real time at that
+   resolution on typical CPUs. Set it to `0` to remove the cap.
+
+Audio always transcodes to **AAC**.
+
+## HDR
+
+Lumastra keeps the picture in HDR whenever it can. Direct play and remux never touch
+the bitstream, so they always preserve the source HDR, including full **Dolby
+Vision**. The transcode decision is:
+
+| Source HDR | Device supports it? | Output |
+| --- | --- | --- |
+| SDR | (any) | SDR |
+| HDR10 / HLG | Yes, and preservation enabled | Preserved (copy) |
+| HDR10 / HLG | Yes, but preservation disabled | Tone-mapped to SDR |
+| HDR10 / HLG | No | Tone-mapped to SDR |
+| Dolby Vision Profile 5/7 (no HDR10 base) | Client has DV support | Preserved |
+| Dolby Vision Profile 5/7 | No DV support | Tone-mapped to SDR |
+| Dolby Vision Profile 8 (has HDR10 base) | Client supports HDR10 | **HDR10** (or HLG), mastering metadata copied |
+| Dolby Vision Profile 8 | No HDR support at all | Tone-mapped to SDR |
+
+Profile 8's HDR10 base layer is what makes the third-to-last row possible: many
+servers flatten this case to SDR, but transcoding for an HDR-capable-but-not-DV
+client keeps the picture in HDR here. This is on by default
+(`ENABLE_HDR10_PRESERVATION`). Profile 5/7 has no HDR10 base layer, so it always
+tone-maps to SDR for non-DV clients. The tone-mapping curve is configurable
+(`TONEMAPPING_ALGORITHM`, default `bt2390`; also `hable`, `mobius`, `reinhard`). Preview
+clips always render in SDR regardless of source, since they're throwaway.
+
+## Subtitles
+
+Most subtitle formats render **without** burning into the video: text formats use
+the native player, and image (PGS, VobSub) and styled (ASS/SSA) subtitles render
+client-side via WebAssembly. Only **DVB-sub** and **XSUB** are burned in, and a
+burn-in forces a video transcode. See
+[Codec & client support](/reference/codec-support/#subtitles).
+
+## The HLS engine
+
+When the delivery path is native or MSE HLS, an FFmpeg-based engine produces fMP4
+HLS output with **per-audio-track renditions**: separate video and audio streams,
+each its own HLS rendition, tied together by `-var_stream_map`. This is what lets
+tvOS/Apple TV switch audio tracks natively without rebuffering, instead of
+re-muxing a single file per track choice.
+
+```
+#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",URI="stream_1/index.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Japanese",URI="stream_2/index.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",URI="subs_0/index.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=...,AUDIO="audio",SUBTITLES="subs"
+stream_0/index.m3u8
+```
+
+Audio is copied straight through when the container already speaks HLS-safe audio.
+When it doesn't, the target AAC bitrate is **adaptive**, not fixed: Lumastra takes
+roughly 70% of the source track's bitrate (AAC is more efficient than the source
+codec at the same quality) and clamps it to 96–256 kbps for stereo or 192–512 kbps
+for anything wider. When the source bitrate isn't known, it falls back to
+`AUDIO_BITRATE_STEREO` / `AUDIO_BITRATE_SURROUND` (128k / 256k by default).
+
+| Source codec | HLS output | Action |
+| --- | --- | --- |
+| AAC | AAC | copy |
+| AC-3 | AC-3 | copy |
+| E-AC-3 (DD+) | E-AC-3 | copy |
+| DTS, DTS-HD, TrueHD, FLAC, PCM | AAC (adaptive bitrate) | transcode |
+
+Additional HLS features layer on top of the same manifest: an I-frame playlist
+(`/iframe.m3u8`) for Apple TV scrub thumbnails, a trickplay thumbnail stream
+(`/trickplay.m3u8`) compatible with Jellyfin-style BIF thumbnails, and per-track
+WebVTT subtitle extraction (`/subs_N/index.m3u8`).
+
+:::note[Firefox seek fix]
+A muxed-mode init segment regenerated after a seek can embed an empty edit-list
+(`elst`) entry whose duration equals the seek target. Firefox stacks that on top of
+hls.js's own `timestampOffset` and lands playback at roughly 2× the intended seek
+position (Chrome ignores the edit list under MSE, so it's unaffected). Lumastra
+strips empty edit-list entries from every track before serving the init segment,
+while preserving genuine ones (like AAC encoder-delay priming).
+:::
+
+### Transcoding mode
+
+`TRANSCODING_MODE` controls how FFmpeg sources input. `full` is currently the only
+supported value: it processes the local file as a single FFmpeg input, encoding or
+copying video and each audio track as needed, with GPU acceleration used when
+`GPU_ACCELERATION` is set and CPU encoding otherwise. MKV containers always need
+remuxing to fMP4 regardless of mode.
+
+| Setting | Values | Default | Purpose |
+| --- | --- | --- | --- |
+| `FFMPEG_PATH` | path | (none) | Enables HLS transcoding at all; unset means direct-file-serving only |
+| `FFPROBE_PATH` | path | (none) | Path to the FFprobe binary used for codec detection |
+| `TRANSCODING_MODE` | `full` | `full` | Video source strategy |
+| `GPU_TYPE` | `nvidia`, `intel`, `amd`, `apple`, `none` | `none` | GPU hardware used for hardware encoding |
+| `TONEMAPPING_ALGORITHM` | `bt2390`, `hable`, `mobius`, `reinhard` | `bt2390` | HDR-to-SDR tone-mapping curve |
+| `FFMPEG_SEGMENT_DURATION` | seconds | `6` | HLS segment length |
+
+## Quality and bitrate ladder (ABR)
+
+Independent of hls.js's own within-manifest level switching, Lumastra's client-side
+adaptive bitrate logic requests a **new HLS manifest at a different bitrate cap**
+when conditions change:
+
+| Preset | Max bitrate | Resolution |
+| --- | --- | --- |
+| 4K – 120 Mbps | 120,000 kbps | 3840×2160 |
+| 4K – 80 Mbps | 80,000 kbps | 3840×2160 |
+| 1080p – 40 Mbps | 40,000 kbps | 1920×1080 |
+| 1080p – 20 Mbps | 20,000 kbps | 1920×1080 |
+| 1080p – 10 Mbps | 10,000 kbps | 1920×1080 |
+| 720p – 8 Mbps | 8,000 kbps | 1280×720 |
+| 720p – 4 Mbps | 4,000 kbps | 1280×720 |
+| 480p – 2 Mbps | 2,000 kbps | 854×480 |
+| 360p – 1 Mbps | 1,000 kbps | 640×360 |
+| 240p – 500 Kbps | 500 kbps | 426×240 |
+
+Three special modes sit alongside the ladder: **original** (no cap, direct play
+preferred), **auto** (the ABR algorithm sets the cap dynamically), and **fixed**
+(the user pins a preset and the server transcodes to that ceiling).
+
+Bandwidth is sampled from hls.js's fragment-load events into a rolling window; the
+target bitrate is the median of that window times a conservative factor (0.8, the
+same conservatism hls.js's own `abrBandWidthFactor` applies to buffer-based
+switching). Switch decisions from there:
+
+- Target bitrate drops below 85% of the current level → **switch down**.
+- Target bitrate rises above 150% of the current level → **switch up**, but
+  stepwise, not straight to the top.
+- A buffer stall is detected → immediate 50% bitrate reduction, no averaging.
+- The first **10 seconds** of playback are a stability period with no switching,
+  except a critical drop below 30% bandwidth, which switches immediately.
+
+A quality switch rebuilds the HLS URL with the new bitrate parameter and reloads at
+the current playback position, rather than trying to swap levels within the
+existing manifest.
+
+## Next
+
+- [Codec & client support](/reference/codec-support/): per-client support tables
+- [Hardware (GPU) transcoding](/guides/gpu-transcoding/): offload encoding to a GPU

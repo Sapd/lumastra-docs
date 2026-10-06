@@ -1,0 +1,316 @@
+---
+title: Progress & state
+description: >
+  Report playback progress with play sessions, read and write watch state,
+  sync offline listening/viewing, run a network speed test, and subscribe to
+  the global live event stream: the second half of building a player.
+---
+
+This continues [Building a player](/developers/building-a-player/) and
+[Streaming a player](/developers/building-a-player-streaming/) once a stream is
+open. It covers reporting progress, reading watch state, telemetry, offline
+sync, and the push-event channel.
+
+## 1. Report progress
+
+Open a play session before or shortly after starting the stream. The session is
+the authoritative record of resume position. Send the same `session_id` you
+already used as `PlaySessionId` on the HLS URL: `session_id` is optional here
+(the server generates one if omitted), but omitting it leaves the HLS endpoint's
+own row disconnected from this one.
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/play-sessions \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "session_id": "<same-uuid-as-PlaySessionId>", "media_id": "550e8400-…",
+        "device_id": "my-tv-app-uuid", "client_name": "tvOS",
+        "requested": { "play_method": "audio_transcode" } }'
+# → 201 { "session_id": "uuid", "stream_token": "stream_abc123…" }
+```
+
+Heartbeat about every 10 seconds:
+
+```bash
+curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{session_id} \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "position_ms": 2760000, "status": "ACTIVE", "event_seq": 7, "buffer_health_sec": 12 }'
+```
+
+- **`position_ms`** is milliseconds, not ticks.
+- **`event_seq`** is required: a per-session, monotonically increasing integer
+  starting at 1. The server rejects non-increasing values (it deduplicates
+  stale or out-of-order reports).
+- **`status`:** `ACTIVE` | `PAUSED` | `COMPLETED`. On `COMPLETED`, include
+  `end_reason`: `user` | `completion` | `unload` | `error` | `switch`.
+
+Heartbeat responses carry signals to watch for: `action: "kill"` means the
+server terminated this session, so stop playback. `action: "superseded"` means
+another device's session now owns this item's watch state: playback continues,
+but progress no longer persists, so surface a one-time notice.
+
+:::note[Multi-device ownership: newest session wins]
+If a user resumes on a second device while the first is still paused, the new
+device becomes the sole authority for that item's watch state. That's why
+heartbeats can come back `superseded`. Starting a fresh session on the older
+device reclaims ownership.
+:::
+
+Each play session has its own SSE channel (`GET /api/v1/play-sessions/{id}/events`,
+must own the session) for `kill`, `session_terminated`, `admin_message`, and
+maintenance frames. It's separate from the global stream in [§7](#7-live-event-stream).
+On teardown where you cannot issue a `PUT`, use
+`POST /api/v1/play-sessions/{id}/beacon` (works with `navigator.sendBeacon`).
+
+:::danger[A reaped session isn't a dead end: an `ACTIVE` report revives it]
+A session that missed too many heartbeats is reaped to `CRASHED`, but the row
+isn't deleted: the next heartbeat with `status: "ACTIVE"` revives it in place
+(this is what a mobile app returning from background, or a container restart
+mid-playback, should send). A `PAUSED` report against a `CRASHED` row does
+**not** revive it, so a backgrounded tab's slow keepalive can't ping-pong the
+row between `CRASHED` and `PAUSED` forever. It's still answered as a silent
+no-op `200`, not an error.
+
+The id only starts answering `404` once the server's retention job has actually
+deleted the row (`COMPLETED`/`CRASHED` sessions past the retention cutoff, run
+well after the session ended); at that point it's permanent. Don't loop
+retrying a `404`: open a fresh session instead.
+:::
+
+## 2. Watch state
+
+`GET/PUT /api/v1/watch-state/{id}` is the unified per-user watch state node:
+watched/unwatched, resume position, favorites, and rating in one call.
+
+```bash
+curl https://lumastra.example.com/api/v1/watch-state/550e8400-… -H "Authorization: Bearer <token>"
+# → { "mediaId": "…", "watched": false, "positionMs": 2760000, "favorite": false, "rating": null }
+
+curl -X PUT .../api/v1/watch-state/550e8400-… -d '{"watched": true, "rating": 8}'
+```
+
+:::caution[`position` is read-only here]
+`PUT /watch-state/{id}` accepts `watched`, `favorite`, and `rating` only. During
+live playback, position is set by the play-session heartbeats above. For a
+bookkeeping write with no live playback behind it, use
+[offline playback sync](#4-offline-playback-sync) instead of opening a session
+purely to record a position. A session consumes a concurrent-stream slot and
+supersedes sessions paused on the same item elsewhere.
+:::
+
+`DELETE /api/v1/continue-watching/{itemId}` clears an item from Continue
+Watching.
+
+## 3. Telemetry & incidents
+
+**Quality telemetry** (`POST /api/v1/playback/telemetry`) reports client-side
+quality-of-experience metrics for the admin dashboard only; nothing here
+affects resume position. Batch events (`bandwidth_estimate`,
+`rebuffer_event`, `quality_switch`, `delivery_window`, …) and send them every
+10–30 s, max 100 per request, with `navigator.sendBeacon()` on unload.
+
+**Active sessions**: `GET /api/v1/sessions?scope=mine|all` lists currently
+active play sessions, useful for "already playing on another device" UX.
+
+**Incidents**: `POST /api/v1/playback/incidents` is a higher-detail,
+one-report-per-event surface (an error, a reconnect, a session ending
+unrecoverably), each carrying a short lead-up `timeline[]` so an admin can
+reconstruct what happened. Key fields: `attemptId` (stable across a reconnect,
+unlike `playSessionId`, which rotates), `triggerType` (`error`/`reconnect`/`terminal`),
+and `stage` (`manifest`/`init-segment`/`media-segment`/`unknown`). Rate-limited
+to 20/minute per user. `PATCH /api/v1/playback/incidents { attemptId }`
+resolves every unresolved incident for that attempt once it self-heals.
+
+## 4. Offline playback sync
+
+Not to be confused with [Offline downloads](/developers/offline-downloads/),
+which moves *bytes*. This is the opposite direction: uploading *playback that
+already happened* on a device with no network, once it reconnects.
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/offline-playback-sessions \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "sessions": [{ "eventId": "1f0c1a2e-…", "mediaId": "550e8400-…",
+        "knownAsOf": "2026-08-15T21:04:00Z", "startedAt": "2026-08-17T08:00:00Z",
+        "endedAt": "2026-08-17T08:47:13Z", "positionMs": 1423000,
+        "runtimeMs": 5400000, "sessionElapsedMs": 1187000, "endReason": "stopped" }] }'
+```
+
+```jsonc
+// 200 — always 200 unless the ENVELOPE itself is malformed
+{ "results": [{ "eventId": "1f0c1a2e-…", "status": "accepted", "retryable": false }],
+  "summary": { "accepted": 1, "duplicate": 0, "rejected": 0 } }
+```
+
+Uses the same `media:write` scope as `POST /play-sessions`. No separate opt-in
+needed.
+
+- **`eventId`**: a UUID you generate once and keep locally. It's the permanent
+  idempotency key. Drop a queued record only on a **terminal** result.
+- **`retryable`**: present on every result. `true` means keep it queued;
+  `false` means stop (terminal success or a permanently bad record). Treat this
+  flag as authoritative, not the `reason` string.
+- **`endedAt`** is the authoritative occurrence time: the moment playback
+  actually stopped on the device, not the moment you came back online.
+- **`knownAsOf`**: the moment your client last read server state for that
+  item. It bounds how stale your reported position may be. The server won't
+  let your record lower a resume point set after that instant. Omitting it is
+  safe but blunt: an absent value is read as an *unbounded* blind spot, so the
+  record may only ever *advance* the resume point, never rewind it.
+
+| `reason` | `retryable` | Meaning |
+|---|---|---|
+| `invalid` | `false` | The record's own shape is wrong. Fix it; resubmitting unchanged cannot help. |
+| `too_old` | `false` | `endedAt` is past the 90-day acceptance window. |
+| `too_far_future` | `true` | `endedAt` is more than 5 minutes ahead of server time; succeeds once server time catches up. |
+| `write_failed` | `true` | A server-side write failed and rolled back. Nothing was stored. |
+
+| Limit | Value |
+|---|---|
+| Records per request | 50 |
+| Oldest accepted `endedAt` | 90 days |
+| Clock skew tolerated (future) | 5 minutes |
+
+Audiobooks work through this same endpoint. The server fans each record out to
+whichever store owns the resume point (AudiobookShelf, for a book) before the
+response returns. See [Audiobook playback](/developers/audiobook-playback/) for
+the audiobook-specific rules. Music isn't yet accepted on this endpoint.
+
+## 5. Network speed test
+
+An on-demand link measurement for the "is it my connection?" question. The
+measurement is taken on the receiver: a server-side timer would measure the
+write into a socket buffer, not what the viewer actually got.
+
+```
+GET /api/v1/network/speed-test?bytes=16777216   # 1 MiB – 64 MiB, default 16 MiB
+```
+
+Fold arrivals into 250 ms buckets, then post the result:
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/network/speed-test/results \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "mode": "cadence", "bytesRequested": 33554432, "bytesReceived": 33554432,
+        "durationMs": 48210, "ttfbMs": 41, "buckets": [],
+        "requests": [{ "bytes": 4194304, "ttfbMs": 41, "durationMs": 5120 }] }'
+```
+
+Three profiles: `single` (one 16 MiB download), `long` (one 64 MiB download),
+and `cadence` (8 sequential 4 MiB fetches, 2 s apart). `cadence` is closest to
+real segment fetches and worth implementing first. Rate-limited to 6
+posts/minute; the payload endpoint's own limits are split by size (≤4 MiB: 40
+requests/minute; larger: 6/minute).
+
+Related but passive: emit a `delivery_window` event on
+`POST /api/v1/playback/telemetry` every closed 30-second window of real segment
+downloads, so an admin looking at a stall can see the link's state without
+asking the viewer to run anything.
+
+## 6. What to play next
+
+`GET /api/v1/series/{seriesId}/next-episode` returns the next unwatched episode,
+accounting for any in-progress session. Add `?season=N&episode=M` (both
+required) to fetch the episode at that position instead. Feed the Continue
+Watching rail from `GET /api/v1/continue-watching`.
+
+### Next-episode prompt
+
+Show the next-episode card from two playback preferences, read from
+`GET /api/v1/user/playback-preferences`.
+
+- `nextEpisodePromptLeadSeconds` (−60 to 120) is the number of seconds before
+  the start of the credits, which is the `Outro` media segment. A negative value
+  shows the card after the credits have started. When it is `null`, the
+  instance default applies. The server setting is
+  `NEXT_EPISODE_PROMPT_LEAD_SECONDS`, and it is 0 out of the box. The instance
+  default is not exposed on `/api/v1`, so a v1 client with a `null` preference
+  should assume 0.
+- Without an `Outro` segment, use `noOutroFallbackSeconds` (0 to 120, default
+  30): show the card that many seconds before the end, and never before the
+  midpoint of the item. A value of 0 turns the fallback off.
+
+In a [Watch Together](/developers/watch-together/) party, only the host's card
+advances the party. A guest shows no card and waits for the host's `navigate`.
+
+## 7. Live event stream
+
+`GET /api/v1/events` is the one global per-user SSE push channel. Open it
+after login; keep it open for the session.
+
+```javascript
+// EventSource cannot set an Authorization header — pass the token as a query param.
+const es = new EventSource(`/api/v1/events?api_key=${encodeURIComponent(accessToken)}`);
+es.addEventListener('connected', (e) => { const { serverTime } = JSON.parse(e.data); });
+es.addEventListener('device.action_pending', (e) => handleCastRequest(JSON.parse(e.data)));
+es.addEventListener('admin', (e) => handleAdminFrame(JSON.parse(e.data)));
+```
+
+Every frame is `event: <name>` plus a JSON `data:` line: subscribe to `name`
+verbatim. The per-install list is advertised at
+`GET /api/v1/server/capabilities` → `events.kinds[]`.
+
+| `event:` | Class | Durable |
+|---|---|---|
+| `connected` | bootstrap | — |
+| `admin` | signal | no |
+| `device.action_pending` | signal | no |
+| `session_changed` | signal | no |
+| `watch_state_set_changed` | signal | no |
+| `library.new_episode` | notification | yes |
+| `request.available` | notification | yes |
+| `admin.broadcast` | notification | yes |
+
+A `signal` means "your view of something is stale, refetch"; missing one is
+harmless. A `notification` also writes a durable row. If `durable` is true,
+also poll `GET /api/v1/notifications` so an offline client still sees it.
+
+### `event: admin`: toasts and maintenance notices
+
+Discriminate on `data.type`: `admin_message` (a perishable operator toast),
+`maintenance_notice` (the pinned banner, carrying an absolute `endsAt` epoch-ms
+so a client that connects mid-window can compute remaining time), or
+`maintenance_cleared`. `severity` and `durationMs` are advisory only: decode an
+unrecognised `severity` as `info`, and clamp `durationMs` to what your UI can
+honour. `event: admin` frames carry no `id:` and are **never replayed** on
+reconnect. A toast replayed forty minutes late is worse than a dropped one.
+Maintenance *state*, unlike the toast, is re-sent as a snapshot immediately
+after `connected`, and can also be read without a stream at
+`GET /api/v1/server/notice`.
+
+An `admin_message` targets a `playSessionId` or `deviceId`. The server sends
+it to every connection on the account, and the client filters: render it
+when neither field is set (broadcast, which is what `maintenance_notice`
+always is), or when one field matches this client; drop it otherwise. One
+account can have several clients connected (two Apple TVs, a phone, a
+browser), and honouring the target avoids one extra toast on the others.
+
+Notification-class frames carry an `id:` line; `EventSource` sends the last one
+back as `Last-Event-ID` on reconnect and the server replays what was missed.
+`event: admin` frames are the exception: no `id:`, never replayed (see above).
+
+### Announce what you can render
+
+```jsonc
+POST /api/v1/play-sessions
+{ "media_id": "…", "device_id": "…", "client_features": ["admin_message", "maintenance_notice", "watch_together"] }
+```
+
+The admin UI hides actions a client would silently swallow, so a client that
+does not announce support is never sent one. This is a feature list, not a
+version check: tvOS, iOS, and web version independently. The same list is
+accepted on `POST /api/v1/music/sessions` and `POST /api/v1/devices/{id}/heartbeat`
+(where it generalizes the older `supportsWatchTogether` boolean, which wins if
+both are sent). Unknown tokens are ignored, never rejected.
+
+This global channel is separate from the scoped ones: `play-sessions/{id}/events`
+([§1](#1-report-progress)) and Watch Together's own session channel, which have
+their own resource lifecycle. The session-scoped channel also carries the
+`admin_message`/maintenance payloads as bare `data:` frames (no `event:` name);
+if you read both, de-duplicate on the frame's `id` before rendering.
+
+## Next
+
+- [Live TV playback](/developers/live-tv-playback/): the same play-session
+  model over a live channel.
+- [Watch Together](/developers/watch-together/): synchronized playback built
+  on top of this same per-device model.

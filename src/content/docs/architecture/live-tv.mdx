@@ -1,0 +1,143 @@
+---
+title: Live TV
+description: "How Live TV works: channel import, the dedicated stream proxy, and backup-channel failover."
+sidebar:
+  order: 3
+---
+
+import LiveTvDiagram from '../../../components/diagrams/LiveTvDiagram.astro';
+import LiveTvContainersDiagram from '../../../components/diagrams/LiveTvContainersDiagram.astro';
+
+Live TV in Lumastra has two moving parts that set it apart from a simple
+"play this URL" approach: a **dedicated stream proxy** that multiplexes one
+upstream pull to many viewers, and **backup channels** that fail a stream over to
+an alternate source automatically.
+
+Live TV is gated by `FEATURE_LIVETV` (off by default); when on, channels come from sources
+added in the admin UI (`LIVETV_SOURCE` defaults to `standalone`).
+
+## How a channel reaches a viewer
+
+<LiveTvDiagram />
+
+<p style="margin-top:-0.5rem;font-size:0.85rem;opacity:0.7;">
+	Drag to pan; zoom with the controls.
+</p>
+
+## Channel import & auto-processing
+
+Sources are added from the admin UI (`LIVETV_SOURCE=standalone` selects this mode):
+an M3U playlist, Xtream Codes account, or HDHomeRun device. Each is imported into
+channels, along with EPG (program guide) data that is matched to each channel. During
+import, Lumastra **auto-processes** the channel list to:
+
+- group duplicate channels into **backup groups** (see below),
+- detect **quality tiers** (SD / HD / FHD / …) within a group,
+- sub-group by country code so regional variants aren't mistaken for backups.
+
+Channels, groups, and visibility are then managed in
+[Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio).
+
+## The stream proxy
+
+The stream proxy is a **standalone process** (`start-proxy.sh` →
+`build/stream-proxy.js`), kept isolated: it imports only Node built-ins and
+a small shared module, with no app framework or database access. It exists to do one
+job well: pull live streams and fan them out efficiently.
+
+The diagram below shows how the containers relate: the web app handles channel
+selection and policy, while clients stream HLS **directly from the proxy** container.
+
+<LiveTvContainersDiagram />
+
+| Responsibility       | Detail                                                                       |
+| -------------------- | ---------------------------------------------------------------------------- |
+| **Multiplexing**     | One upstream connection per active channel, shared by all its viewers (reference-counted). Ten people on the same channel means **one** upstream pull, not ten. |
+| **Transcoding**      | An FFmpeg manager remuxes or transcodes per a per-stream transcode decision. |
+| **SSRF protection**  | Upstream URLs are validated before they're fetched.                          |
+| **Health & cleanup** | A health monitor and orphan cleanup tear down streams with no viewers.       |
+| **Clustering**       | Each proxy replica sends a heartbeat to Valkey, so it appears in the admin cluster overview. |
+
+The app talks to the proxy over an authenticated channel, configured with
+`STREAM_PROXY_MODE`, `STREAM_PROXY_URL`, and `STREAM_PROXY_SECRET`. Because it's a
+separate role, the proxy can be scaled and deployed independently of the web tier.
+
+Encoder behaviour is tuned with the `LIVETV_PROXY_*` variables (GPU, preset, CRF,
+target codec, transcode mode) and the passthrough flags. See
+[Administering Lumastra](/guides/administration/#live-tv-and-radio).
+
+## Outbound proxy
+
+For networks where outbound traffic has to go through a proxy, `LIVETV_UPSTREAM_PROXY_URL`
+sends **all** outbound Live TV traffic to the source through an HTTP **CONNECT** forward
+proxy. It's applied in two places, because the work happens in two processes:
+
+| Traffic | Process | Mechanism |
+| --- | --- | --- |
+| M3U/XMLTV import & refresh, channel logos, Xtream validation | web / worker | An undici `ProxyAgent` dispatcher attached to those (and only those) fetches. |
+| Live stream + probe pulls | stream proxy | `http_proxy` / `https_proxy` injected into the FFmpeg / ffprobe child environment. |
+
+Both halves are **fail-closed**: when the variable is set there's no direct fallback, so
+a dead proxy fails the request instead of bypassing the proxy. SSRF validation still runs
+first; when proxied, the connection is handed to the proxy (which resolves DNS), so the
+anti-DNS-rebinding IP-pinning step is skipped.
+
+Because both processes need it, set `LIVETV_UPSTREAM_PROXY_URL` on the app, the worker
+**and** the stream-proxy container. Only HTTP CONNECT proxies are supported; for a
+SOCKS-only proxy, put a `socks→http` shim (e.g. gost or privoxy) in front.
+
+:::caution[HTTPS streams can crash the bundled FFmpeg through a proxy]
+The app side (undici) handles HTTP and HTTPS through the proxy correctly. The **FFmpeg**
+side doesn't, for HTTPS. The bundled Jellyfin FFmpeg's CONNECT client expects a bare
+`200 Connection Established` tunnel for an HTTPS upstream. If the proxy answers with a
+normal framed HTTP response instead (for example `Connection: close` plus
+`Transfer-Encoding: chunked`, which some proxies send for CONNECT), FFmpeg misreads it as
+a chunked body and **segfaults** instead of returning an error.
+
+It isn't a TLS bug (the build uses OpenSSL, and HTTPS without a proxy works) and not really
+a proxy bug (curl and undici handle the same proxy fine); it's FFmpeg's handling of the
+CONNECT response. **HTTP streams are unaffected**, because an HTTP URL through a proxy is a
+plain forwarded `GET` and never uses `CONNECT`.
+
+**Workaround for HTTPS sources:** don't set `LIVETV_UPSTREAM_PROXY_URL` on the stream
+proxy. Instead, run the stream-proxy container inside the network namespace of the
+container that provides your outbound route (`network_mode: "container:<gateway>"`).
+FFmpeg then connects without a proxy or `CONNECT`, and its traffic leaves through that
+route at the network level. Publish the stream proxy's control port through the gateway
+container so the web tier can still reach it. The import, logo and Xtream paths on the
+web and worker can keep using `LIVETV_UPSTREAM_PROXY_URL` as normal.
+:::
+
+## Backup channels (failover)
+
+Live TV streams can be unreliable, so a channel can belong to a **backup group**:
+a set of channels that are alternate sources for the same logical channel.
+
+When a viewer starts a channel, the app builds an **ordered list of stream URLs**:
+the channel's primary URL followed by the other URLs in its backup group. The proxy
+plays the first that works and **fails over to the next** if a stream drops or won't
+start. With `preferHighQuality`, higher-quality tiers in the group are tried first.
+
+Backup groups are **detected automatically** during import (by normalizing channel
+names, separating regional variants by country, and ranking quality tiers), and can
+be curated by an operator: create a group from ungrouped channels, split a group, or
+remove members. If every source in the group fails, the client shows a stream-failure
+overlay.
+
+## Stream limits & contention
+
+Concurrent live streams are bounded per source. Access is restricted to the groups
+in `LIVETV_GROUPS`, and members of `LIVETV_HIGH_PRIORITY_GROUPS` can preempt a stream
+when capacity is contended (governed by `LIVETV_KICK_POLICY`). Idle viewers are
+reaped using `LIVETV_VIEWER_TIMEOUT_SECONDS` and `LIVETV_GRACE_PERIOD_SECONDS`.
+
+:::note[No DVR]
+Live TV has rich channel management and failover, but there is **no recording / DVR**
+today.
+:::
+
+## Next
+
+- [Setting up Live TV](/guides/live-tv/): turn the feature on and add your first source
+- [Codec & client support](/reference/codec-support/): what plays natively per client
+- [Playback decisions](/architecture/playback-decisions/): the same transcode machinery, for on-demand video

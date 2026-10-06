@@ -1,0 +1,92 @@
+---
+title: Deployment
+description: "Lumastra deploys with Docker (single host) or Kubernetes (multi-replica): overview, images, and a production checklist."
+---
+
+Lumastra uses PostgreSQL 18 + pgvector, Valkey 9, and the same app image for web and
+background-worker roles. Choose a deployment method:
+
+| Method | Best for | Guide |
+| ------ | -------- | ----- |
+| **Docker Compose** | A single host: home server, NAS, one VM | [Deploy with Docker](/guides/deploy-docker/) |
+| **Kubernetes** (Helm chart, beta) | Multi-replica / high availability. Best-effort support until 1.0 | [Deploy on Kubernetes](/guides/deploy-kubernetes/) |
+
+## Docker images
+
+Images are published to GHCR:
+
+- `ghcr.io/lumastra/lumastra:stable` / `:latest`: the latest release (intended production tag)
+- `ghcr.io/lumastra/lumastra:0.1.0`: a specific release
+- `ghcr.io/lumastra/lumastra:edge`: every commit to `main`, amd64 only (testing)
+
+A full deployment runs four containers: **PostgreSQL 18 + pgvector**, **Valkey 9**, the
+**app**, and a **worker** for background jobs. An optional **stream proxy** handles
+Live TV. The app and worker can run in one container or be split; the database and
+cache always run separately and should stay on a private network.
+
+## Reverse proxy
+
+Terminate TLS at Caddy, Traefik, or nginx and forward to port 3000. Set `ORIGIN` for
+secure login cookies. Forward auth additionally requires identity headers and
+`TRUSTED_PROXY_IPS`; see [Authentication](/guides/authentication/).
+
+The [Reverse proxy guide](/guides/reverse-proxy/) has copy-paste setups for Caddy, nginx,
+Traefik and Nginx Proxy Manager. The [Docker proxy section](/guides/deploy-docker/#reverse-proxy--tls)
+covers compression, credential-safe logs, and upload limits for all deployment methods.
+
+## Scaling to multiple replicas
+
+For **two or more web replicas**, use the following topology:
+
+Run **N web replicas + exactly one worker**, sharing PostgreSQL and Valkey:
+
+- **Web replicas** (`WORKER_MODE=disabled`) serve HTTP/API/SSE. Scale these freely.
+- **Worker replica** (`WORKER_MODE=enabled`) runs the task runner, scheduler, and
+  file-scanner watcher. Run **exactly one**: it's the single source of background job
+  orchestration, and only it needs the media library mounted. Running more than one
+  worker is **not supported**. If background processing is your bottleneck, give the
+  single worker more CPU/RAM and tune its
+  [concurrency](/guides/performance-tuning/). Don't add worker replicas.
+- Requests for one playback session **must** reach the same web replica. Per-session
+  HLS transcode state is pinned to the replica that started it. The Kubernetes Helm
+  chart ships a router that does this. Elsewhere, use cookie affinity or source-IP
+  hash on your load balancer, never round-robin.
+- Each replica needs a unique `INSTANCE_ID` for Valkey coordination, leader election,
+  and the admin cluster view. Leave it unset and Lumastra derives a unique one from
+  the hostname; if you set it explicitly, it must differ per replica.
+- The `config` volume is shared between web and worker replicas (artwork, trickplay
+  tiles); the media library only needs mounting on the worker.
+- Database migrations are serialized by a PostgreSQL advisory lock at startup.
+
+See [Deploy on Kubernetes](/guides/deploy-kubernetes/) for the Helm chart, the
+per-pod requirements, and the Valkey eviction-policy split.
+
+## Production checklist
+
+- `NODE_ENV=production`, and `ORIGIN=https://your-domain` set so secure session cookies
+  work behind your TLS proxy
+- `JWT_SECRET` and `LUMASTRA_MASTER_KEY` set to ≥ 32-byte random values; the master key
+  **backed up separately**
+- Sign-in configured: a first admin via the `/setup` wizard (built-in login); for
+  forward auth, `TRUSTED_PROXY_IPS` set and admin granted via an `ADMIN_GROUPS` group in
+  your IdP; or for [OIDC](/guides/sso-oidc/), `AUTH_OIDC_*` set and the callback URI
+  registered
+- Postgres and Valkey on a private network; regular [backups](/guides/backup-recovery/)
+  (the database **and** your master key)
+- Valkey eviction policy chosen so task-system keys aren't evicted (see the
+  [Kubernetes guide](/guides/deploy-kubernetes/#valkey))
+- Resource limits set (the worker especially: 2–4 GB RAM under load)
+- Logs aggregated from container stdout
+- Compression enabled at the reverse proxy for HTML, CSS, JavaScript and JSON (including
+  `/api/v1`), but not for `text/event-stream` or media. See
+  [Compression](/guides/deploy-docker/#compression)
+- Proxy access logs record paths **without query strings**. Third-party clients pass
+  tokens and Subsonic passwords as query parameters. See
+  [Access logs](/guides/deploy-docker/#access-logs-keep-credentials-out)
+- The proxy's request-body limit is at least your `BODY_SIZE_LIMIT`. nginx's 1 MB default
+  rejects artwork uploads, library upload chunks, and app diagnostics bundles. Behind
+  `auth_request`, the auth location needs the same limit. See
+  [Request body size](/guides/deploy-docker/#request-body-size)
+- Running more than one web replica? Session affinity (the Helm chart's router, or
+  sticky sessions on your load balancer) and a unique `INSTANCE_ID` per replica. See [Scaling to multiple
+  replicas](#scaling-to-multiple-replicas) above

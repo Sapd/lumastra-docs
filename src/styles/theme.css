@@ -1,0 +1,83 @@
+/* ============================================================
+   Lumastra — astral theme tokens + Starlight re-skin
+   Loaded site-wide (landing + docs) via Starlight `customCss`.
+   ============================================================ */
+
+@import '@fontsource-variable/fraunces';
+@import '@fontsource-variable/hanken-grotesk';
+@import '@fontsource-variable/jetbrains-mono';
+
+:root {
+	/* Brand palette — luminous violet/magenta on deep ink (cosmic, not "purple on white") */
+	--lum-ink: #07050c;
+	--lum-ink-2: #0c0916;
+	--lum-ink-3: #120d1f;
+	--lum-violet: #8b5cf6;
+	--lum-violet-bright: #a78bfa;
+	--lum-magenta: #e072f0;
+	--lum-indigo: #6366f1;
+	--lum-star: #efeaff;
+	--lum-text: #ece8f5;
+	--lum-muted: #9c93b5;
+	--lum-line: rgba(167, 139, 250, 0.16);
+	--lum-glass: rgba(255, 255, 255, 0.025);
+
+	/* Type */
+	--lum-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+	--lum-body: 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, sans-serif;
+	--lum-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+
+	/* Signature gradients */
+	--lum-grad: linear-gradient(100deg, var(--lum-violet-bright), var(--lum-magenta) 55%, var(--lum-indigo));
+	--lum-grad-soft: linear-gradient(100deg, #c4b5fd, #f0abfc 55%, #a5b4fc);
+}
+
+/* ----------------------------------------------------------------
+   Starlight docs re-skin — make the docs feel like the same product
+   ---------------------------------------------------------------- */
+:root {
+	--sl-font: var(--lum-body);
+	--sl-font-mono: var(--lum-mono);
+}
+
+:root[data-theme='dark'] {
+	--sl-color-accent-low: #2b1a52;
+	--sl-color-accent: #7c5cff;
+	--sl-color-accent-high: #d6c9ff;
+	--sl-color-white: #f5f2fc;
+	--sl-color-gray-1: #e7e2f3;
+	--sl-color-gray-2: #c0b8d4;
+	--sl-color-gray-3: #9c93b5;
+	--sl-color-gray-4: #685f80;
+	--sl-color-gray-5: #2c2640;
+	--sl-color-gray-6: #1a1528;
+	--sl-color-black: #0c0916;
+	--sl-color-bg: var(--lum-ink);
+	--sl-color-bg-nav: rgba(8, 6, 14, 0.72);
+	--sl-color-bg-sidebar: var(--lum-ink-2);
+	--sl-color-hairline-shade: var(--lum-line);
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #e9e0ff;
+	--sl-color-accent: #6d3fe0;
+	--sl-color-accent-high: #2a1163;
+	--sl-color-bg: #faf8ff;
+	--sl-color-bg-nav: rgba(250, 248, 255, 0.8);
+}
+
+/* Display font for docs headings — cohesive with the landing */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.content-panel h1,
+:root .sl-markdown-content h1 {
+	font-family: var(--lum-display);
+	font-optical-sizing: auto;
+	letter-spacing: -0.01em;
+}
+
+/* Site title / nav polish */
+:root[data-theme='dark'] header.header {
+	backdrop-filter: blur(14px) saturate(140%);
+	border-bottom: 1px solid var(--lum-line);
+}

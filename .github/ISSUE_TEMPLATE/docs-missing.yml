@@ -1,0 +1,16 @@
+name: Missing documentation
+description: A topic, setting or step that the docs don't cover.
+labels: ['docs:missing']
+body:
+    - type: textarea
+      id: topic
+      attributes:
+          label: What's missing?
+          description: What were you trying to do, and where did you look?
+      validations:
+          required: true
+    - type: textarea
+      id: proposal
+      attributes:
+          label: Where should it go? (optional)
+          description: An existing page to extend, or a new page.

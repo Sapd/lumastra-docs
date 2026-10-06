@@ -1,0 +1,798 @@
+---
+title: Deploy with Docker
+description: Run Lumastra on a single host with Docker Compose, covering containers, the worker split, volumes, reverse proxy, and updates.
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Docker Compose runs Lumastra on one host: a home server, NAS, or single VM. You'll
+need Docker (or Podman) with Compose, and a domain if you plan to front it with a
+reverse proxy. For multi-replica / cluster deployments, see [Deploy on
+Kubernetes](/guides/deploy-kubernetes/).
+
+The repository ships a `docker-compose.example.yml`. Download it as your own
+`docker-compose.yml` and customize it. You don't need to clone the repository for this;
+the [Quick Start](/start/quick-start/#1-get-the-example-files) has the two `curl`
+commands. The example below is a trimmed version of the file.
+
+## What you deploy
+
+| Service    | Image                          | Role                                                               | Required |
+| ---------- | ------------------------------ | ------------------------------------------------------------------ | -------- |
+| `postgres` | `pgvector/pgvector:pg18`       | PostgreSQL 18 + pgvector: all application data and search vectors  | Yes      |
+| `valkey`   | `valkey/valkey:9-alpine`       | Valkey 9 for cache, BullMQ job queues, and leader locks             | Yes      |
+| `lumastra` | `ghcr.io/lumastra/lumastra:latest` | The app (UI and API). Can also run background jobs (see below)     | Yes      |
+| `worker`   | same image                     | Background jobs (scans, metadata, embeddings, image extraction)    | Optional |
+| `proxy`    | same image                     | Live TV stream proxy, only with `LIVETV_SOURCE=standalone`         | Optional |
+
+Image tags: **`ghcr.io/lumastra/lumastra:stable`** and **`:latest`** (the latest release, amd64 +
+arm64), version tags such as **`:0.1.0`**, and **`:edge`** (every commit to `main`, amd64
+only, for testing, not production).
+
+### One container or two? The worker split
+
+The same image runs the web app and the background worker; `WORKER_MODE` decides
+which:
+
+- **Combined (simplest)**: one `lumastra` container with `WORKER_MODE=enabled` (the
+  default, and also settable to `auto`) runs the web app **and** the worker
+  in-process. Good for most home setups.
+- **Split (more headroom)**: set `WORKER_MODE=disabled` on the web container and add
+  a dedicated `worker` container (`./start-worker.sh`). This isolates heavy jobs
+  (embeddings, ffmpeg) from web latency and lets you give the worker its own
+  resources.
+
+:::note
+`start-worker.sh` forces `WORKER_MODE=enabled` and `DEDICATED_WORKER=true`, so a split
+worker always shows up correctly in **System → Health** → Cluster tab. The web and
+worker containers must **share the `config` volume** (the worker writes artwork the
+web tier serves).
+:::
+
+:::tip[Combined setup on a small host]
+When one container runs both web and jobs, a big initial library scan can add latency
+to web requests on a small host (≲ 4 cores). If you notice it, lower the heavy-job
+parallelism: drop the CPU task class, e.g. `LUMASTRA_CONCURRENCY_CPU=2`. Its default
+is already auto-sized to `floor(cores/2)` (clamped to 1–6), so on a small host it may
+already be at 1 or 2; lowering it further trades scan throughput for web latency. For
+very large libraries on capable hardware you can tune the other way. See
+[Performance tuning](/guides/performance-tuning/).
+:::
+
+## Minimal docker-compose.yml
+
+A single-host, combined (web + worker in one) setup. Put passwords and keys in a
+`.env` file (copy from `.env.example`).
+
+```yaml
+services:
+  lumastra:
+    image: ghcr.io/lumastra/lumastra:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      WORKER_MODE: enabled # web + background jobs in one container (also: auto)
+      BASE_PATH: /config
+      DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
+      CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+      ORIGIN: "https://lumastra.example.com" # so the login cookie gets its Secure flag
+    env_file: [.env]
+    volumes:
+      - config:/config # admin settings + artwork (shared with a split worker)
+      - cache:/app/.cache # image cache
+    ports:
+      - "127.0.0.1:3000:3000" # bind to loopback; front with a reverse proxy
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:3000/api/health || [ $? -eq 22 ]",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s # time for first-boot migrations
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    shm_size: 1gb # 64MB default /dev/shm OOMs Postgres parallel queries on large libraries
+    command: >
+      postgres
+      -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-512MB}
+      -c jit_above_cost=10000000
+      -c jit_optimize_above_cost=50000000
+      -c jit_inline_above_cost=50000000
+    environment:
+      POSTGRES_DB: lumastra
+      POSTGRES_USER: lumastra
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumastra -d lumastra"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    restart: unless-stopped
+    command: >
+      valkey-server --requirepass ${CACHE_PASSWORD}
+      --maxmemory-policy noeviction
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "valkey-cli",
+          "--no-auth-warning",
+          "-a",
+          "${CACHE_PASSWORD}",
+          "ping",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  valkey_data:
+  config:
+  cache:
+```
+
+Compose prefixes these names with the project name (the folder name by default), so
+an install in a folder called `lumastra` gets `lumastra_config`, `lumastra_postgres_data`
+and so on, and a second install in another folder gets its own set. Don't pin them with
+`name:`: two stacks that share a Postgres volume corrupt the database as soon as both
+run. Installs created from the older example file (which pinned `lumastra_*` names) can
+keep their data by adding `name: lumastra_postgres_data` etc. back to each volume.
+
+### Adding a dedicated worker
+
+To split the worker out: set `WORKER_MODE: disabled` on the `lumastra` service and add:
+
+```yaml
+worker:
+  image: ghcr.io/lumastra/lumastra:latest
+  restart: unless-stopped
+  command: ["./start-worker.sh"]
+  cpu_shares: 512 # yield to web + Postgres under contention (idle = still uses everything)
+  # cpus: 8       # hard ceiling — set to ~half your host's cores (8 on a 16-core box)
+  environment:
+    NODE_ENV: production
+    BASE_PATH: /config
+    DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
+    CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+  env_file: [.env]
+  volumes:
+    - config:/config # MUST be the same config volume as the web container
+  depends_on:
+    postgres: { condition: service_healthy }
+    valkey: { condition: service_healthy }
+```
+
+`cpu_shares` is safe to leave on (relative weight, only bites under contention);
+`cpus` is a hard ceiling, so pick a number for **your** host. See
+[Capping total CPU](/guides/performance-tuning/#capping-total-cpu-concurrency-limits-jobs-not-threads)
+in the performance guide for the full rationale.
+
+## Required environment
+
+In `.env`:
+
+| Variable              | Purpose                                              | Generate               |
+| --------------------- | ----------------------------------------------------- | ---------------------- |
+| `DATABASE_PASSWORD`   | Postgres password (interpolated into `DATABASE_URL`) | `openssl rand -hex 16` |
+| `CACHE_PASSWORD`      | Valkey password (interpolated into `CACHE_URL`)      | `openssl rand -hex 16` |
+| `LUMASTRA_MASTER_KEY` | Encrypts stored integration/plugin secrets           | `openssl rand -hex 32` |
+
+That's the minimum. Two more you'll usually want:
+
+| Variable            | Purpose                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `JWT_SECRET`        | Signs login / device-flow tokens. **Optional**, derived from the master key if unset, but set it explicitly (`openssl rand -hex 32`) to rotate it independently. |
+| `TRUSTED_PROXY_IPS` | Your reverse proxy's IP(s) (e.g. `127.0.0.1,::1`). Required for forward auth. It also makes client IPs and rate limits work per client. See [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips). |
+
+:::caution[Back up your master key]
+`LUMASTRA_MASTER_KEY` encrypts every secret stored in the database. Lose it and those
+secrets are unrecoverable. Keep it stable and back it up separately from the database.
+See [Backup & recovery](/guides/backup-recovery/).
+:::
+
+`.env.example` lists every optional key commented out; uncomment only what you use.
+Placeholder values such as `your_tmdb_api_key` are ignored with a warning at startup.
+Recommended extras: `TMDB_API_KEY` (metadata: see [Optional
+integrations](/guides/integrations/)), an `OPENAI_API_KEY` or `VOYAGE_API_KEY` for AI,
+and your Jellyfin/MDBList keys. See the full [Environment
+Variables](/reference/environment-variables/) reference.
+
+## Production Valkey layout
+
+The minimal Compose file intentionally uses one Valkey instance, run with
+`noeviction` and no memory cap. Task keys (BullMQ locks, run state) carry an
+expiry time, so any eviction policy, `volatile-lru` included, could drop them under
+memory pressure and run a job twice. Cache entries expire on their own, so memory
+stays bounded without a cap. If you want a hard memory limit, or have sustained task
+traffic, use two instances instead:
+
+| Instance          | Environment variable | Policy                        | Holds                                                             |
+| ----------------- | -------------------- | ----------------------------- | ----------------------------------------------------------------- |
+| General cache     | `CACHE_URL`          | `allkeys-lru` + `--maxmemory` | Recommendations, metadata and other expiring cache data           |
+| Task coordination | `TASK_CACHE_URL`     | `noeviction`                  | BullMQ jobs, task-run state, identity keys, and distributed locks |
+
+Add a second `valkey-tasks` service with its own persistent volume, and set the same
+`TASK_CACHE_URL` on **both** the `lumastra` and `worker` services:
+
+```yaml
+  lumastra:
+    environment:
+      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-tasks:6379/0"
+
+  worker:
+    environment:
+      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-tasks:6379/0"
+
+  valkey-tasks:
+    image: valkey/valkey:9-alpine
+    restart: unless-stopped
+    command: >
+      valkey-server --requirepass ${CACHE_PASSWORD}
+      --maxmemory ${TASK_VALKEY_MAXMEMORY:-512mb} --maxmemory-policy noeviction
+    volumes:
+      - valkey_tasks_data:/data
+    networks: [default]
+
+volumes:
+  valkey_tasks_data:
+```
+
+Do not publish the task instance's port to the host or Internet. `512mb` is a
+starting point, not a capacity target: keep steady-state use below 70%, investigate
+at 80%, and increase memory before 95%. `noeviction` is intentional: if this instance
+fills, it must reject new writes visibly instead of evicting a live queue lock or
+task record.
+
+Cut over only after draining active work and restarting the web and worker together;
+moving `TASK_CACHE_URL` during a rolling deploy splits queue and lock state across
+instances. Keep the task volume when recreating containers. Do not use `FLUSHDB` to
+recover capacity; see [task troubleshooting](/guides/task-troubleshooting/) for the
+safe, targeted procedure.
+
+## Volumes
+
+| Volume          | Mount                 | Holds                                              | Containers                  |
+| --------------- | ---------------------- | --------------------------------------------------- | ---------------------------- |
+| `postgres_data` | `/var/lib/postgresql` | The database                                       | postgres                    |
+| `valkey_data`   | `/data`               | Valkey persistence (queue state)                   | valkey                      |
+| `config`        | `/config`             | Admin settings, extracted artwork, trickplay tiles | web **and** worker (shared) |
+| `cache`         | `/app/.cache`         | TMDB / Jellyfin image cache, avatars               | web                          |
+
+To index local files, mount your media (read-only) into the worker (or the combined
+container) and add it as a library in **Library → Sources & scanning**. See
+[Organizing your media](/guides/organizing-media/):
+
+```yaml
+volumes:
+  - /path/to/media:/data/media:ro
+```
+
+If your library is on **NFS**, the mount options make a big difference to scan speed
+(use `nconnect`, `vers=4.2`, `noatime`, …). See [Performance
+tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
+
+## First run
+
+<Steps>
+
+1. On first boot the app runs all database migrations automatically (watch
+   `docker compose logs -f`).
+2. Open the app. With an empty database it redirects you to the **`/setup` wizard**
+   to create the first admin: built-in login, or forward auth or OIDC if you run an
+   identity provider. See [Authentication](/guides/authentication/).
+3. Verify:
+
+   ```bash
+   curl http://localhost:3000/api/health
+   curl http://localhost:3000/api/health/config   # config doctor, admins only
+   ```
+
+   The config doctor answers `401` until you are signed in as an admin; before that,
+   run `docker compose exec lumastra npm run doctor` instead.
+
+</Steps>
+
+## Reverse proxy & TLS
+
+Lumastra listens on port 3000. Terminate TLS at a reverse proxy and forward to it; set
+`ORIGIN` (above) so the secure login cookie is set. The
+[Reverse proxy guide](/guides/reverse-proxy/) has a checklist of what the proxy must do
+and copy-paste setups for Caddy, nginx, Traefik and Nginx Proxy Manager. The sections
+below cover compression, access logs and request body size in more detail.
+
+If you use **forward auth**, the proxy must also inject `X-Forwarded-User` /
+`X-Forwarded-Groups`, and you must set `TRUSTED_PROXY_IPS` to the proxy's address:
+those headers are rejected from untrusted peers ([Authentication →
+proxy trust](/guides/authentication/#proxy-trust-fail-closed)).
+
+:::caution[Forward auth: run the proxy on the compose network]
+With a proxy installed **on the host** (as above), Lumastra doesn't see the proxy's
+address. Docker rewrites it, so every request arrives from the network's gateway (for
+example `172.21.0.1`). Trusting that gateway trusts **every process on the host**: any
+local program can then send `X-Forwarded-User: admin` to `127.0.0.1:3000` and gets
+admin. That is fine for plain `reverse_proxy` with built-in or OIDC login, which don't
+use identity headers.
+
+For forward auth, run the proxy as a service in the same compose file, remove the
+`ports:` block from `lumastra`, and point the proxy at `lumastra:3000`. Then
+`TRUSTED_PROXY_IPS` is the proxy container's own address. Give it a fixed
+`ipv4_address` and trust only that one IP. Don't trust the whole subnet, because it
+contains the gateway, and host processes that connect to a container address arrive
+from the gateway. Lumastra warns
+at startup when `TRUSTED_PROXY_IPS` contains its own gateway.
+:::
+
+### Compression
+
+Enable compression at the proxy for dynamic pages and JSON (including `/api/v1`).
+Only static assets under `/_app/immutable/` ship pre-compressed.
+
+**Compress** these content types:
+
+- `text/html`, `text/css`, `application/javascript`
+- `application/json`, `application/manifest+json`, `image/svg+xml`
+
+**Never compress:**
+
+- `text/event-stream`: live updates (notifications, watch-state sync, Watch Together)
+  use server-sent events, and a compressing proxy buffers the stream, so updates
+  arrive late or not at all.
+- Video, audio and HLS (`application/vnd.apple.mpegurl`, `video/mp2t`,
+  `video/iso.segment`, `audio/*`) and images. They are already compressed, and
+  compressing them breaks the byte-range requests that seeking relies on.
+
+Select compression **by content type**: `/api/v1/` serves both JSON and media. Keep
+streaming responses uncompressed and set `proxy_buffering off` on streaming locations.
+
+<Tabs>
+<TabItem label="nginx">
+
+```nginx
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 5;
+# text/html is always included when gzip is on
+gzip_types text/css application/javascript application/json
+           application/manifest+json image/svg+xml;
+
+# Optional, if the Brotli module is installed
+# (e.g. Debian's libnginx-mod-http-brotli-filter):
+brotli on;
+brotli_comp_level 5;
+brotli_types text/css application/javascript application/json
+             application/manifest+json image/svg+xml;
+```
+
+</TabItem>
+<TabItem label="Caddy">
+
+`encode` compresses every `text/*` response by default, and that includes
+`text/event-stream`. List the types explicitly:
+
+```caddyfile
+lumastra.example.com {
+    encode {
+        zstd
+        gzip 5
+        match {
+            header Content-Type text/html*
+            header Content-Type text/css*
+            header Content-Type application/javascript*
+            header Content-Type application/json*
+            header Content-Type application/manifest+json*
+            header Content-Type image/svg+xml*
+        }
+    }
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+</TabItem>
+<TabItem label="Traefik">
+
+The `compress` middleware excludes no content types by default, so it would also
+compress media. Use an include list:
+
+```yaml
+http:
+  middlewares:
+    lumastra-compress:
+      compress:
+        includedContentTypes:
+          - text/html
+          - text/css
+          - application/javascript
+          - application/json
+          - application/manifest+json
+          - image/svg+xml
+```
+
+</TabItem>
+</Tabs>
+
+To verify, request the public web manifest (large enough to pass every proxy's
+minimum-size threshold) and check for a `content-encoding` header:
+
+```bash
+curl -s -o /dev/null -D - -H 'Accept-Encoding: br, gzip' \
+  https://lumastra.example.com/manifest.json | grep -i content-encoding
+```
+
+Then open the app with your browser's network tools. Page data and `/api/` JSON should
+show `content-encoding: br` or `gzip`. Event-stream requests, video segments, and images
+should show none.
+
+### Access logs: keep credentials out
+
+Some clients can't send auth headers, so they put credentials in the **query string**:
+
+- Jellyfin-compatible apps (`/j/`): `api_key`, `ApiKey`, `token`
+- Subsonic apps (`/subsonic/`): `t` + `s`, `apiKey`, and `p`, which is the user's
+  **password**
+- Native players and `<audio>`/`<video>` streams: `stream_token`
+- Server-sent event streams from third-party clients: `api_key=pat_…`
+
+Most proxies' default access-log formats record the full request URI (nginx's
+`$request`, for example), so every one of those requests writes a live credential into
+your logs in plain text. Log the path without the query string.
+
+<Tabs>
+<TabItem label="nginx">
+
+Define the format in the `http` block and use it in the Lumastra `server` block:
+
+```nginx
+# http { ... }
+log_format lumastra_no_query '$remote_addr - $remote_user [$time_local] '
+                             '"$request_method $uri $server_protocol" $status '
+                             '$body_bytes_sent "$http_referer" "$http_user_agent" '
+                             'rt=$request_time';
+
+# server { ... }
+access_log /var/log/nginx/access.log lumastra_no_query;
+```
+
+</TabItem>
+<TabItem label="Caddy">
+
+Filter the query keys out of the logged URI:
+
+```caddyfile
+lumastra.example.com {
+    log {
+        format filter {
+            request>uri query {
+                delete api_key
+                delete ApiKey
+                delete token
+                delete apiKey
+                delete stream_token
+                delete p
+                delete t
+                delete s
+            }
+        }
+    }
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+</TabItem>
+<TabItem label="Traefik">
+
+Drop query parameters from the access log (static configuration). On an older release
+without `queryParameters`, drop the `RequestPath` field instead:
+
+```yaml
+accessLog:
+  fields:
+    queryParameters:
+      defaultMode: drop
+```
+
+</TabItem>
+</Tabs>
+
+Changing the format only protects new log lines. Rotated and archived logs written
+before the change still hold those credentials. Delete them or redact them in place, and
+treat any personal access token or Subsonic password that appears in them as exposed.
+Revoke the token, or change the password.
+
+### Request body size
+
+The proxy's request-body limit has to be at least as large as the biggest upload you
+want Lumastra to accept. Otherwise the proxy rejects it with `413` before it reaches
+the app. The app's own limits:
+
+| Upload | Limit | Set by |
+| ------ | ----- | ------ |
+| Artwork (posters, backdrops, logos) | 10 MB | `MAX_IMAGE_UPLOAD_MB` (up to 50) |
+| Library uploads, per chunk | 5 MB | `UPLOAD_CHUNK_SIZE_MB` |
+| Diagnostics bundles from the iOS and tvOS apps (`/api/v1/`) | 3 MiB | fixed |
+| Avatars | 2 MB | fixed |
+| Everything, ceiling | 50 MB in the example compose file | `BODY_SIZE_LIMIT` |
+
+Caddy and Traefik don't limit request bodies unless you add a limit (Caddy's
+`request_body`, Traefik's `buffering` middleware). **nginx defaults to 1 MB**, which is
+too small for artwork and library uploads. Set the limit for the whole Lumastra
+`server` block so every location inherits it:
+
+```nginx
+server {
+    server_name lumastra.example.com;
+    # Match the app's BODY_SIZE_LIMIT.
+    client_max_body_size 50m;
+    # ...
+}
+```
+
+If you use nginx `auth_request` for forward auth (Authentik's outpost, for example),
+the auth subrequest carries the original request's `Content-Length` and is
+size-checked against the **auth location's** limit. If you raise the limit only in
+some locations and not in the auth location, large uploads fail with `500` ("auth
+request unexpected status: 413") instead of a clean `413`. A `server`-level limit
+covers both: raising it in the auth location costs nothing, since the body isn't
+forwarded there (`proxy_pass_request_body off`).
+
+Test uploads through the same proxy configuration you run in production. A staging
+proxy with no body limit (`client_max_body_size 0`) passes every upload and hides a
+`413` that production will return.
+
+## Updating
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Migrations run on boot, and an advisory lock ensures only one container migrates if web
+and worker start together. Avoid running mismatched image versions against the same
+database for long. Roll updates promptly. For rolling updates with no dropped
+requests or interrupted streams, see [Zero-downtime updates](/guides/zero-downtime-updates/).
+
+## Live TV stream proxy
+
+Only needed when `LIVETV_SOURCE=standalone` (you bring your own M3U/EPG). Add a `proxy`
+service that uses `start-proxy.sh`, and point the app at it:
+
+```yaml
+proxy:
+  image: ghcr.io/lumastra/lumastra:latest
+  restart: unless-stopped
+  entrypoint: ["sh", "start-proxy.sh"]
+  environment:
+    STREAM_PROXY_SECRET: ${STREAM_PROXY_SECRET}
+    PORT: "3000"
+  volumes:
+    - config:/config # so the proxy reuses the downloaded ffmpeg binary
+```
+
+```dotenv
+# .env
+LIVETV_SOURCE=standalone
+STREAM_PROXY_URL=http://proxy:3000
+STREAM_PROXY_SECRET=<openssl rand -hex 24>
+```
+
+More on how it works: [Live TV architecture](/architecture/live-tv/).
+
+## Sonic embedder sidecar
+
+The sonic sidecar provides MSCLAP embeddings and the Music Map projection. Use it
+for sonic music features; its published image is
+`ghcr.io/lumastra/lumastra-sonic-embedder`.
+
+The [`docker-compose.example.yml`](https://github.com/Sapd/lumastra/blob/main/docker-compose.example.yml)
+already defines it as the `lumastra-sonic-embedder` service behind the `sonic` profile,
+so a plain `docker compose up -d` never starts it. To turn it on:
+
+1. **Mount your media exactly like the app does.** Lumastra hands the sidecar the file
+   paths it stored when it scanned (for example `/data/media/music/…`), so the sidecar
+   needs the **same container path**, not just the same host folder. Replace the
+   placeholder `- /path/to/media:/data/media:ro` on the sidecar with the same line you
+   put on the `lumastra` service. With a different container path every track fails
+   with `No such file or directory`.
+2. **Create the read-only database role** the sidecar connects as, once, after
+   Lumastra's first start has created the schema. Pick a password, put it in `.env` as
+   `SONIC_READER_PASSWORD`, and run:
+
+   ```bash
+   docker compose exec lumastra-postgres psql -U lumastra -d lumastra -c "
+     CREATE ROLE sonic_reader LOGIN PASSWORD '<same password>';
+     GRANT CONNECT ON DATABASE lumastra TO sonic_reader;
+     GRANT USAGE ON SCHEMA public TO sonic_reader;
+     GRANT SELECT ON media_audio_embeddings TO sonic_reader;"
+   ```
+
+3. **Point the app at it.** Uncomment `SONIC_EMBEDDER_URL` on the `lumastra` service
+   (and on the worker, if you run a split worker). Leave it commented out while the
+   sidecar isn't running: the setup wizard treats a set URL as "sidecar available" and
+   turns the sonic features on.
+4. Start it with `docker compose --profile sonic up -d`. Stop everything with
+   `docker compose --profile sonic down`; without the profile, `down` leaves the sidecar
+   running and can't remove the network.
+
+The service as shipped in the example file, for reference:
+
+```yaml
+lumastra-sonic-embedder:
+  profiles: ['sonic']
+  image: ghcr.io/lumastra/lumastra-sonic-embedder:stable
+  restart: unless-stopped
+  environment:
+    DATABASE_URL: 'postgresql://sonic_reader:${SONIC_READER_PASSWORD:-}@lumastra-postgres:5432/lumastra'
+    MODEL_ID: 'msclap-2023'
+    SONIC_EMBEDDER_THREADS: '4' # set explicitly; memory grows with threads (see below)
+    # SONIC_MODEL_FP: /models/clap-2023.pth  # air-gap: load local weights (see below)
+  # Hardened (supported):
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  deploy:
+    resources:
+      limits: { memory: 6g, cpus: '4' }
+  volumes:
+    - /path/to/media:/data/media:ro # the SAME line as on the lumastra service
+    - sonic-model-cache:/app/.cache/huggingface # persist downloaded CLAP weights (HF_HOME)
+    # - /path/to/clap-2023.pth:/models/clap-2023.pth:ro  # air-gap: mount local weights
+  depends_on:
+    lumastra-postgres: { condition: service_healthy }
+```
+
+```yaml
+# on the lumastra (web) service — and the worker, if you run a split worker:
+environment:
+  SONIC_EMBEDDER_URL: 'http://lumastra-sonic-embedder:8000'
+```
+
+The sidecar image is amd64 only; on an arm64 host leave the profile off.
+
+Then enable the features you want. They are all **off by default**.
+`FEATURE_MUSIC_SONIC` is the master switch (it also needs
+`FEATURE_AI_RECOMMENDATIONS`); the per-surface flags
+(`FEATURE_MUSIC_MAP`, `FEATURE_MUSIC_CLUSTERS`, `FEATURE_MUSIC_TEXT_SOUND`,
+`FEATURE_MUSIC_SONIC_TASTE`, `FEATURE_MUSIC_SONIC_QUEUE`, `FEATURE_MUSIC_ALCHEMY`,
+`FEATURE_MUSIC_LYRICS_SEARCH`) each require it. The
+[Music discovery guide](/guides/music-discovery/) walks through each flag and the
+one-time backfill.
+
+:::caution[Size sonic memory for its thread count]
+Set `SONIC_EMBEDDER_THREADS` at or below the container's `cpus:` limit. Memory grows
+with threads: 4 threads with 6 GB and 8 threads with 16 GB have been tested.
+If unset, current images use half the allowed container CPUs; images before
+30 September 2026 used half the host cores and can exceed their memory limit.
+:::
+
+:::caution[Upgrading from an image before 27 September 2026]
+The image now runs as a non-root user (uid 1000); older images ran as root. If your
+model cache (the `sonic-model-cache` volume, or a folder mounted at
+`/app/.cache/huggingface`) was created by an older image, it belongs to root and the
+model can't load. Fix the ownership once before upgrading:
+`docker run --rm -v sonic-model-cache:/c alpine chown -R 1000:1000 /c` (or
+`chown -R 1000:1000 <folder>` for a bind mount).
+:::
+
+Keep the sidecar running to avoid loading the model for every Sound Search query.
+An NVIDIA GPU speeds initial embedding backfill; CPU also works.
+
+The sidecar uses Microsoft's **CLAP-2023** model (via the `msclap` package). The
+**weights download at runtime** from HuggingFace
+([`microsoft/msclap`](https://huggingface.co/microsoft/msclap)) on first load.
+Lumastra does **not** bundle or redistribute them. The `msclap`/CLAP code is MIT;
+the weights are Microsoft's, so review the
+[model card](https://huggingface.co/microsoft/msclap) for the exact weight terms.
+The `sonic-model-cache:/app/.cache/huggingface` mount above (the image sets
+`HF_HOME` there) persists the downloaded weights across recreates. Declare it under
+the top-level `volumes:` like the other named volumes.
+
+:::tip[Air-gapped hosts]
+If the sidecar can't reach HuggingFace, supply a vetted local weights file: mount
+your `clap-2023.pth` read-only and set `SONIC_MODEL_FP` to its in-container path (see
+the commented lines above). The sidecar then loads locally and never hits the
+network. Alternatively, pre-populate the `sonic-model-cache` volume from a machine
+that does have access. The
+[`docker-compose.example.yml`](https://github.com/Sapd/lumastra/blob/main/docker-compose.example.yml)
+ships both options ready to uncomment.
+:::
+
+## Log rotation
+
+The example compose file's services use Docker's default `json-file` log driver with
+size-based rotation, so container logs can't grow unbounded on disk:
+
+| Service          | max-size | max-file | Effective cap | Purpose                                     |
+| ---------------- | -------- | -------- | -------------- | -------------------------------------------- |
+| `lumastra` (app) | 20m      | 10       | ~200 MB       | API server, request logs, high write volume |
+| `worker`         | 20m      | 10       | ~200 MB       | Background job processing, sync operations  |
+| `postgres`       | 10m      | 5        | ~50 MB        | Database logs, query errors                 |
+| `valkey`         | 5m       | 3        | ~15 MB        | Cache operations, job queue events          |
+
+Each service carries a `logging` stanza:
+
+```yaml
+logging:
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "10"
+    compress: "true"
+```
+
+Docker rotates files at `max-size` and deletes the oldest after `max-file` rotations.
+`compress: "true"` gzips rotated logs.
+
+If your production compose file is managed separately from the example (hand-edited on
+the host, or through a container-management UI), add the same `logging` stanza to each
+service manually, then recreate the containers. The setting only takes effect on the
+_next_ container start, not by editing the running one:
+
+```bash
+docker compose up -d
+```
+
+**Verify it took effect:**
+
+```bash
+docker inspect <container_id> --format '{{json .HostConfig.LogConfig}}'
+```
+
+Expect:
+
+```json
+{
+  "Type": "json-file",
+  "Config": { "compress": "true", "max-file": "10", "max-size": "20m" }
+}
+```
+
+An empty `Config` means the container hasn't been restarted since you added the
+stanza. `docker compose down && docker compose up -d` picks it up.
+
+:::note[Valkey's AOF is separate]
+Valkey can persist to disk via its own Append-Only File (`--appendonly yes`), which
+this log-rotation policy does **not** touch. AOF self-compacts via
+`--auto-aof-rewrite-percentage` / `--auto-aof-rewrite-min-size`. See [Valkey
+Persistence](https://valkey.io/topics/persistence/).
+:::
+
+For multiple hosts, add centralized logging if you need cross-host search or longer
+retention; Docker rotates logs independently on each host.
+
+## Resource sizing
+
+| Component    | Minimum  | Recommended | Notes                                 |
+| ------------ | -------- | ------------ | -------------------------------------- |
+| App / worker | 1 GB     | 2–4 GB       | Embeddings and ffmpeg peak above 1 GB |
+| PostgreSQL   | 256 MB   | 512 MB–1 GB  | Grows with the pgvector index         |
+| Valkey       | 256 MB   | 512 MB–1 GB  | No cap in the example; cache expires  |
+| **Total**    | **4 GB** | **8 GB**     | 4 GB only for a small library in low-RAM mode; the background tasks need the headroom |
+
+For a hard Valkey memory cap, use the separate cache/task layout under
+[Production Valkey layout](#production-valkey-layout).
+
+The image does not bundle ffmpeg: on first start each transcoding container downloads
+the pinned `jellyfin-ffmpeg` release from GitHub into the `ffmpeg-cache` volume (checked
+against a SHA-256 in the image), so later starts skip it. For an offline host set
+`FFMPEG_AUTO_DOWNLOAD=false` and provide the binaries at `FFMPEG_PATH` / `FFPROBE_PATH`.
+Transcoding is software by default. To offload it
+to a GPU, set `GPU_ACCELERATION` and pass the device through. See
+[Hardware (GPU) transcoding](/guides/gpu-transcoding/).

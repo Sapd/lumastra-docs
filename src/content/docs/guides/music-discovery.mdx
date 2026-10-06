@@ -1,0 +1,239 @@
+---
+title: Music discovery (sonic AI)
+description: "The AI music suite: sound-alike, Music Map, Song Paths, Sonic Collections, Sound Search, Lyrics Search, the Mixing Desk, taste-driven Quick Picks, and the smart queue, plus how to enable each."
+sidebar:
+  order: 3.6
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import MusicDiscoveryPipelineDiagram from '../../../components/diagrams/MusicDiscoveryPipelineDiagram.astro';
+
+Lumastra discovers music through audio similarity, listening history, and lyrics.
+Sonic features need a scanned music library and an embedding backfill. They are
+optional and off by default.
+
+## What you get
+
+| Feature | Where | What it does |
+| ------- | ----- | ------------- |
+| **Sound-alike** | Track menu | Acoustically similar tracks. |
+| **Music Map** | `/music/map` | A 2D library map: nearby tracks sound alike. |
+| **Song Paths** | `/music/path` | A sonic bridge between two tracks. |
+| **Sonic Fingerprint** | `/music` | Recommendations from recent listening. |
+| **Mixes for You** (Sonic Collections) | `/music/collections` | Library mixes grouped by sound. |
+| **Sound Search** | `/music/text-search` | Audio search from a text description. |
+| **Lyrics Search** | `/music/lyrics-search` | Search lyrics by meaning. |
+| **Mixing Desk** | `/music/alchemy` and `/music` dock | Playlists shaped by seeds, exclusions, energy, tempo, and obscurity. |
+| **Quick Picks** | `/music` | Recommendations from votes and listening history. |
+| **Smart queue** | Player | Similar tracks with diversity and flow constraints. |
+| **Genre rows** | `/music` | Library genres ranked by listening history. |
+| **Smart Mixes** | `/music` | Personal genre mixes of up to 24 tracks. |
+| **New to You** | `/music` | An unplayed genre close to your taste. |
+
+---
+
+## Listening to mixes
+
+**Smart Mixes** use listening history; **Mixes for You** group your library by sound.
+Starting a mix replaces the current queue. Saving creates a private playlist snapshot;
+a partial save can be retried into the same playlist.
+
+Library-mix previews contain up to 200 tracks. Playback and saving use that selection,
+even if the collection is larger. Smart Mixes contain up to 24 tracks, subject to
+availability, diversity, and access filters.
+
+## Building your own selection
+
+Music Map supports shift-drag selection and track search (up to 50 matches at a time).
+Selections can become playlists or Mixing Desk seeds. Song Paths creates an ordered
+journey between two tracks, including both endpoints; it can replace or append to the
+queue, or be saved as a private playlist.
+
+## How it works
+
+Audio embeddings place similar-sounding tracks near each other in a vector space.
+
+<MusicDiscoveryPipelineDiagram />
+
+- **Model:** Microsoft's CLAP-2023, via `msclap`, produces 1024-dimension vectors.
+  Sound Search embeds text into the same space. Weights download on first load from
+  [HuggingFace](https://huggingface.co/microsoft/msclap); Lumastra does not redistribute
+  them. The code is MIT-licensed; review the model card for weight terms.
+- **Storage:** PostgreSQL with pgvector and an approximate nearest-neighbour index.
+- **Compute:** the Python sonic embedder runs on CPU or NVIDIA CUDA. The published
+  image is `ghcr.io/lumastra/lumastra-sonic-embedder`; see
+  [Docker deployment](/guides/deploy-docker/).
+- **Smart queue:** audio similarity is re-ranked for genre, tempo, energy, and artist
+  diversity, with remix/live/duplicate-title suppression. Tracks without embeddings
+  fall back to metadata similarity. Quick Picks also works without embeddings.
+- **Essentia:** a separate [audio-analysis pipeline](/guides/organizing-music/#audio-analysis-essentia)
+  provides tempo, key, energy, and mood for Mixing Desk controls and queue re-ranking.
+
+Map, Paths, Collections, and Sound Search need embeddings; they remain empty until the
+backfill supplies them.
+
+## Enabling the features
+
+Sonic features are gated by environment-variable feature flags. They are all
+**`false` by default**. Set the ones you want and restart.
+
+### The foundation
+
+| Flag | Default | Enables |
+| ---- | ------- | ------- |
+| `FEATURE_MUSIC_SONIC` | `false` | The whole suite's foundation: audio embeddings and sound-alike ("more like this"). Required by everything below except Lyrics Search and the Mixing Desk. |
+
+`FEATURE_MUSIC_SONIC` also requires `FEATURE_AI_RECOMMENDATIONS` to be on (the
+shared AI/recommendations subsystem). Turning on `FEATURE_MUSIC_SONIC` gives you
+**sound-alike recommendations**, the **Sonic Fingerprint** section, and the data
+the per-surface flags below build on.
+
+### Per-surface flags
+
+Each of these needs `FEATURE_MUSIC_SONIC` as well:
+
+| Flag | Default | Enables | Page |
+| ---- | ------- | ------- | ---- |
+| `FEATURE_MUSIC_MAP` | `false` | Music Map | `/music/map` |
+| `FEATURE_MUSIC_CLUSTERS` | `false` | Sonic Collections (auto-clusters) | `/music/collections` |
+| `FEATURE_MUSIC_TEXT_SOUND` | `false` | Sound Search (text → audio) | `/music/text-search` |
+| `FEATURE_MUSIC_SONIC_TASTE` | `false` | Vote-weighted sonic taste in Quick Picks | `/music` |
+| `FEATURE_MUSIC_SONIC_QUEUE` | `false` | Sonic smart queue / autoplay | the player |
+
+:::note[Song Paths]
+Song Paths (`/music/path`) is part of the core sonic suite and lights up with
+`FEATURE_MUSIC_SONIC` alone. It has no separate flag.
+:::
+
+:::caution[The Mixing Desk does not need sonic embeddings]
+`FEATURE_MUSIC_ALCHEMY` (default `false`) turns on the **Mixing Desk**
+(`/music/alchemy`). It depends on `FEATURE_MUSIC_CLUSTERING` (a separate,
+default-**on** Quick Picks flag for k-means taste clustering) and on
+Essentia-analysed tracks, not on `FEATURE_MUSIC_SONIC` or the CLAP
+embeddings this page otherwise describes. If `FEATURE_MUSIC_CLUSTERING` is
+turned off, the Mixing Desk stays unavailable even with `FEATURE_MUSIC_ALCHEMY`
+on. See [Audio analysis](/guides/organizing-music/#audio-analysis-essentia) for
+Essentia.
+:::
+
+### Lyrics features
+
+Lyrics Search is **separate** from the audio-embedding suite. It works on the text
+of your lyrics, so it does **not** need `FEATURE_MUSIC_SONIC`.
+
+| Flag | Default | Enables |
+| ---- | ------- | ------- |
+| `FEATURE_MUSIC_LYRICS_SEARCH` | `false` | Semantic Lyrics Search (`/music/lyrics-search`). Needs an AI provider key (`VOYAGE_API_KEY` or `OPENAI_API_KEY`) and `FEATURE_AI_RECOMMENDATIONS`. |
+| `FEATURE_AUTO_LYRICS` | `true` | Auto-fetch lyrics from LRCLIB when a listener opens the lyrics tab. |
+| `FEATURE_MUSIC_LYRICS_FETCH` | `false` | Bulk background lyrics fetch for tracks with none yet (no-op unless `FEATURE_AUTO_LYRICS` is also on). |
+
+:::tip[Bring your own AI key]
+The text-side features (Lyrics Search) need an AI provider. Lumastra is
+**bring-your-own-key**. See [Integrations](/guides/integrations/). The audio
+embeddings, by contrast, run on the local sonic embedder and need **no** external
+key.
+:::
+
+---
+
+## Populating the data
+
+Enabling a flag does not, by itself, fill in any data. The background tasks do.
+The general order is:
+
+<Steps>
+
+1. **Scan** your music library so the tracks exist (see
+   [Organizing your music](/guides/organizing-music/)).
+2. Turn on `FEATURE_MUSIC_SONIC` (+ `FEATURE_AI_RECOMMENDATIONS`) and run the
+   **embedding backfill**. It feeds every track through the sonic embedder. This is
+   the long-running, CPU-heavy step; a GPU makes it far faster.
+3. For the **Music Map**, the **Build Music Map** task computes 2D UMAP
+   coordinates for the starfield once embedding coverage is high. For **Sonic
+   Collections**, the clustering pass groups tracks. For **New to You**, the **Build
+   Genre Sound Profiles** task builds one sonic fingerprint per genre. It is pure
+   SQL and takes about a second, but the row does not appear until it has run once.
+   These run **automatically on a schedule** (no extra flag, no manual step);
+   **Tasks → Overview** also has a **Run** button if you want them sooner.
+4. Optionally enable Essentia analysis for tempo/key/energy/mood (powers the Mixing
+   Desk knobs and mood filters, see
+   [Audio analysis](/guides/organizing-music/#audio-analysis-essentia)).
+
+</Steps>
+
+Check coverage and failed tracks at **Developer → Sonic embeddings**
+(`/admin/developer/sonic-embeddings`), visible after enabling **Show developer tools**
+in Settings → General.
+
+## Using the Mixing Desk
+
+The dock on `/music` and the full page at `/music/alchemy` share locally persisted state.
+Add seed tracks and tracks to avoid through drag-and-drop, track menus, or search, then
+adjust Energy, Tempo, and Obscurity. These controls need Essentia-analysed tracks;
+unanalysed tracks are unaffected.
+
+## How the genre rows are chosen
+
+Genres are ranked by library size and listening history (plays, skips, and completions),
+with per-album caps. Listening outweighs library size after roughly seven albums' worth
+of activity. A row needs approximately 120 tracks across eight albums.
+
+Spelling variants are normalized; distinct genres remain separate. Rows update slowly,
+with a daily selection; pinned genres come first.
+
+### New to You
+
+An unplayed genre may occupy the fourth row when its sound matches your listening
+confidently. The choice holds for a week. It requires **Build Genre Sound Profiles**,
+which averages embeddings per genre, and enough listening history; otherwise the row
+is absent.
+
+## Performance & operations
+
+Audio embedding is CPU-heavy. Cap thread use on shared hardware and use NVIDIA CUDA
+for faster backfills.
+
+- **Cap the threads.** Each ML/audio task (sonic embeddings, clustering, map)
+  exposes a **CPU-threads** setting in its admin task settings, and the embedder
+  sidecar honours the `SONIC_EMBEDDER_THREADS` environment variable. Keep these
+  modest (e.g. `4`) on shared hardware so playback and the web UI stay responsive.
+- **Run the sidecar warm.** Point the app at a long-running embedder over HTTP
+  (`SONIC_EMBEDDER_URL`) so the model stays loaded. This makes Sound Search
+  near-instant instead of paying model-startup cost per query.
+- **Use a GPU for the backfill.** The embedder automatically uses an **NVIDIA
+  CUDA** GPU when one is available, which dramatically speeds the initial backfill.
+  On CPU it still works, just slower.
+- **Coexist with everything else.** Embeddings run as ordinary background tasks
+  with their own concurrency limit, so they yield to user-facing work.
+
+See [Performance tuning](/guides/performance-tuning/#capping-total-cpu-concurrency-limits-jobs-not-threads)
+for the CPU-threads vs concurrency model, the `SONIC_EMBEDDER_THREADS` cap, and how
+to give background work a smaller CPU share under contention.
+
+### Offline / air-gapped
+
+By default the sidecar **downloads the CLAP-2023 weights at runtime** from
+HuggingFace (`microsoft/msclap`) on first load. Two knobs make that work on hosts
+that can't reach the internet, or let you pin a vetted weights file for compliance:
+
+- **`HF_HOME`**: the sidecar image sets this to `/app/.cache/huggingface`. The
+  Docker Compose example mounts a **named volume** there (`sonic-model-cache`) so the
+  weights download **once** and survive container recreates instead of re-fetching
+  every restart. For a fully air-gapped host you can also pre-populate that volume
+  out-of-band with a weights cache copied from a machine that does have access.
+- **`SONIC_MODEL_FP`**: set this to the in-container path of a local weights
+  `.pth` and the sidecar loads from there and **never reaches the network**. Mount
+  your own vetted weights file (read-only) and point `SONIC_MODEL_FP` at it. See the
+  commented options in
+  [`docker-compose.example.yml`](https://github.com/Sapd/lumastra/blob/main/docker-compose.example.yml).
+
+## Next
+
+- [Organizing your music](/guides/organizing-music/): scanning, tags, and the
+  Essentia / MusicBrainz enrichment the sonic suite builds on
+- [Performance tuning](/guides/performance-tuning/): CPU thread caps and worker
+  parallelism for the embedding backfill
+- [Configuration](/guides/configuration/): where feature flags and environment
+  variables are set
+- [For viewers](/using/for-viewers/): day-to-day use of the music player and
+  recommendations

@@ -1,0 +1,20 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'server', type: 'flow', position: { x: 40, y: 0 }, data: { title: 'SvelteKit server', sub: 'web requests', kind: 'app', hasSource: true } },
+		{ id: 'worker', type: 'flow', position: { x: 440, y: 0 }, data: { title: 'Worker process', sub: 'background jobs', kind: 'infra', hasSource: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 40, y: 200 }, data: { title: 'PostgreSQL 18', sub: 'pgvector · source of truth · embeddings', kind: 'infra', hasTarget: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 440, y: 200 }, data: { title: 'Valkey 9', sub: 'cache · queues · locks · pub/sub', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-s-pg', source: 'server', target: 'postgres', label: 'read / write' },
+		{ id: 'e-s-vk', source: 'server', target: 'valkey', label: 'cache' },
+		{ id: 'e-w-pg', source: 'worker', target: 'postgres', label: 'task & media state' },
+		{ id: 'e-w-vk', source: 'worker', target: 'valkey', label: 'queues · locks' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Shared data stores" />

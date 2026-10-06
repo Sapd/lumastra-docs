@@ -1,0 +1,114 @@
+---
+title: "Administration: task and webhook operations"
+description: Cancel stuck runs, diagnose pipeline gaps and health findings, and configure signed task webhooks.
+---
+
+import TaskRunLifecycleDiagram from '../../../components/diagrams/TaskRunLifecycleDiagram.astro';
+
+These routes require [admin access](/guides/authentication/). For libraries, users,
+integrations, and branding, see [Administering Lumastra](/guides/administration/).
+
+## Task monitoring pages
+
+| Route | Use |
+| ----- | --- |
+| `/admin/tasks` | Task schedules, settings, and failures |
+| `/admin/tasks/runs` | Individual runs, cancellation, and errors |
+| `/admin/tasks/pipeline` | Ingest flow and per-item stage coverage |
+| `/admin/system/health` | Component health and self-check findings; cluster health on multi-node installs |
+| `/admin/system/cost` | External API spend and compute cost per task |
+
+See [Monitoring tasks and pipelines](/guides/task-monitoring/) for schedules and
+pipeline diagnostics. The in-app reference at `/admin/help/tasks` matches your
+installed version.
+
+## Run states and cancellation
+
+<TaskRunLifecycleDiagram />
+
+**Stop** requests graceful cancellation. **Force stop** becomes available once a run
+is in `cancelling`; it abandons the job immediately and bypasses cleanup. Give Stop
+time to finish before escalating.
+
+Force stop normally releases the task's exclusivity/dedup lock so the same input can
+run again. If lock release fails, it expires on its TTL (up to 24 hours by default).
+Check for partially applied writes before retrying.
+
+## Pipeline metro map
+
+The Flow view distinguishes failures still retrying (`failed_transient`) from those
+that exhausted retries (`failed_permanent`). The **Stuck items** panel flags
+`attempt ≥ 3`, `pending > 2h`, or `running > 15m`.
+
+The map covers the selected time window (24 hours by default). A quiet map can hide
+older queued work; widen the window when investigating a backlog.
+
+## Coverage grid (Completion view)
+
+Use `/admin/tasks/pipeline?view=completion` to find unfinished stages per item, or add
+`&missingStage=<stage-id>` to isolate a stage's backlog. An item is covered when every
+applicable stage is `completed` or `skipped_permanent`; the latter is a final verdict,
+not a gap. Search, media type, and **Incomplete only** filters are preserved in the URL.
+
+Music coverage differs by type:
+
+- Tracks: `music-analysis`, `music-embedding-generation`, and `music-popularity`.
+- Albums and artists: `album-enrichment` / `artist-enrichment` and `music-popularity`.
+  Neither has a dedicated embedding stage.
+
+`trickplay-params-sync` is excluded from authoritative coverage by default because it
+is keyed per item but generated per file. Single-file libraries can include it through
+`PIPELINE_COVERAGE_AUTHORITATIVE_STAGES`.
+
+See [Task System architecture](/architecture/task-system/) for stage-status mechanics.
+
+## Task operations
+
+- **Pause** stops scheduled starts without deleting triggers; manual runs still work.
+- **Retry pending** requeues a task's stage-state rows stuck in `pending`.
+- **Auto-pause** trips after repeated failures. It probes again after 1 minute, then
+  5 minutes, 30 minutes, and 2 hours on repeated trips, capped at 2 hours. Override it
+  in the task's Settings tab if you need to resume sooner.
+- Custom triggers, concurrency, and priority are configured per task. See
+  [Triggers](/guides/task-monitoring/#triggers-when-a-task-runs) for schedule limits
+  and time-zone behavior.
+
+Internal/system tasks are hidden by default unless they have an active problem. Use
+`?system=1` to include them.
+
+## Health and self-check findings
+
+At `/admin/system/health`, act on these findings:
+
+- **A sealed setting no longer decrypts:** the value is dropped and its default used.
+  Check whether `LUMASTRA_MASTER_KEY` changed without rotation, or a replica lacks the
+  shared config volume containing `master.key`. See [Backup & key
+  rotation](/guides/backup-recovery/).
+- **Live TV credentials stored in plaintext:** older sources may retain unencrypted
+  Xtream credentials or credential-bearing playlist/EPG URLs. Re-save the source at
+  **Settings → Live TV → Sources** to encrypt it with the current master key.
+
+## Webhooks
+
+Configure a target URL, signing secret, and event filter at `/admin/settings/webhooks`.
+Events use [CloudEvents](https://cloudevents.io/):
+
+| Event type | Fires when |
+| ---------- | ---------- |
+| `org.lumastra.task.run.started` | A task run starts |
+| `org.lumastra.task.run.completed` | A run completes successfully |
+| `org.lumastra.task.run.failed` | A run fails |
+| `org.lumastra.task.run.cancelled` | A run is cancelled |
+| `org.lumastra.task.run.stage.completed` | A pipeline stage completes |
+| `org.lumastra.task.cost.threshold.exceeded` | A cost threshold is crossed |
+
+Verify `X-Lumastra-Signature`: HMAC-SHA256 over the request body using your signing
+secret. Delivery uses a durable outbox with these defaults:
+
+| Setting | Default |
+| ------- | ------- |
+| `LUMASTRA_WEBHOOK_RETRY_ATTEMPTS` | 8 attempts |
+| `LUMASTRA_WEBHOOK_DELIVERY_CONCURRENCY` | 16 in-flight deliveries |
+| `DB_CLEANUP_TASK_WEBHOOK_OUTBOX_DAYS` | Prune delivered/dead rows after 30 days |
+
+Webhooks are also manageable through [`/api/v1/webhooks`](/developers/api/).

@@ -1,0 +1,26 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'browser', type: 'flow', position: { x: 250, y: 0 }, data: { title: 'Browser / user', sub: 'requests a page', kind: 'viewer', hasSource: true } },
+		{ id: 'proxy', type: 'flow', position: { x: 250, y: 150 }, data: { title: 'Reverse proxy', sub: 'Caddy · Traefik · forward-auth', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'idp', type: 'flow', position: { x: 250, y: 300 }, data: { title: 'Identity provider', sub: 'Authentik · authenticates user', kind: 'ext', hasTarget: true, hasSource: true } },
+		{ id: 'lumastra', type: 'flow', position: { x: 250, y: 450 }, data: { title: 'Lumastra', sub: 'auto-provisions user · admin = ADMIN_GROUPS', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'trustgate', type: 'flow', position: { x: 560, y: 450 }, data: { title: 'Trust gate', sub: 'TRUSTED_PROXY_IPS · fail-closed', kind: 'proxy', hasTarget: true } },
+		{ id: 'apiv1', type: 'flow', position: { x: 250, y: 600 }, data: { title: '/api/v1 surface', sub: 'PAT · service · device JWT', kind: 'infra', hasTarget: true } },
+		{ id: 'client', type: 'flow', position: { x: 560, y: 600 }, data: { title: 'TV app / script', sub: 'bearer token · bypasses forward-auth', kind: 'viewer', hasSource: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-browser-proxy', source: 'browser', target: 'proxy', label: 'request' },
+		{ id: 'e-proxy-idp', source: 'proxy', target: 'idp', label: 'authenticate' },
+		{ id: 'e-idp-proxy', source: 'idp', target: 'proxy', label: 'identity result' },
+		{ id: 'e-proxy-trust', source: 'proxy', target: 'trustgate', label: 'X-Forwarded-User · X-Forwarded-Groups' },
+		{ id: 'e-trust-lumastra', source: 'trustgate', target: 'lumastra', label: 'trusted peer IP' },
+		{ id: 'e-lumastra-api', source: 'lumastra', target: 'apiv1', label: 'authenticated access' },
+		{ id: 'e-client-api', source: 'client', target: 'apiv1', label: 'Bearer token' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Authentication paths" />

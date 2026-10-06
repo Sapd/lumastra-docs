@@ -1,0 +1,26 @@
+name: Notify site
+
+# After a push to main, ask the lumastra.org site repository to pull in the
+# change right away. Without the SITE_DISPATCH_TOKEN secret this step is
+# skipped, and the site still picks up the change on its hourly sync.
+
+on:
+    push:
+        branches: [main]
+
+permissions: {}
+
+jobs:
+    notify:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Trigger the site sync
+              env:
+                  GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+              run: |
+                  if [ -z "$GH_TOKEN" ]; then
+                    echo "SITE_DISPATCH_TOKEN is not set; the site syncs on its hourly schedule."
+                    exit 0
+                  fi
+                  gh workflow run sync-docs.yml --repo Sapd/lumastra-web --ref main

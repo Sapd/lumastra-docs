@@ -1,0 +1,25 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'workerA', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Worker A', sub: 'claims run · dies mid-execution', kind: 'app', hasSource: true } },
+		{ id: 'bullmq', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'BullMQ', sub: 'stalled-job detector · lock duration + stalled interval (default 5 min, configurable)', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'workerB', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'Worker B', sub: 'picks up job · claimRun rejected', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'orchestrator', type: 'flow', position: { x: 464, y: 160 }, data: { title: 'Orchestrator', sub: 'QueueEvents listener', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 232, y: 320 }, data: { title: 'Valkey', sub: 'run hash state (claim-run.lua)', kind: 'infra', hasTarget: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 464, y: 320 }, data: { title: 'Postgres', sub: 'task_history row', kind: 'infra', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-a-vk', source: 'workerA', target: 'valkey', label: 'claimRun (ownership), then transitionRun: pending→active' },
+		{ id: 'e-a-bmq', source: 'workerA', target: 'bullmq', label: 'holds job lock' },
+		{ id: 'e-bmq-b', source: 'bullmq', target: 'workerB', label: 'stalled → re-dispatch as retry attempt', animated: true },
+		{ id: 'e-b-vk', source: 'workerB', target: 'valkey', label: 'reseed for retry, then claimRun rejected: state mismatch' },
+		{ id: 'e-b-bmq', source: 'workerB', target: 'bullmq', label: 'retries exhausted → failed' },
+		{ id: 'e-bmq-orch', source: 'bullmq', target: 'orchestrator', label: 'QueueEvents: failed', animated: true },
+		{ id: 'e-orch-pg', source: 'orchestrator', target: 'postgres', label: "writes state='failed'" },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Worker failure and retry handling" />

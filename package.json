@@ -1,0 +1,27 @@
+{
+  "name": "lumastra-docs",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "license": "CC-BY-4.0",
+  "scripts": {
+    "dev": "npm run diagrams && astro dev",
+    "build": "npm run diagrams && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "diagrams": "node --experimental-strip-types scripts/generate-diagrams.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.40.0",
+    "astro": "^6.4.5",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "elkjs": "^0.12.0",
+    "starlight-links-validator": "0.24.1",
+    "typescript": "^6.0.3"
+  }
+}

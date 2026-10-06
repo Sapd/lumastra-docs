@@ -1,0 +1,21 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'triggers', type: 'flow', position: { x: 250, y: 0 }, data: { title: 'Triggers', sub: 'scheduler · event · manual · webhook', kind: 'source', hasSource: true } },
+		{ id: 'orchestrator', type: 'flow', position: { x: 240, y: 140 }, data: { title: 'Orchestrator', sub: 'leader election · dedup · circuit breaker', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'queues', type: 'flow', position: { x: 240, y: 290 }, data: { title: 'BullMQ queues', sub: 'resource classes · concurrency caps', kind: 'default', hasTarget: true, hasSource: true } },
+		{ id: 'worker', type: 'flow', position: { x: 235, y: 430 }, data: { title: 'Worker', sub: 'claim · run stages · heartbeat', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'stages', type: 'flow', position: { x: 240, y: 580 }, data: { title: 'Pipeline stages', sub: 'per-item coverage · invalidation events', kind: 'default', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-trig-orch', source: 'triggers', target: 'orchestrator', label: 'startRun()' },
+		{ id: 'e-orch-q', source: 'orchestrator', target: 'queues', label: 'enqueue', animated: true },
+		{ id: 'e-q-worker', source: 'queues', target: 'worker', label: 'dispatch', animated: true },
+		{ id: 'e-worker-stages', source: 'worker', target: 'stages', label: 'stage transitions' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Task execution pipeline" />

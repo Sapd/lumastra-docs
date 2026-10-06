@@ -1,0 +1,7072 @@
+{
+  "Audiobook playback and progress": {
+    "width": 1312.6,
+    "height": 1116,
+    "nodes": [
+      {
+        "id": "client",
+        "width": 230,
+        "height": 71,
+        "$H": 277,
+        "x": 920.4333333333333,
+        "y": 28,
+        "title": [
+          "Client"
+        ],
+        "sub": [
+          "native player"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "open",
+        "width": 230,
+        "height": 71,
+        "$H": 279,
+        "x": 920.4333333333333,
+        "y": 199,
+        "title": [
+          "Open session"
+        ],
+        "sub": [
+          "POST /audiobooks/session"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "stream",
+        "width": 230,
+        "height": 71,
+        "$H": 281,
+        "x": 958.7666666666667,
+        "y": 385,
+        "title": [
+          "Stream files"
+        ],
+        "sub": [
+          "byte proxy · streamToken"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "heartbeat",
+        "width": 230,
+        "height": 71,
+        "$H": 283,
+        "x": 702.0999999999999,
+        "y": 571,
+        "title": [
+          "Heartbeat"
+        ],
+        "sub": [
+          "while paused · liveness only"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "report",
+        "width": 230,
+        "height": 88,
+        "$H": 285,
+        "x": 997.0999999999999,
+        "y": 571,
+        "title": [
+          "Report progress"
+        ],
+        "sub": [
+          "POST …/session/{id} every",
+          "~30s"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "offline",
+        "width": 230,
+        "height": 71,
+        "$H": 287,
+        "x": 271.4000000000001,
+        "y": 588,
+        "title": [
+          "Offline device"
+        ],
+        "sub": [
+          "no network — queues locally"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "close",
+        "width": 230,
+        "height": 71,
+        "$H": 289,
+        "x": 1054.6,
+        "y": 802.5,
+        "title": [
+          "Close session"
+        ],
+        "sub": [
+          "DELETE …/session/{id}"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "sync",
+        "width": 230,
+        "height": 88,
+        "$H": 291,
+        "x": 271.4000000000001,
+        "y": 794,
+        "title": [
+          "Offline sync"
+        ],
+        "sub": [
+          "POST",
+          "/offline-playback-sessions"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "lost",
+        "width": 230,
+        "height": 88,
+        "$H": 293,
+        "x": 759.5999999999999,
+        "y": 794,
+        "title": [
+          "sessionLost: true"
+        ],
+        "sub": [
+          "ABS forgot the session —",
+          "keep playing, reopen"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "abs",
+        "width": 230,
+        "height": 71,
+        "$H": 295,
+        "x": 555.5999999999999,
+        "y": 1017,
+        "title": [
+          "AudiobookShelf"
+        ],
+        "sub": [
+          "owns the resume point"
+        ],
+        "kind": "ext"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-client-open",
+        "sources": [
+          "client"
+        ],
+        "targets": [
+          "open"
+        ],
+        "labels": [
+          {
+            "id": "e-client-open-label",
+            "text": "mediaId, deviceId",
+            "width": 148.6,
+            "height": 30,
+            "x": 884.8333333333333,
+            "y": 134
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-client-open_s0",
+            "startPoint": {
+              "x": 1035.4333333333334,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 1035.4333333333334,
+              "y": 199
+            },
+            "incomingShape": "client",
+            "outgoingShape": "open"
+          }
+        ],
+        "container": "root",
+        "path": "M 1035.4333333333334 99 L 1035.4333333333334 199"
+      },
+      {
+        "id": "e-open-stream",
+        "sources": [
+          "open"
+        ],
+        "targets": [
+          "stream"
+        ],
+        "labels": [
+          {
+            "id": "e-open-stream-label",
+            "text": "startPositionMs",
+            "width": 133,
+            "height": 30,
+            "x": 1076.7666666666667,
+            "y": 320
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-open-stream_s0",
+            "startPoint": {
+              "x": 1073.7666666666667,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 1073.7666666666667,
+              "y": 385
+            },
+            "incomingShape": "open",
+            "outgoingShape": "stream"
+          }
+        ],
+        "container": "root",
+        "path": "M 1073.7666666666667 270 L 1073.7666666666667 385"
+      },
+      {
+        "id": "e-stream-report",
+        "sources": [
+          "stream"
+        ],
+        "targets": [
+          "report"
+        ],
+        "labels": [
+          {
+            "id": "e-stream-report-label",
+            "text": "listenedMs",
+            "width": 94,
+            "height": 30,
+            "x": 1016.0999999999999,
+            "y": 506
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-stream-report_s0",
+            "startPoint": {
+              "x": 1112.1,
+              "y": 456
+            },
+            "endPoint": {
+              "x": 1112.1,
+              "y": 571
+            },
+            "incomingShape": "stream",
+            "outgoingShape": "report"
+          }
+        ],
+        "container": "root",
+        "path": "M 1112.1 456 L 1112.1 571"
+      },
+      {
+        "id": "e-stream-heartbeat",
+        "sources": [
+          "stream"
+        ],
+        "targets": [
+          "heartbeat"
+        ],
+        "labels": [
+          {
+            "id": "e-stream-heartbeat-label",
+            "text": "paused",
+            "width": 62.8,
+            "height": 30,
+            "x": 752.3,
+            "y": 506
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-stream-heartbeat_s0",
+            "startPoint": {
+              "x": 1035.4333333333334,
+              "y": 456
+            },
+            "endPoint": {
+              "x": 817.0999999999999,
+              "y": 571
+            },
+            "bendPoints": [
+              {
+                "x": 1035.4333333333334,
+                "y": 481
+              },
+              {
+                "x": 817.0999999999999,
+                "y": 481
+              }
+            ],
+            "incomingShape": "stream",
+            "outgoingShape": "heartbeat"
+          }
+        ],
+        "container": "root",
+        "path": "M 1035.4333333333334 456 L 1035.4333333333334 481 L 817.0999999999999 481 L 817.0999999999999 571"
+      },
+      {
+        "id": "e-report-close",
+        "sources": [
+          "report"
+        ],
+        "targets": [
+          "close"
+        ],
+        "labels": [
+          {
+            "id": "e-report-close-label",
+            "text": "on teardown",
+            "width": 101.8,
+            "height": 30,
+            "x": 1065.8,
+            "y": 729
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-report-close_s0",
+            "startPoint": {
+              "x": 1169.6,
+              "y": 659
+            },
+            "endPoint": {
+              "x": 1169.6,
+              "y": 802.5
+            },
+            "incomingShape": "report",
+            "outgoingShape": "close"
+          }
+        ],
+        "container": "root",
+        "path": "M 1169.6 659 L 1169.6 802.5"
+      },
+      {
+        "id": "e-report-abs",
+        "sources": [
+          "report"
+        ],
+        "targets": [
+          "abs"
+        ],
+        "labels": [
+          {
+            "id": "e-report-abs-label",
+            "text": "bookPositionMs",
+            "width": 125.2,
+            "height": 30,
+            "x": 566.4,
+            "y": 823
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-report-abs_s0",
+            "startPoint": {
+              "x": 1054.6,
+              "y": 659
+            },
+            "endPoint": {
+              "x": 693.5999999999999,
+              "y": 1017
+            },
+            "bendPoints": [
+              {
+                "x": 1054.6,
+                "y": 684
+              },
+              {
+                "x": 693.5999999999999,
+                "y": 684
+              }
+            ],
+            "incomingShape": "report",
+            "outgoingShape": "abs"
+          }
+        ],
+        "container": "root",
+        "path": "M 1054.6 659 L 1054.6 684 L 693.5999999999999 684 L 693.5999999999999 1017"
+      },
+      {
+        "id": "e-open-abs",
+        "sources": [
+          "open"
+        ],
+        "targets": [
+          "abs"
+        ],
+        "labels": [
+          {
+            "id": "e-open-abs-label",
+            "text": "saved progress",
+            "width": 125.2,
+            "height": 30,
+            "x": 28,
+            "y": 600
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-open-abs_s0",
+            "startPoint": {
+              "x": 997.0999999999999,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 601.5999999999999,
+              "y": 1017
+            },
+            "bendPoints": [
+              {
+                "x": 997.0999999999999,
+                "y": 295
+              },
+              {
+                "x": 155.20000000000005,
+                "y": 295
+              },
+              {
+                "x": 155.20000000000005,
+                "y": 992
+              },
+              {
+                "x": 601.5999999999999,
+                "y": 992
+              }
+            ],
+            "incomingShape": "open",
+            "outgoingShape": "abs"
+          }
+        ],
+        "container": "root",
+        "path": "M 997.0999999999999 270 L 997.0999999999999 295 L 155.20000000000005 295 L 155.20000000000005 992 L 601.5999999999999 992 L 601.5999999999999 1017"
+      },
+      {
+        "id": "e-close-abs",
+        "sources": [
+          "close"
+        ],
+        "targets": [
+          "abs"
+        ],
+        "labels": [
+          {
+            "id": "e-close-abs-label",
+            "text": "final position",
+            "width": 125.2,
+            "height": 30,
+            "x": 1042.3999999999999,
+            "y": 917
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-close-abs_s0",
+            "startPoint": {
+              "x": 1169.6,
+              "y": 873.5
+            },
+            "endPoint": {
+              "x": 739.5999999999999,
+              "y": 1017
+            },
+            "bendPoints": [
+              {
+                "x": 1169.6,
+                "y": 972
+              },
+              {
+                "x": 739.5999999999999,
+                "y": 972
+              }
+            ],
+            "incomingShape": "close",
+            "outgoingShape": "abs"
+          }
+        ],
+        "container": "root",
+        "path": "M 1169.6 873.5 L 1169.6 972 L 739.5999999999999 972 L 739.5999999999999 1017"
+      },
+      {
+        "id": "e-report-lost",
+        "sources": [
+          "report"
+        ],
+        "targets": [
+          "lost"
+        ],
+        "labels": [
+          {
+            "id": "e-report-lost-label",
+            "text": "sessionLost",
+            "width": 101.8,
+            "height": 30,
+            "x": 770.8,
+            "y": 729
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-report-lost_s0",
+            "startPoint": {
+              "x": 1112.1,
+              "y": 659
+            },
+            "endPoint": {
+              "x": 874.5999999999999,
+              "y": 794
+            },
+            "bendPoints": [
+              {
+                "x": 1112.1,
+                "y": 704
+              },
+              {
+                "x": 874.5999999999999,
+                "y": 704
+              }
+            ],
+            "incomingShape": "report",
+            "outgoingShape": "lost"
+          }
+        ],
+        "container": "root",
+        "path": "M 1112.1 659 L 1112.1 704 L 874.5999999999999 704 L 874.5999999999999 794"
+      },
+      {
+        "id": "e-offline-sync",
+        "sources": [
+          "offline"
+        ],
+        "targets": [
+          "sync"
+        ],
+        "labels": [
+          {
+            "id": "e-offline-sync-label",
+            "text": "knownAsOf, endedAt",
+            "width": 156.4,
+            "height": 30,
+            "x": 228,
+            "y": 729
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-offline-sync_s0",
+            "startPoint": {
+              "x": 386.4000000000001,
+              "y": 659
+            },
+            "endPoint": {
+              "x": 386.4000000000001,
+              "y": 794
+            },
+            "incomingShape": "offline",
+            "outgoingShape": "sync"
+          }
+        ],
+        "container": "root",
+        "path": "M 386.4000000000001 659 L 386.4000000000001 794"
+      },
+      {
+        "id": "e-sync-abs",
+        "sources": [
+          "sync"
+        ],
+        "targets": [
+          "abs"
+        ],
+        "labels": [
+          {
+            "id": "e-sync-abs-label",
+            "text": "fans out before response",
+            "width": 203.2,
+            "height": 30,
+            "x": 181.20000000000005,
+            "y": 917
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-sync-abs_s0",
+            "startPoint": {
+              "x": 386.4000000000001,
+              "y": 882
+            },
+            "endPoint": {
+              "x": 647.5999999999999,
+              "y": 1017
+            },
+            "bendPoints": [
+              {
+                "x": 386.40000000000003,
+                "y": 972
+              },
+              {
+                "x": 647.5999999999999,
+                "y": 972
+              }
+            ],
+            "incomingShape": "sync",
+            "outgoingShape": "abs"
+          }
+        ],
+        "container": "root",
+        "path": "M 386.4000000000001 882 L 386.40000000000003 972 L 647.5999999999999 972 L 647.5999999999999 1017"
+      }
+    ]
+  },
+  "Authentication paths": {
+    "width": 641,
+    "height": 962,
+    "nodes": [
+      {
+        "id": "browser",
+        "width": 230,
+        "height": 71,
+        "$H": 523,
+        "x": 380.5,
+        "y": 45,
+        "title": [
+          "Browser / user"
+        ],
+        "sub": [
+          "requests a page"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "proxy",
+        "width": 230,
+        "height": 88,
+        "$H": 525,
+        "x": 323,
+        "y": 266,
+        "title": [
+          "Reverse proxy"
+        ],
+        "sub": [
+          "Caddy · Traefik ·",
+          "forward-auth"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "idp",
+        "width": 230,
+        "height": 88,
+        "$H": 527,
+        "x": 85.5,
+        "y": 28,
+        "title": [
+          "Identity provider"
+        ],
+        "sub": [
+          "Authentik · authenticates",
+          "user"
+        ],
+        "kind": "ext"
+      },
+      {
+        "id": "lumastra",
+        "width": 230,
+        "height": 88,
+        "$H": 529,
+        "x": 323,
+        "y": 660,
+        "title": [
+          "Lumastra"
+        ],
+        "sub": [
+          "auto-provisions user · admin",
+          "= ADMIN_GROUPS"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "trustgate",
+        "width": 230,
+        "height": 88,
+        "$H": 531,
+        "x": 323,
+        "y": 472,
+        "title": [
+          "Trust gate"
+        ],
+        "sub": [
+          "TRUSTED_PROXY_IPS ·",
+          "fail-closed"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "apiv1",
+        "width": 230,
+        "height": 71,
+        "$H": 533,
+        "x": 284.66666666666663,
+        "y": 863,
+        "title": [
+          "/api/v1 surface"
+        ],
+        "sub": [
+          "PAT · service · device JWT"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "client",
+        "width": 230,
+        "height": 88,
+        "$H": 535,
+        "x": 28,
+        "y": 660,
+        "title": [
+          "TV app / script"
+        ],
+        "sub": [
+          "bearer token · bypasses",
+          "forward-auth"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-browser-proxy",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-proxy-label",
+            "text": "request",
+            "width": 70.6,
+            "height": 30,
+            "x": 422.9,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-proxy_s0",
+            "startPoint": {
+              "x": 495.5,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 495.5,
+              "y": 266
+            },
+            "incomingShape": "browser",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 495.5 116 L 495.5 266"
+      },
+      {
+        "id": "e-proxy-idp",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "idp"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-idp-label",
+            "text": "authenticate",
+            "width": 109.6,
+            "height": 30,
+            "x": 241.83333333333334,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-idp_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 266
+            },
+            "endPoint": {
+              "x": 238.83333333333334,
+              "y": 116
+            },
+            "bendPoints": [
+              {
+                "x": 438,
+                "y": 221
+              },
+              {
+                "x": 238.83333333333334,
+                "y": 221
+              }
+            ],
+            "incomingShape": "proxy",
+            "outgoingShape": "idp"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 266 L 438 221 L 238.83333333333334 221 L 238.83333333333334 116"
+      },
+      {
+        "id": "e-idp-proxy",
+        "sources": [
+          "idp"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-idp-proxy-label",
+            "text": "identity result",
+            "width": 133,
+            "height": 30,
+            "x": 82.83333333333334,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-idp-proxy_s0",
+            "startPoint": {
+              "x": 162.16666666666669,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 380.5,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 162.16666666666669,
+                "y": 141
+              },
+              {
+                "x": 217.83333333333334,
+                "y": 141
+              },
+              {
+                "x": 217.83333333333334,
+                "y": 241
+              },
+              {
+                "x": 380.5,
+                "y": 241
+              }
+            ],
+            "incomingShape": "idp",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 162.16666666666669 116 L 162.16666666666669 141 L 217.83333333333334 141 L 217.83333333333334 241 L 380.5 241 L 380.5 266"
+      },
+      {
+        "id": "e-proxy-trust",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "trustgate"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-trust-label",
+            "text": "X-Forwarded-User ·\nX-Forwarded-Groups",
+            "width": 156.4,
+            "height": 48,
+            "x": 279.6,
+            "y": 389
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-trust_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 354
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 472
+            },
+            "incomingShape": "proxy",
+            "outgoingShape": "trustgate"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 354 L 438 472"
+      },
+      {
+        "id": "e-trust-lumastra",
+        "sources": [
+          "trustgate"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-trust-lumastra-label",
+            "text": "trusted peer IP",
+            "width": 133,
+            "height": 30,
+            "x": 303,
+            "y": 595
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-trust-lumastra_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 560
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 660
+            },
+            "incomingShape": "trustgate",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 560 L 438 660"
+      },
+      {
+        "id": "e-lumastra-api",
+        "sources": [
+          "lumastra"
+        ],
+        "targets": [
+          "apiv1"
+        ],
+        "labels": [
+          {
+            "id": "e-lumastra-api-label",
+            "text": "authenticated access",
+            "width": 172,
+            "height": 30,
+            "x": 441,
+            "y": 783
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-lumastra-api_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 748
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 863
+            },
+            "incomingShape": "lumastra",
+            "outgoingShape": "apiv1"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 748 L 438 863"
+      },
+      {
+        "id": "e-client-api",
+        "sources": [
+          "client"
+        ],
+        "targets": [
+          "apiv1"
+        ],
+        "labels": [
+          {
+            "id": "e-client-api-label",
+            "text": "Bearer token",
+            "width": 109.6,
+            "height": 30,
+            "x": 31.400000000000006,
+            "y": 783
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-client-api_s0",
+            "startPoint": {
+              "x": 143,
+              "y": 748
+            },
+            "endPoint": {
+              "x": 361.3333333333333,
+              "y": 863
+            },
+            "bendPoints": [
+              {
+                "x": 143,
+                "y": 838
+              },
+              {
+                "x": 361.3333333333333,
+                "y": 838
+              }
+            ],
+            "incomingShape": "client",
+            "outgoingShape": "apiv1"
+          }
+        ],
+        "container": "root",
+        "path": "M 143 748 L 143 838 L 361.3333333333333 838 L 361.3333333333333 863"
+      }
+    ]
+  },
+  "Worker failure and retry handling": {
+    "width": 963.4666666666665,
+    "height": 894,
+    "nodes": [
+      {
+        "id": "workerA",
+        "width": 230,
+        "height": 88,
+        "$H": 631,
+        "x": 190.6333333333333,
+        "y": 28,
+        "title": [
+          "Worker A"
+        ],
+        "sub": [
+          "claims run · dies",
+          "mid-execution"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "bullmq",
+        "width": 230,
+        "height": 122,
+        "$H": 633,
+        "x": 152.29999999999995,
+        "y": 231,
+        "title": [
+          "BullMQ"
+        ],
+        "sub": [
+          "stalled-job detector · lock",
+          "duration + stalled interval",
+          "(default 5 min,",
+          "configurable)"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "workerB",
+        "width": 230,
+        "height": 88,
+        "$H": 635,
+        "x": 389.79999999999995,
+        "y": 539,
+        "title": [
+          "Worker B"
+        ],
+        "sub": [
+          "picks up job · claimRun",
+          "rejected"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "orchestrator",
+        "width": 230,
+        "height": 71,
+        "$H": 637,
+        "x": 94.79999999999998,
+        "y": 547.5,
+        "title": [
+          "Orchestrator"
+        ],
+        "sub": [
+          "QueueEvents listener"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 639,
+        "x": 428.13333333333327,
+        "y": 778,
+        "title": [
+          "Valkey"
+        ],
+        "sub": [
+          "run hash state",
+          "(claim-run.lua)"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "postgres",
+        "width": 230,
+        "height": 71,
+        "$H": 641,
+        "x": 94.79999999999998,
+        "y": 778,
+        "title": [
+          "Postgres"
+        ],
+        "sub": [
+          "task_history row"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-a-vk",
+        "sources": [
+          "workerA"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-a-vk-label",
+            "text": "claimRun (ownership), then\ntransitionRun:\npending→active",
+            "width": 218.79999999999998,
+            "height": 66,
+            "x": 713.6666666666665,
+            "y": 423
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-a-vk_s0",
+            "startPoint": {
+              "x": 343.96666666666664,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 581.4666666666666,
+              "y": 778
+            },
+            "bendPoints": [
+              {
+                "x": 343.96666666666664,
+                "y": 141
+              },
+              {
+                "x": 934.4666666666665,
+                "y": 141
+              },
+              {
+                "x": 934.4666666666665,
+                "y": 753
+              },
+              {
+                "x": 581.4666666666666,
+                "y": 753
+              }
+            ],
+            "incomingShape": "workerA",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 343.96666666666664 116 L 343.96666666666664 141 L 934.4666666666665 141 L 934.4666666666665 753 L 581.4666666666666 753 L 581.4666666666666 778"
+      },
+      {
+        "id": "e-a-bmq",
+        "sources": [
+          "workerA"
+        ],
+        "targets": [
+          "bullmq"
+        ],
+        "labels": [
+          {
+            "id": "e-a-bmq-label",
+            "text": "holds job lock",
+            "width": 125.2,
+            "height": 30,
+            "x": 140.09999999999997,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-a-bmq_s0",
+            "startPoint": {
+              "x": 267.29999999999995,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 267.29999999999995,
+              "y": 231
+            },
+            "incomingShape": "workerA",
+            "outgoingShape": "bullmq"
+          }
+        ],
+        "container": "root",
+        "path": "M 267.29999999999995 116 L 267.29999999999995 231"
+      },
+      {
+        "id": "e-bmq-b",
+        "sources": [
+          "bullmq"
+        ],
+        "targets": [
+          "workerB"
+        ],
+        "labels": [
+          {
+            "id": "e-bmq-b-label",
+            "text": "stalled → re-dispatch as\nretry attempt",
+            "width": 203.2,
+            "height": 48,
+            "x": 490.4666666666666,
+            "y": 432
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-bmq-b_s0",
+            "startPoint": {
+              "x": 324.79999999999995,
+              "y": 353
+            },
+            "endPoint": {
+              "x": 543.1333333333333,
+              "y": 539
+            },
+            "bendPoints": [
+              {
+                "x": 324.79999999999995,
+                "y": 378
+              },
+              {
+                "x": 487.4666666666666,
+                "y": 378
+              },
+              {
+                "x": 487.4666666666666,
+                "y": 514
+              },
+              {
+                "x": 543.1333333333333,
+                "y": 514
+              }
+            ],
+            "incomingShape": "bullmq",
+            "outgoingShape": "workerB"
+          }
+        ],
+        "container": "root",
+        "path": "M 324.79999999999995 353 L 324.79999999999995 378 L 487.4666666666666 378 L 487.4666666666666 514 L 543.1333333333333 514 L 543.1333333333333 539"
+      },
+      {
+        "id": "e-b-vk",
+        "sources": [
+          "workerB"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-b-vk-label",
+            "text": "reseed for retry, then\nclaimRun rejected: state\nmismatch",
+            "width": 203.2,
+            "height": 66,
+            "x": 299.59999999999997,
+            "y": 662
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-b-vk_s0",
+            "startPoint": {
+              "x": 504.79999999999995,
+              "y": 627
+            },
+            "endPoint": {
+              "x": 504.79999999999995,
+              "y": 778
+            },
+            "incomingShape": "workerB",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 504.79999999999995 627 L 504.79999999999995 778"
+      },
+      {
+        "id": "e-b-bmq",
+        "sources": [
+          "workerB"
+        ],
+        "targets": [
+          "bullmq"
+        ],
+        "labels": [
+          {
+            "id": "e-b-bmq-label",
+            "text": "retries exhausted → failed",
+            "width": 218.79999999999998,
+            "height": 30,
+            "x": 245.6666666666666,
+            "y": 441
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-b-bmq_s0",
+            "startPoint": {
+              "x": 466.46666666666664,
+              "y": 539
+            },
+            "endPoint": {
+              "x": 267.29999999999995,
+              "y": 353
+            },
+            "bendPoints": [
+              {
+                "x": 466.4666666666666,
+                "y": 398
+              },
+              {
+                "x": 267.29999999999995,
+                "y": 398
+              }
+            ],
+            "incomingShape": "workerB",
+            "outgoingShape": "bullmq"
+          }
+        ],
+        "container": "root",
+        "path": "M 466.46666666666664 539 L 466.4666666666666 398 L 267.29999999999995 398 L 267.29999999999995 353"
+      },
+      {
+        "id": "e-bmq-orch",
+        "sources": [
+          "bullmq"
+        ],
+        "targets": [
+          "orchestrator"
+        ],
+        "labels": [
+          {
+            "id": "e-bmq-orch-label",
+            "text": "QueueEvents: failed",
+            "width": 164.2,
+            "height": 30,
+            "x": 43.599999999999994,
+            "y": 441
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-bmq-orch_s0",
+            "startPoint": {
+              "x": 209.79999999999995,
+              "y": 353
+            },
+            "endPoint": {
+              "x": 209.79999999999998,
+              "y": 547.5
+            },
+            "incomingShape": "bullmq",
+            "outgoingShape": "orchestrator"
+          }
+        ],
+        "container": "root",
+        "path": "M 209.79999999999995 353 L 209.79999999999998 547.5"
+      },
+      {
+        "id": "e-orch-pg",
+        "sources": [
+          "orchestrator"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [
+          {
+            "id": "e-orch-pg-label",
+            "text": "writes state='failed'",
+            "width": 179.79999999999998,
+            "height": 30,
+            "x": 28,
+            "y": 680
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-orch-pg_s0",
+            "startPoint": {
+              "x": 209.79999999999998,
+              "y": 618.5
+            },
+            "endPoint": {
+              "x": 209.79999999999998,
+              "y": 778
+            },
+            "incomingShape": "orchestrator",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 209.79999999999998 618.5 L 209.79999999999998 778"
+      }
+    ]
+  },
+  "Kubernetes components": {
+    "width": 581,
+    "height": 671,
+    "nodes": [
+      {
+        "id": "clients",
+        "width": 230,
+        "height": 71,
+        "$H": 751,
+        "x": 323,
+        "y": 28,
+        "title": [
+          "Browsers / apps"
+        ],
+        "sub": [
+          "HLS · SSE · REST"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "edge",
+        "width": 230,
+        "height": 71,
+        "$H": 753,
+        "x": 323,
+        "y": 134,
+        "title": [
+          "Ingress / Gateway"
+        ],
+        "sub": [
+          "TLS, no affinity needed"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "router",
+        "width": 230,
+        "height": 71,
+        "$H": 755,
+        "x": 323,
+        "y": 240,
+        "title": [
+          "Router (nginx)"
+        ],
+        "sub": [
+          "keeps a session on one pod"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "web",
+        "width": 230,
+        "height": 71,
+        "$H": 757,
+        "x": 323,
+        "y": 411,
+        "title": [
+          "web-0 … web-N"
+        ],
+        "sub": [
+          "StatefulSet"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "worker",
+        "width": 230,
+        "height": 71,
+        "$H": 759,
+        "x": 28,
+        "y": 411,
+        "title": [
+          "Worker"
+        ],
+        "sub": [
+          "one pod"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "postgres",
+        "width": 230,
+        "height": 71,
+        "$H": 761,
+        "x": 28,
+        "y": 572,
+        "title": [
+          "PostgreSQL 17+"
+        ],
+        "sub": [
+          "external or CloudNativePG"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "valkey",
+        "width": 230,
+        "height": 71,
+        "$H": 763,
+        "x": 323,
+        "y": 572,
+        "title": [
+          "Valkey"
+        ],
+        "sub": [
+          "tasks + cache"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-clients-edge",
+        "sources": [
+          "clients"
+        ],
+        "targets": [
+          "edge"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-clients-edge_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 134
+            },
+            "incomingShape": "clients",
+            "outgoingShape": "edge"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 99 L 438 134"
+      },
+      {
+        "id": "e-edge-router",
+        "sources": [
+          "edge"
+        ],
+        "targets": [
+          "router"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-edge-router_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 205
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 240
+            },
+            "incomingShape": "edge",
+            "outgoingShape": "router"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 205 L 438 240"
+      },
+      {
+        "id": "e-router-web",
+        "sources": [
+          "router"
+        ],
+        "targets": [
+          "web"
+        ],
+        "labels": [
+          {
+            "id": "e-router-web-label",
+            "text": "by key",
+            "width": 62.8,
+            "height": 30,
+            "x": 373.2,
+            "y": 346
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-router-web_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 311
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 411
+            },
+            "incomingShape": "router",
+            "outgoingShape": "web"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 311 L 438 411"
+      },
+      {
+        "id": "e-web-pg",
+        "sources": [
+          "web"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-web-pg_s0",
+            "startPoint": {
+              "x": 399.6666666666667,
+              "y": 482
+            },
+            "endPoint": {
+              "x": 181.33333333333334,
+              "y": 572
+            },
+            "bendPoints": [
+              {
+                "x": 399.6666666666667,
+                "y": 507
+              },
+              {
+                "x": 290.5,
+                "y": 507
+              },
+              {
+                "x": 290.5,
+                "y": 547
+              },
+              {
+                "x": 181.33333333333334,
+                "y": 547
+              }
+            ],
+            "incomingShape": "web",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 399.6666666666667 482 L 399.6666666666667 507 L 290.5 507 L 290.5 547 L 181.33333333333334 547 L 181.33333333333334 572"
+      },
+      {
+        "id": "e-web-valkey",
+        "sources": [
+          "web"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-web-valkey_s0",
+            "startPoint": {
+              "x": 476.33333333333337,
+              "y": 482
+            },
+            "endPoint": {
+              "x": 476.33333333333337,
+              "y": 572
+            },
+            "incomingShape": "web",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 476.33333333333337 482 L 476.33333333333337 572"
+      },
+      {
+        "id": "e-worker-pg",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-worker-pg_s0",
+            "startPoint": {
+              "x": 104.66666666666667,
+              "y": 482
+            },
+            "endPoint": {
+              "x": 104.66666666666667,
+              "y": 572
+            },
+            "incomingShape": "worker",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 104.66666666666667 482 L 104.66666666666667 572"
+      },
+      {
+        "id": "e-worker-valkey",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-worker-valkey_s0",
+            "startPoint": {
+              "x": 181.33333333333334,
+              "y": 482
+            },
+            "endPoint": {
+              "x": 399.6666666666667,
+              "y": 572
+            },
+            "bendPoints": [
+              {
+                "x": 181.33333333333334,
+                "y": 527
+              },
+              {
+                "x": 399.6666666666667,
+                "y": 527
+              }
+            ],
+            "incomingShape": "worker",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 181.33333333333334 482 L 181.33333333333334 527 L 399.6666666666667 527 L 399.6666666666667 572"
+      }
+    ]
+  },
+  "Device authorization": {
+    "width": 961.1999999999999,
+    "height": 365,
+    "nodes": [
+      {
+        "id": "tv",
+        "width": 230,
+        "height": 88,
+        "$H": 823,
+        "x": 645.6999999999999,
+        "y": 28,
+        "title": [
+          "TV app / script"
+        ],
+        "sub": [
+          "no keyboard · polls for a",
+          "token"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "user",
+        "width": 230,
+        "height": 71,
+        "$H": 825,
+        "x": 94.79999999999995,
+        "y": 45,
+        "title": [
+          "User's phone / browser"
+        ],
+        "sub": [
+          "visits /device · approves"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "lumastra",
+        "width": 230,
+        "height": 71,
+        "$H": 827,
+        "x": 344.4,
+        "y": 266,
+        "title": [
+          "Lumastra"
+        ],
+        "sub": [
+          "/oauth/device · /oauth/token"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "apiv1",
+        "width": 230,
+        "height": 71,
+        "$H": 829,
+        "x": 703.1999999999999,
+        "y": 266,
+        "title": [
+          "/api/v1 surface"
+        ],
+        "sub": [
+          "bearer access token"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-tv-device",
+        "sources": [
+          "tv"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-tv-device-label",
+            "text": "1. POST /oauth/device",
+            "width": 179.79999999999998,
+            "height": 30,
+            "x": 483.4,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-tv-device_s0",
+            "startPoint": {
+              "x": 760.6999999999999,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 516.9,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 760.6999999999999,
+                "y": 161
+              },
+              {
+                "x": 480.4,
+                "y": 161
+              },
+              {
+                "x": 480.4,
+                "y": 241
+              },
+              {
+                "x": 516.9,
+                "y": 241
+              }
+            ],
+            "incomingShape": "tv",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 760.6999999999999 116 L 760.6999999999999 161 L 480.4 161 L 480.4 241 L 516.9 241 L 516.9 266"
+      },
+      {
+        "id": "e-user-approve",
+        "sources": [
+          "user"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-user-approve-label",
+            "text": "2. approve at /device",
+            "width": 179.79999999999998,
+            "height": 30,
+            "x": 28,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-user-approve_s0",
+            "startPoint": {
+              "x": 209.79999999999995,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 401.9,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 209.79999999999995,
+                "y": 241
+              },
+              {
+                "x": 401.9,
+                "y": 241
+              }
+            ],
+            "incomingShape": "user",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 209.79999999999995 116 L 209.79999999999995 241 L 401.9 241 L 401.9 266"
+      },
+      {
+        "id": "e-tv-poll",
+        "sources": [
+          "tv"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-tv-poll-label",
+            "text": "3. POST /oauth/token (poll)",
+            "width": 226.6,
+            "height": 30,
+            "x": 230.79999999999995,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-tv-poll_s0",
+            "startPoint": {
+              "x": 703.1999999999999,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 459.4,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 703.1999999999999,
+                "y": 141
+              },
+              {
+                "x": 459.4,
+                "y": 141
+              }
+            ],
+            "incomingShape": "tv",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 703.1999999999999 116 L 703.1999999999999 141 L 459.4 141 L 459.4 266"
+      },
+      {
+        "id": "e-tv-api",
+        "sources": [
+          "tv"
+        ],
+        "targets": [
+          "apiv1"
+        ],
+        "labels": [
+          {
+            "id": "e-tv-api-label",
+            "text": "4. Bearer token",
+            "width": 133,
+            "height": 30,
+            "x": 683.1999999999999,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-tv-api_s0",
+            "startPoint": {
+              "x": 818.1999999999999,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 818.1999999999999,
+              "y": 266
+            },
+            "incomingShape": "tv",
+            "outgoingShape": "apiv1"
+          }
+        ],
+        "container": "root",
+        "path": "M 818.1999999999999 116 L 818.1999999999999 266"
+      }
+    ]
+  },
+  "OAuth device authorization": {
+    "width": 1339.6666666666667,
+    "height": 799,
+    "nodes": [
+      {
+        "id": "device",
+        "width": 230,
+        "height": 71,
+        "$H": 886,
+        "x": 231.54285714285714,
+        "y": 28,
+        "title": [
+          "TV app / CLI client"
+        ],
+        "sub": [
+          "requests + polls"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "oauthDevice",
+        "width": 230,
+        "height": 88,
+        "$H": 888,
+        "x": 667.8,
+        "y": 309,
+        "title": [
+          "POST /oauth/device"
+        ],
+        "sub": [
+          "issues device_code ·",
+          "user_code"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "browser",
+        "width": 230,
+        "height": 71,
+        "$H": 890,
+        "x": 372.79999999999995,
+        "y": 317.5,
+        "title": [
+          "User's browser"
+        ],
+        "sub": [
+          "opens /device"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "lumastra",
+        "width": 230,
+        "height": 88,
+        "$H": 892,
+        "x": 372.79999999999995,
+        "y": 497,
+        "title": [
+          "Lumastra"
+        ],
+        "sub": [
+          "consent screen · records",
+          "approval"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "oauthToken",
+        "width": 230,
+        "height": 71,
+        "$H": 894,
+        "x": 372.79999999999995,
+        "y": 700,
+        "title": [
+          "POST /oauth/token"
+        ],
+        "sub": [
+          "polled at `interval`"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "apiv1",
+        "width": 230,
+        "height": 71,
+        "$H": 896,
+        "x": 1081.6666666666667,
+        "y": 309,
+        "title": [
+          "/api/v1 surface"
+        ],
+        "sub": [
+          "Bearer JWT · scope-gated"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-device-request",
+        "sources": [
+          "device"
+        ],
+        "targets": [
+          "oauthDevice"
+        ],
+        "labels": [
+          {
+            "id": "e-device-request-label",
+            "text": "1. client_id · scope",
+            "width": 172,
+            "height": 30,
+            "x": 768.4666666666666,
+            "y": 229
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-device-request_s0",
+            "startPoint": {
+              "x": 362.9714285714286,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 821.1333333333333,
+              "y": 309
+            },
+            "bendPoints": [
+              {
+                "x": 362.9714285714286,
+                "y": 164
+              },
+              {
+                "x": 765.4666666666666,
+                "y": 164
+              },
+              {
+                "x": 765.4666666666666,
+                "y": 284
+              },
+              {
+                "x": 821.1333333333333,
+                "y": 284
+              }
+            ],
+            "incomingShape": "device",
+            "outgoingShape": "oauthDevice"
+          }
+        ],
+        "container": "root",
+        "path": "M 362.9714285714286 99 L 362.9714285714286 164 L 765.4666666666666 164 L 765.4666666666666 284 L 821.1333333333333 284 L 821.1333333333333 309"
+      },
+      {
+        "id": "e-request-device",
+        "sources": [
+          "oauthDevice"
+        ],
+        "targets": [
+          "device"
+        ],
+        "labels": [
+          {
+            "id": "e-request-device-label",
+            "text": "device_code · user_code",
+            "width": 195.4,
+            "height": 30,
+            "x": 547.0666666666666,
+            "y": 229
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-request-device_s0",
+            "startPoint": {
+              "x": 744.4666666666666,
+              "y": 309
+            },
+            "endPoint": {
+              "x": 330.11428571428576,
+              "y": 99
+            },
+            "bendPoints": [
+              {
+                "x": 744.4666666666666,
+                "y": 184
+              },
+              {
+                "x": 330.11428571428576,
+                "y": 184
+              }
+            ],
+            "incomingShape": "oauthDevice",
+            "outgoingShape": "device"
+          }
+        ],
+        "container": "root",
+        "path": "M 744.4666666666666 309 L 744.4666666666666 184 L 330.11428571428576 184 L 330.11428571428576 99"
+      },
+      {
+        "id": "e-device-browser",
+        "sources": [
+          "device"
+        ],
+        "targets": [
+          "browser"
+        ],
+        "labels": [
+          {
+            "id": "e-device-browser-label",
+            "text": "2. shows user_code / QR",
+            "width": 195.4,
+            "height": 30,
+            "x": 290.4,
+            "y": 229
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-device-browser_s0",
+            "startPoint": {
+              "x": 297.25714285714287,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 487.79999999999995,
+              "y": 317.5
+            },
+            "bendPoints": [
+              {
+                "x": 297.25714285714287,
+                "y": 204
+              },
+              {
+                "x": 487.79999999999995,
+                "y": 204
+              }
+            ],
+            "incomingShape": "device",
+            "outgoingShape": "browser"
+          }
+        ],
+        "container": "root",
+        "path": "M 297.25714285714287 99 L 297.25714285714287 204 L 487.79999999999995 204 L 487.79999999999995 317.5"
+      },
+      {
+        "id": "e-browser-lumastra",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-lumastra-label",
+            "text": "sign in + approve",
+            "width": 148.6,
+            "height": 30,
+            "x": 337.19999999999993,
+            "y": 432
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-lumastra_s0",
+            "startPoint": {
+              "x": 487.79999999999995,
+              "y": 388.5
+            },
+            "endPoint": {
+              "x": 487.79999999999995,
+              "y": 497
+            },
+            "incomingShape": "browser",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 487.79999999999995 388.5 L 487.79999999999995 497"
+      },
+      {
+        "id": "e-device-poll",
+        "sources": [
+          "device"
+        ],
+        "targets": [
+          "oauthToken"
+        ],
+        "labels": [
+          {
+            "id": "e-device-poll-label",
+            "text": "3. poll device_code",
+            "width": 164.2,
+            "height": 30,
+            "x": 799.2666666666667,
+            "y": 432
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-device-poll_s0",
+            "startPoint": {
+              "x": 395.8285714285714,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 545.3,
+              "y": 700
+            },
+            "bendPoints": [
+              {
+                "x": 395.8285714285714,
+                "y": 144
+              },
+              {
+                "x": 965.4666666666667,
+                "y": 144
+              },
+              {
+                "x": 965.4666666666667,
+                "y": 675
+              },
+              {
+                "x": 545.3,
+                "y": 675
+              }
+            ],
+            "incomingShape": "device",
+            "outgoingShape": "oauthToken"
+          }
+        ],
+        "container": "root",
+        "path": "M 395.8285714285714 99 L 395.8285714285714 144 L 965.4666666666667 144 L 965.4666666666667 675 L 545.3 675 L 545.3 700"
+      },
+      {
+        "id": "e-lumastra-poll",
+        "sources": [
+          "lumastra"
+        ],
+        "targets": [
+          "oauthToken"
+        ],
+        "labels": [
+          {
+            "id": "e-lumastra-poll-label",
+            "text": "approval recorded",
+            "width": 148.6,
+            "height": 30,
+            "x": 337.19999999999993,
+            "y": 620
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-lumastra-poll_s0",
+            "startPoint": {
+              "x": 487.79999999999995,
+              "y": 585
+            },
+            "endPoint": {
+              "x": 487.79999999999995,
+              "y": 700
+            },
+            "incomingShape": "lumastra",
+            "outgoingShape": "oauthToken"
+          }
+        ],
+        "container": "root",
+        "path": "M 487.79999999999995 585 L 487.79999999999995 700"
+      },
+      {
+        "id": "e-poll-device",
+        "sources": [
+          "oauthToken"
+        ],
+        "targets": [
+          "device"
+        ],
+        "labels": [
+          {
+            "id": "e-poll-device-label",
+            "text": "access_token + refresh_token",
+            "width": 234.4,
+            "height": 30,
+            "x": 28,
+            "y": 432
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-poll-device_s0",
+            "startPoint": {
+              "x": 430.29999999999995,
+              "y": 700
+            },
+            "endPoint": {
+              "x": 264.4,
+              "y": 99
+            },
+            "bendPoints": [
+              {
+                "x": 430.29999999999995,
+                "y": 675
+              },
+              {
+                "x": 264.4,
+                "y": 675
+              }
+            ],
+            "incomingShape": "oauthToken",
+            "outgoingShape": "device"
+          }
+        ],
+        "container": "root",
+        "path": "M 430.29999999999995 700 L 430.29999999999995 675 L 264.4 675 L 264.4 99"
+      },
+      {
+        "id": "e-device-api",
+        "sources": [
+          "device"
+        ],
+        "targets": [
+          "apiv1"
+        ],
+        "labels": [
+          {
+            "id": "e-device-api-label",
+            "text": "4. Bearer <access_token>",
+            "width": 203.2,
+            "height": 30,
+            "x": 991.4666666666667,
+            "y": 229
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-device-api_s0",
+            "startPoint": {
+              "x": 428.6857142857143,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 1196.6666666666667,
+              "y": 309
+            },
+            "bendPoints": [
+              {
+                "x": 428.6857142857143,
+                "y": 124
+              },
+              {
+                "x": 1196.6666666666667,
+                "y": 124
+              }
+            ],
+            "incomingShape": "device",
+            "outgoingShape": "apiv1"
+          }
+        ],
+        "container": "root",
+        "path": "M 428.6857142857143 99 L 428.6857142857143 124 L 1196.6666666666667 124 L 1196.6666666666667 309"
+      }
+    ]
+  },
+  "Drift calibration": {
+    "width": 593.8,
+    "height": 499,
+    "nodes": [
+      {
+        "id": "measuring",
+        "width": 230,
+        "height": 71,
+        "$H": 1033,
+        "x": 187.73333333333335,
+        "y": 28,
+        "title": [
+          "MEASURING"
+        ],
+        "sub": [
+          "5 s, ≥3 samples"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "calibrating",
+        "width": 230,
+        "height": 71,
+        "$H": 1035,
+        "x": 330.4,
+        "y": 214,
+        "title": [
+          "CALIBRATING"
+        ],
+        "sub": [
+          "rate computed"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "locked",
+        "width": 230,
+        "height": 71,
+        "$H": 1037,
+        "x": 187.73333333333335,
+        "y": 400,
+        "title": [
+          "LOCKED"
+        ],
+        "sub": [
+          "recalibrates on backoff"
+        ],
+        "kind": "default"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-measuring-calibrating",
+        "sources": [
+          "measuring"
+        ],
+        "targets": [
+          "calibrating"
+        ],
+        "labels": [
+          {
+            "id": "e-measuring-calibrating-label",
+            "text": "samples ready",
+            "width": 117.39999999999999,
+            "height": 30,
+            "x": 448.4,
+            "y": 149
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-measuring-calibrating_s0",
+            "startPoint": {
+              "x": 341.0666666666667,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 445.4,
+              "y": 214
+            },
+            "bendPoints": [
+              {
+                "x": 341.0666666666667,
+                "y": 124
+              },
+              {
+                "x": 445.4,
+                "y": 124
+              }
+            ],
+            "incomingShape": "measuring",
+            "outgoingShape": "calibrating"
+          }
+        ],
+        "container": "root",
+        "path": "M 341.0666666666667 99 L 341.0666666666667 124 L 445.4 124 L 445.4 214"
+      },
+      {
+        "id": "e-calibrating-locked",
+        "sources": [
+          "calibrating"
+        ],
+        "targets": [
+          "locked"
+        ],
+        "labels": [
+          {
+            "id": "e-calibrating-locked-label",
+            "text": "rate applied",
+            "width": 109.6,
+            "height": 30,
+            "x": 448.4,
+            "y": 320
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-calibrating-locked_s0",
+            "startPoint": {
+              "x": 445.4,
+              "y": 285
+            },
+            "endPoint": {
+              "x": 341.0666666666667,
+              "y": 400
+            },
+            "bendPoints": [
+              {
+                "x": 445.4,
+                "y": 375
+              },
+              {
+                "x": 341.0666666666667,
+                "y": 375
+              }
+            ],
+            "incomingShape": "calibrating",
+            "outgoingShape": "locked"
+          }
+        ],
+        "container": "root",
+        "path": "M 445.4 285 L 445.4 375 L 341.0666666666667 375 L 341.0666666666667 400"
+      },
+      {
+        "id": "e-locked-measuring",
+        "sources": [
+          "locked"
+        ],
+        "targets": [
+          "measuring"
+        ],
+        "labels": [
+          {
+            "id": "e-locked-measuring-label",
+            "text": "drift > hard-seek threshold,\nor host seeks",
+            "width": 234.4,
+            "height": 48,
+            "x": 28,
+            "y": 225.5
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-locked-measuring_s0",
+            "startPoint": {
+              "x": 264.40000000000003,
+              "y": 400
+            },
+            "endPoint": {
+              "x": 264.40000000000003,
+              "y": 99
+            },
+            "incomingShape": "locked",
+            "outgoingShape": "measuring"
+          }
+        ],
+        "container": "root",
+        "path": "M 264.40000000000003 400 L 264.40000000000003 99"
+      }
+    ]
+  },
+  "Live TV container connections": {
+    "width": 734.8666666666667,
+    "height": 843,
+    "nodes": [
+      {
+        "id": "clients",
+        "width": 230,
+        "height": 88,
+        "$H": 1089,
+        "x": 438.5333333333333,
+        "y": 28,
+        "title": [
+          "Clients"
+        ],
+        "sub": [
+          "browser · Jellyfin /",
+          "Streamyfin apps"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "app",
+        "width": 230,
+        "height": 105,
+        "$H": 1091,
+        "x": 54,
+        "y": 231,
+        "title": [
+          "Lumastra app"
+        ],
+        "sub": [
+          "web container · channel",
+          "resolve · access & stream",
+          "policy"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "proxy",
+        "width": 230,
+        "height": 88,
+        "$H": 1093,
+        "x": 438.5333333333333,
+        "y": 509,
+        "title": [
+          "Stream Proxy"
+        ],
+        "sub": [
+          "separate container ·",
+          "multiplex · FFmpeg"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "postgres",
+        "width": 230,
+        "height": 88,
+        "$H": 1095,
+        "x": 54,
+        "y": 386,
+        "title": [
+          "Postgres"
+        ],
+        "sub": [
+          "channels · EPG · backup",
+          "groups"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 1097,
+        "x": 181.86666666666667,
+        "y": 727,
+        "title": [
+          "Valkey"
+        ],
+        "sub": [
+          "proxy heartbeat · cluster ·",
+          "cache"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "upstream",
+        "width": 230,
+        "height": 71,
+        "$H": 1099,
+        "x": 476.8666666666667,
+        "y": 727,
+        "title": [
+          "Upstream IPTV"
+        ],
+        "sub": [
+          "live streams · failover"
+        ],
+        "kind": "ext"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cl-app",
+        "sources": [
+          "clients"
+        ],
+        "targets": [
+          "app"
+        ],
+        "labels": [
+          {
+            "id": "e-cl-app-label",
+            "text": "select channel",
+            "width": 125.2,
+            "height": 30,
+            "x": 41.80000000000001,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-cl-app_s0",
+            "startPoint": {
+              "x": 515.2,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 169,
+              "y": 231
+            },
+            "bendPoints": [
+              {
+                "x": 515.2,
+                "y": 141
+              },
+              {
+                "x": 169,
+                "y": 141
+              }
+            ],
+            "incomingShape": "clients",
+            "outgoingShape": "app"
+          }
+        ],
+        "container": "root",
+        "path": "M 515.2 116 L 515.2 141 L 169 141 L 169 231"
+      },
+      {
+        "id": "e-cl-proxy",
+        "sources": [
+          "clients"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-cl-proxy-label",
+            "text": "HLS playback",
+            "width": 109.6,
+            "height": 30,
+            "x": 594.8666666666667,
+            "y": 268.5
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-cl-proxy_s0",
+            "startPoint": {
+              "x": 591.8666666666667,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 591.8666666666667,
+              "y": 509
+            },
+            "incomingShape": "clients",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 591.8666666666667 116 L 591.8666666666667 509"
+      },
+      {
+        "id": "e-app-proxy",
+        "sources": [
+          "app"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-app-proxy-label",
+            "text": "hand off ·\nSTREAM_PROXY_SECRET",
+            "width": 164.2,
+            "height": 48,
+            "x": 349,
+            "y": 406
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-app-proxy_s0",
+            "startPoint": {
+              "x": 226.5,
+              "y": 336
+            },
+            "endPoint": {
+              "x": 515.2,
+              "y": 509
+            },
+            "bendPoints": [
+              {
+                "x": 226.5,
+                "y": 361
+              },
+              {
+                "x": 515.2,
+                "y": 361
+              }
+            ],
+            "incomingShape": "app",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 226.5 336 L 226.5 361 L 515.2 361 L 515.2 509"
+      },
+      {
+        "id": "e-app-pg",
+        "sources": [
+          "app"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-app-pg_s0",
+            "startPoint": {
+              "x": 169,
+              "y": 336
+            },
+            "endPoint": {
+              "x": 169,
+              "y": 386
+            },
+            "incomingShape": "app",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 169 336 L 169 386"
+      },
+      {
+        "id": "e-app-vk",
+        "sources": [
+          "app"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-app-vk_s0",
+            "startPoint": {
+              "x": 111.5,
+              "y": 336
+            },
+            "endPoint": {
+              "x": 258.53333333333336,
+              "y": 727
+            },
+            "bendPoints": [
+              {
+                "x": 111.5,
+                "y": 361
+              },
+              {
+                "x": 28,
+                "y": 361
+              },
+              {
+                "x": 28,
+                "y": 702
+              },
+              {
+                "x": 258.53333333333336,
+                "y": 702
+              }
+            ],
+            "incomingShape": "app",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 111.5 336 L 111.5 361 L 28 361 L 28 702 L 258.53333333333336 702 L 258.53333333333336 727"
+      },
+      {
+        "id": "e-proxy-vk",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-vk-label",
+            "text": "heartbeat",
+            "width": 86.2,
+            "height": 30,
+            "x": 247,
+            "y": 647
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-vk_s0",
+            "startPoint": {
+              "x": 515.2,
+              "y": 597
+            },
+            "endPoint": {
+              "x": 335.20000000000005,
+              "y": 727
+            },
+            "bendPoints": [
+              {
+                "x": 515.2,
+                "y": 622
+              },
+              {
+                "x": 335.2,
+                "y": 622
+              }
+            ],
+            "incomingShape": "proxy",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 515.2 597 L 515.2 622 L 335.2 622 L 335.20000000000005 727"
+      },
+      {
+        "id": "e-proxy-up",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "upstream"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-up-label",
+            "text": "pull · failover",
+            "width": 133,
+            "height": 30,
+            "x": 456.8666666666667,
+            "y": 647
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-up_s0",
+            "startPoint": {
+              "x": 591.8666666666667,
+              "y": 597
+            },
+            "endPoint": {
+              "x": 591.8666666666667,
+              "y": 727
+            },
+            "incomingShape": "proxy",
+            "outgoingShape": "upstream"
+          }
+        ],
+        "container": "root",
+        "path": "M 591.8666666666667 597 L 591.8666666666667 727"
+      }
+    ]
+  },
+  "Live TV processing and delivery": {
+    "width": 601,
+    "height": 798,
+    "nodes": [
+      {
+        "id": "src",
+        "width": 230,
+        "height": 71,
+        "$H": 1201,
+        "x": 86.33333333333333,
+        "y": 28,
+        "title": [
+          "IPTV / M3U source"
+        ],
+        "sub": [
+          "channel list · LIVETV_SOURCE"
+        ],
+        "kind": "source"
+      },
+      {
+        "id": "import",
+        "width": 230,
+        "height": 88,
+        "$H": 1203,
+        "x": 86.33333333333333,
+        "y": 134,
+        "title": [
+          "Import & auto-process"
+        ],
+        "sub": [
+          "channels · EPG · backup",
+          "groups · quality tiers"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "app",
+        "width": 230,
+        "height": 105,
+        "$H": 1205,
+        "x": 86.33333333333333,
+        "y": 257,
+        "title": [
+          "Lumastra app"
+        ],
+        "sub": [
+          "resolve channel · ordered",
+          "URLs (primary + backups) ·",
+          "access policy"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "proxy",
+        "width": 230,
+        "height": 105,
+        "$H": 1207,
+        "x": 86.33333333333333,
+        "y": 462,
+        "title": [
+          "Stream Proxy"
+        ],
+        "sub": [
+          "one upstream per channel",
+          "(multiplex) · FFmpeg · SSRF",
+          "check"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "upstream",
+        "width": 230,
+        "height": 88,
+        "$H": 1209,
+        "x": 48,
+        "y": 682,
+        "title": [
+          "Live stream"
+        ],
+        "sub": [
+          "upstream URL · fails over to",
+          "backups"
+        ],
+        "kind": "ext"
+      },
+      {
+        "id": "viewers",
+        "width": 230,
+        "height": 88,
+        "$H": 1211,
+        "x": 343,
+        "y": 682,
+        "title": [
+          "Viewers"
+        ],
+        "sub": [
+          "HLS · many viewers, one",
+          "shared pull"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-src-import",
+        "sources": [
+          "src"
+        ],
+        "targets": [
+          "import"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-src-import_s0",
+            "startPoint": {
+              "x": 201.33333333333331,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 201.33333333333331,
+              "y": 134
+            },
+            "incomingShape": "src",
+            "outgoingShape": "import"
+          }
+        ],
+        "container": "root",
+        "path": "M 201.33333333333331 99 L 201.33333333333331 134"
+      },
+      {
+        "id": "e-import-app",
+        "sources": [
+          "import"
+        ],
+        "targets": [
+          "app"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-import-app_s0",
+            "startPoint": {
+              "x": 201.33333333333331,
+              "y": 222
+            },
+            "endPoint": {
+              "x": 201.33333333333331,
+              "y": 257
+            },
+            "incomingShape": "import",
+            "outgoingShape": "app"
+          }
+        ],
+        "container": "root",
+        "path": "M 201.33333333333331 222 L 201.33333333333331 257"
+      },
+      {
+        "id": "e-app-proxy",
+        "sources": [
+          "app"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-app-proxy-label",
+            "text": "hand off · secret",
+            "width": 148.6,
+            "height": 30,
+            "x": 50.73333333333332,
+            "y": 397
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-app-proxy_s0",
+            "startPoint": {
+              "x": 201.33333333333331,
+              "y": 362
+            },
+            "endPoint": {
+              "x": 201.33333333333331,
+              "y": 462
+            },
+            "incomingShape": "app",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 201.33333333333331 362 L 201.33333333333331 462"
+      },
+      {
+        "id": "e-proxy-up",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "upstream"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-up-label",
+            "text": "pull · failover",
+            "width": 133,
+            "height": 30,
+            "x": 28,
+            "y": 617
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-up_s0",
+            "startPoint": {
+              "x": 163,
+              "y": 567
+            },
+            "endPoint": {
+              "x": 163,
+              "y": 682
+            },
+            "incomingShape": "proxy",
+            "outgoingShape": "upstream"
+          }
+        ],
+        "container": "root",
+        "path": "M 163 567 L 163 682"
+      },
+      {
+        "id": "e-proxy-view",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "viewers"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-view-label",
+            "text": "HLS",
+            "width": 39.4,
+            "height": 30,
+            "x": 461,
+            "y": 617
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-view_s0",
+            "startPoint": {
+              "x": 239.66666666666669,
+              "y": 567
+            },
+            "endPoint": {
+              "x": 458,
+              "y": 682
+            },
+            "bendPoints": [
+              {
+                "x": 239.66666666666669,
+                "y": 592
+              },
+              {
+                "x": 458,
+                "y": 592
+              }
+            ],
+            "incomingShape": "proxy",
+            "outgoingShape": "viewers"
+          }
+        ],
+        "container": "root",
+        "path": "M 239.66666666666669 567 L 239.66666666666669 592 L 458 592 L 458 682"
+      }
+    ]
+  },
+  "Music discovery pipeline": {
+    "width": 617.5999999999999,
+    "height": 729,
+    "nodes": [
+      {
+        "id": "huggingface",
+        "width": 230,
+        "height": 88,
+        "$H": 1271,
+        "x": 323,
+        "y": 28,
+        "title": [
+          "HuggingFace"
+        ],
+        "sub": [
+          "microsoft/msclap weights ·",
+          "first load only"
+        ],
+        "kind": "ext"
+      },
+      {
+        "id": "file",
+        "width": 230,
+        "height": 71,
+        "$H": 1273,
+        "x": 28,
+        "y": 45,
+        "title": [
+          "Audio file"
+        ],
+        "sub": [
+          "in your music library"
+        ],
+        "kind": "source"
+      },
+      {
+        "id": "sidecar",
+        "width": 230,
+        "height": 88,
+        "$H": 1275,
+        "x": 284.66666666666663,
+        "y": 231,
+        "title": [
+          "Sonic embedder"
+        ],
+        "sub": [
+          "CLAP-2023 · Python sidecar ·",
+          "CPU or GPU"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "pgvector",
+        "width": 230,
+        "height": 71,
+        "$H": 1277,
+        "x": 284.66666666666663,
+        "y": 419,
+        "title": [
+          "PostgreSQL + pgvector"
+        ],
+        "sub": [
+          "1024-dim vector per track"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "surfaces",
+        "width": 230,
+        "height": 111,
+        "$H": 1279,
+        "x": 284.66666666666663,
+        "y": 590,
+        "title": [
+          "Map · Collections ·",
+          "Sound Search · smart",
+          "queue"
+        ],
+        "sub": [
+          "nearest-neighbour lookup"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-hf-sidecar",
+        "sources": [
+          "huggingface"
+        ],
+        "targets": [
+          "sidecar"
+        ],
+        "labels": [
+          {
+            "id": "e-hf-sidecar-label",
+            "text": "downloads weights",
+            "width": 148.6,
+            "height": 30,
+            "x": 441,
+            "y": 151
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-hf-sidecar_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 231
+            },
+            "incomingShape": "huggingface",
+            "outgoingShape": "sidecar"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 116 L 438 231"
+      },
+      {
+        "id": "e-file-sidecar",
+        "sources": [
+          "file"
+        ],
+        "targets": [
+          "sidecar"
+        ],
+        "labels": [
+          {
+            "id": "e-file-sidecar-label",
+            "text": "embeds",
+            "width": 62.8,
+            "height": 30,
+            "x": 78.19999999999999,
+            "y": 151
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-file-sidecar_s0",
+            "startPoint": {
+              "x": 143,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 361.3333333333333,
+              "y": 231
+            },
+            "bendPoints": [
+              {
+                "x": 143,
+                "y": 206
+              },
+              {
+                "x": 361.3333333333333,
+                "y": 206
+              }
+            ],
+            "incomingShape": "file",
+            "outgoingShape": "sidecar"
+          }
+        ],
+        "container": "root",
+        "path": "M 143 116 L 143 206 L 361.3333333333333 206 L 361.3333333333333 231"
+      },
+      {
+        "id": "e-sidecar-pgvector",
+        "sources": [
+          "sidecar"
+        ],
+        "targets": [
+          "pgvector"
+        ],
+        "labels": [
+          {
+            "id": "e-sidecar-pgvector-label",
+            "text": "writes vector",
+            "width": 117.39999999999999,
+            "height": 30,
+            "x": 280.26666666666665,
+            "y": 354
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-sidecar-pgvector_s0",
+            "startPoint": {
+              "x": 399.66666666666663,
+              "y": 319
+            },
+            "endPoint": {
+              "x": 399.66666666666663,
+              "y": 419
+            },
+            "incomingShape": "sidecar",
+            "outgoingShape": "pgvector"
+          }
+        ],
+        "container": "root",
+        "path": "M 399.66666666666663 319 L 399.66666666666663 419"
+      },
+      {
+        "id": "e-pgvector-surfaces",
+        "sources": [
+          "pgvector"
+        ],
+        "targets": [
+          "surfaces"
+        ],
+        "labels": [
+          {
+            "id": "e-pgvector-surfaces-label",
+            "text": "similarity search",
+            "width": 148.6,
+            "height": 30,
+            "x": 249.06666666666666,
+            "y": 525
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pgvector-surfaces_s0",
+            "startPoint": {
+              "x": 399.66666666666663,
+              "y": 490
+            },
+            "endPoint": {
+              "x": 399.66666666666663,
+              "y": 590
+            },
+            "incomingShape": "pgvector",
+            "outgoingShape": "surfaces"
+          }
+        ],
+        "container": "root",
+        "path": "M 399.66666666666663 490 L 399.66666666666663 590"
+      }
+    ]
+  },
+  "Shared data stores": {
+    "width": 810.9333333333333,
+    "height": 365,
+    "nodes": [
+      {
+        "id": "server",
+        "width": 230,
+        "height": 71,
+        "$H": 1338,
+        "x": 404.73333333333335,
+        "y": 28,
+        "title": [
+          "SvelteKit server"
+        ],
+        "sub": [
+          "web requests"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "worker",
+        "width": 230,
+        "height": 71,
+        "$H": 1340,
+        "x": 109.73333333333333,
+        "y": 28,
+        "title": [
+          "Worker process"
+        ],
+        "sub": [
+          "background jobs"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "postgres",
+        "width": 230,
+        "height": 88,
+        "$H": 1342,
+        "x": 109.73333333333333,
+        "y": 249,
+        "title": [
+          "PostgreSQL 18"
+        ],
+        "sub": [
+          "pgvector · source of truth ·",
+          "embeddings"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 1344,
+        "x": 552.9333333333333,
+        "y": 249,
+        "title": [
+          "Valkey 9"
+        ],
+        "sub": [
+          "cache · queues · locks ·",
+          "pub/sub"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-s-pg",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [
+          {
+            "id": "e-s-pg-label",
+            "text": "read / write",
+            "width": 109.6,
+            "height": 30,
+            "x": 369.79999999999995,
+            "y": 169
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-s-pg_s0",
+            "startPoint": {
+              "x": 481.40000000000003,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 263.06666666666666,
+              "y": 249
+            },
+            "bendPoints": [
+              {
+                "x": 481.4,
+                "y": 224
+              },
+              {
+                "x": 263.06666666666666,
+                "y": 224
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 481.40000000000003 99 L 481.4 224 L 263.06666666666666 224 L 263.06666666666666 249"
+      },
+      {
+        "id": "e-s-vk",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-s-vk-label",
+            "text": "cache",
+            "width": 55,
+            "height": 30,
+            "x": 650.5999999999999,
+            "y": 169
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-s-vk_s0",
+            "startPoint": {
+              "x": 558.0666666666667,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 706.2666666666667,
+              "y": 249
+            },
+            "bendPoints": [
+              {
+                "x": 558.0666666666667,
+                "y": 124
+              },
+              {
+                "x": 707.5999999999999,
+                "y": 124
+              },
+              {
+                "x": 707.5999999999999,
+                "y": 224
+              },
+              {
+                "x": 706.2666666666667,
+                "y": 224
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 558.0666666666667 99 L 558.0666666666667 124 L 707.5999999999999 124 L 707.5999999999999 224 L 706.2666666666667 224 L 706.2666666666667 249"
+      },
+      {
+        "id": "e-w-pg",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [
+          {
+            "id": "e-w-pg-label",
+            "text": "task & media state",
+            "width": 156.4,
+            "height": 30,
+            "x": 28,
+            "y": 169
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-w-pg_s0",
+            "startPoint": {
+              "x": 186.4,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 186.4,
+              "y": 249
+            },
+            "incomingShape": "worker",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 186.4 99 L 186.4 249"
+      },
+      {
+        "id": "e-w-vk",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-w-vk-label",
+            "text": "queues · locks",
+            "width": 125.2,
+            "height": 30,
+            "x": 502.3999999999999,
+            "y": 169
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-w-vk_s0",
+            "startPoint": {
+              "x": 263.06666666666666,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 629.5999999999999,
+              "y": 249
+            },
+            "bendPoints": [
+              {
+                "x": 263.06666666666666,
+                "y": 144
+              },
+              {
+                "x": 629.5999999999999,
+                "y": 144
+              }
+            ],
+            "incomingShape": "worker",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 263.06666666666666 99 L 263.06666666666666 144 L 629.5999999999999 144 L 629.5999999999999 249"
+      }
+    ]
+  },
+  "Components and request flow": {
+    "width": 797.5999999999999,
+    "height": 939,
+    "nodes": [
+      {
+        "id": "browser",
+        "width": 230,
+        "height": 88,
+        "$H": 1401,
+        "x": 323,
+        "y": 28,
+        "title": [
+          "Browser / PWA"
+        ],
+        "sub": [
+          "Svelte 5 · HLS player ·",
+          "service worker"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "auth",
+        "width": 230,
+        "height": 88,
+        "$H": 1403,
+        "x": 323,
+        "y": 231,
+        "title": [
+          "Auth layer"
+        ],
+        "sub": [
+          "forward-auth · JWT · PAT ·",
+          "device flow"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "server",
+        "width": 230,
+        "height": 88,
+        "$H": 1405,
+        "x": 464.66666666666663,
+        "y": 434,
+        "title": [
+          "SvelteKit server"
+        ],
+        "sub": [
+          "API · SSR · services · image",
+          "proxy"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "proxy",
+        "width": 230,
+        "height": 71,
+        "$H": 1407,
+        "x": 28,
+        "y": 231,
+        "title": [
+          "Stream Proxy"
+        ],
+        "sub": [
+          "Live TV · HLS"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "worker",
+        "width": 230,
+        "height": 71,
+        "$H": 1409,
+        "x": 323,
+        "y": 637,
+        "title": [
+          "Worker process"
+        ],
+        "sub": [
+          "BullMQ · background jobs"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "external",
+        "width": 230,
+        "height": 88,
+        "$H": 1411,
+        "x": 464.66666666666663,
+        "y": 823,
+        "title": [
+          "External APIs"
+        ],
+        "sub": [
+          "TMDB · Jellyfin · OpenAI ·",
+          "MDBList"
+        ],
+        "kind": "ext"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-br-auth",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "auth"
+        ],
+        "labels": [
+          {
+            "id": "e-br-auth-label",
+            "text": "sign in",
+            "width": 70.6,
+            "height": 30,
+            "x": 365.4,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-br-auth_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 231
+            },
+            "incomingShape": "browser",
+            "outgoingShape": "auth"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 116 L 438 231"
+      },
+      {
+        "id": "e-br-server",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-br-server-label",
+            "text": "HTTP · SSE",
+            "width": 94,
+            "height": 30,
+            "x": 621,
+            "y": 260
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-br-server_s0",
+            "startPoint": {
+              "x": 495.5,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 618,
+              "y": 434
+            },
+            "bendPoints": [
+              {
+                "x": 495.5,
+                "y": 141
+              },
+              {
+                "x": 618,
+                "y": 141
+              }
+            ],
+            "incomingShape": "browser",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 495.5 116 L 495.5 141 L 618 141 L 618 434"
+      },
+      {
+        "id": "e-br-proxy",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-br-proxy-label",
+            "text": "HLS",
+            "width": 39.4,
+            "height": 30,
+            "x": 101.60000000000002,
+            "y": 166
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-br-proxy_s0",
+            "startPoint": {
+              "x": 380.5,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 143,
+              "y": 231
+            },
+            "bendPoints": [
+              {
+                "x": 380.5,
+                "y": 141
+              },
+              {
+                "x": 143,
+                "y": 141
+              }
+            ],
+            "incomingShape": "browser",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 380.5 116 L 380.5 141 L 143 141 L 143 231"
+      },
+      {
+        "id": "e-auth-server",
+        "sources": [
+          "auth"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-auth-server-label",
+            "text": "identity",
+            "width": 78.4,
+            "height": 30,
+            "x": 357.59999999999997,
+            "y": 354
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-auth-server_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 319
+            },
+            "endPoint": {
+              "x": 541.3333333333333,
+              "y": 434
+            },
+            "bendPoints": [
+              {
+                "x": 438,
+                "y": 409
+              },
+              {
+                "x": 541.3333333333333,
+                "y": 409
+              }
+            ],
+            "incomingShape": "auth",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 319 L 438 409 L 541.3333333333333 409 L 541.3333333333333 434"
+      },
+      {
+        "id": "e-server-worker",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "worker"
+        ],
+        "labels": [
+          {
+            "id": "e-server-worker-label",
+            "text": "enqueue jobs",
+            "width": 109.6,
+            "height": 30,
+            "x": 326.4,
+            "y": 572
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-server-worker_s0",
+            "startPoint": {
+              "x": 541.3333333333333,
+              "y": 522
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 637
+            },
+            "bendPoints": [
+              {
+                "x": 541.3333333333333,
+                "y": 547
+              },
+              {
+                "x": 438,
+                "y": 547
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "worker"
+          }
+        ],
+        "container": "root",
+        "path": "M 541.3333333333333 522 L 541.3333333333333 547 L 438 547 L 438 637"
+      },
+      {
+        "id": "e-server-ext",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "external"
+        ],
+        "labels": [
+          {
+            "id": "e-server-ext-label",
+            "text": "metadata · images",
+            "width": 148.6,
+            "height": 30,
+            "x": 621,
+            "y": 657.5
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-server-ext_s0",
+            "startPoint": {
+              "x": 618,
+              "y": 522
+            },
+            "endPoint": {
+              "x": 618,
+              "y": 823
+            },
+            "incomingShape": "server",
+            "outgoingShape": "external"
+          }
+        ],
+        "container": "root",
+        "path": "M 618 522 L 618 823"
+      },
+      {
+        "id": "e-worker-ext",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "external"
+        ],
+        "labels": [
+          {
+            "id": "e-worker-ext-label",
+            "text": "ingest · embeddings",
+            "width": 164.2,
+            "height": 30,
+            "x": 271.79999999999995,
+            "y": 743
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-worker-ext_s0",
+            "startPoint": {
+              "x": 438,
+              "y": 708
+            },
+            "endPoint": {
+              "x": 541.3333333333333,
+              "y": 823
+            },
+            "bendPoints": [
+              {
+                "x": 438,
+                "y": 798
+              },
+              {
+                "x": 541.3333333333333,
+                "y": 798
+              }
+            ],
+            "incomingShape": "worker",
+            "outgoingShape": "external"
+          }
+        ],
+        "container": "root",
+        "path": "M 438 708 L 438 798 L 541.3333333333333 798 L 541.3333333333333 823"
+      }
+    ]
+  },
+  "Playback delivery choices": {
+    "width": 989.5999999999999,
+    "height": 693,
+    "nodes": [
+      {
+        "id": "client",
+        "width": 230,
+        "height": 88,
+        "$H": 1521,
+        "x": 199.1,
+        "y": 28,
+        "title": [
+          "Client"
+        ],
+        "sub": [
+          "detects codec / HDR support",
+          "per delivery path"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "planner",
+        "width": 230,
+        "height": 88,
+        "$H": 1523,
+        "x": 199.1,
+        "y": 216,
+        "title": [
+          "Server planner"
+        ],
+        "sub": [
+          "sole authority · picks",
+          "delivery path + method"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "direct",
+        "width": 230,
+        "height": 71,
+        "$H": 1525,
+        "x": 731.5999999999999,
+        "y": 447.5,
+        "title": [
+          "Direct play"
+        ],
+        "sub": [
+          "stream the file as-is"
+        ],
+        "kind": "source"
+      },
+      {
+        "id": "remux",
+        "width": 230,
+        "height": 88,
+        "$H": 1527,
+        "x": 436.6,
+        "y": 439,
+        "title": [
+          "Remux"
+        ],
+        "sub": [
+          "copy streams into HLS · no",
+          "re-encode"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "transcode",
+        "width": 230,
+        "height": 88,
+        "$H": 1529,
+        "x": 141.6,
+        "y": 439,
+        "title": [
+          "Transcode"
+        ],
+        "sub": [
+          "re-encode video and/or audio",
+          "· FFmpeg"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "player",
+        "width": 230,
+        "height": 88,
+        "$H": 1531,
+        "x": 436.6,
+        "y": 577,
+        "title": [
+          "Playback"
+        ],
+        "sub": [
+          "native video · hls.js ·",
+          "Safari HLS"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cl-pl",
+        "sources": [
+          "client"
+        ],
+        "targets": [
+          "planner"
+        ],
+        "labels": [
+          {
+            "id": "e-cl-pl-label",
+            "text": "capabilities",
+            "width": 109.6,
+            "height": 30,
+            "x": 202.50000000000003,
+            "y": 151
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-cl-pl_s0",
+            "startPoint": {
+              "x": 314.1,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 314.1,
+              "y": 216
+            },
+            "incomingShape": "client",
+            "outgoingShape": "planner"
+          }
+        ],
+        "container": "root",
+        "path": "M 314.1 116 L 314.1 216"
+      },
+      {
+        "id": "e-pl-direct",
+        "sources": [
+          "planner"
+        ],
+        "targets": [
+          "direct"
+        ],
+        "labels": [
+          {
+            "id": "e-pl-direct-label",
+            "text": "fully compatible",
+            "width": 140.8,
+            "height": 30,
+            "x": 703.8,
+            "y": 374
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pl-direct_s0",
+            "startPoint": {
+              "x": 371.6,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 846.5999999999999,
+              "y": 447.5
+            },
+            "bendPoints": [
+              {
+                "x": 371.6,
+                "y": 329
+              },
+              {
+                "x": 846.5999999999999,
+                "y": 329
+              }
+            ],
+            "incomingShape": "planner",
+            "outgoingShape": "direct"
+          }
+        ],
+        "container": "root",
+        "path": "M 371.6 304 L 371.6 329 L 846.5999999999999 329 L 846.5999999999999 447.5"
+      },
+      {
+        "id": "e-pl-remux",
+        "sources": [
+          "planner"
+        ],
+        "targets": [
+          "remux"
+        ],
+        "labels": [
+          {
+            "id": "e-pl-remux-label",
+            "text": "container / audio mismatch",
+            "width": 218.79999999999998,
+            "height": 30,
+            "x": 330.80000000000007,
+            "y": 374
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pl-remux_s0",
+            "startPoint": {
+              "x": 314.1,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 551.6,
+              "y": 439
+            },
+            "bendPoints": [
+              {
+                "x": 314.1,
+                "y": 349
+              },
+              {
+                "x": 551.6,
+                "y": 349
+              }
+            ],
+            "incomingShape": "planner",
+            "outgoingShape": "remux"
+          }
+        ],
+        "container": "root",
+        "path": "M 314.1 304 L 314.1 349 L 551.6 349 L 551.6 439"
+      },
+      {
+        "id": "e-pl-tr",
+        "sources": [
+          "planner"
+        ],
+        "targets": [
+          "transcode"
+        ],
+        "labels": [
+          {
+            "id": "e-pl-tr-label",
+            "text": "unsupported · HDR · burn-in",
+            "width": 226.6,
+            "height": 30,
+            "x": 28,
+            "y": 374
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pl-tr_s0",
+            "startPoint": {
+              "x": 256.6,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 256.6,
+              "y": 439
+            },
+            "incomingShape": "planner",
+            "outgoingShape": "transcode"
+          }
+        ],
+        "container": "root",
+        "path": "M 256.6 304 L 256.6 439"
+      },
+      {
+        "id": "e-direct-p",
+        "sources": [
+          "direct"
+        ],
+        "targets": [
+          "player"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-direct-p_s0",
+            "startPoint": {
+              "x": 846.5999999999999,
+              "y": 518.5
+            },
+            "endPoint": {
+              "x": 609.1,
+              "y": 577
+            },
+            "bendPoints": [
+              {
+                "x": 846.5999999999999,
+                "y": 552
+              },
+              {
+                "x": 609.1,
+                "y": 552
+              }
+            ],
+            "incomingShape": "direct",
+            "outgoingShape": "player"
+          }
+        ],
+        "container": "root",
+        "path": "M 846.5999999999999 518.5 L 846.5999999999999 552 L 609.1 552 L 609.1 577"
+      },
+      {
+        "id": "e-remux-p",
+        "sources": [
+          "remux"
+        ],
+        "targets": [
+          "player"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-remux-p_s0",
+            "startPoint": {
+              "x": 551.6,
+              "y": 527
+            },
+            "endPoint": {
+              "x": 551.6,
+              "y": 577
+            },
+            "incomingShape": "remux",
+            "outgoingShape": "player"
+          }
+        ],
+        "container": "root",
+        "path": "M 551.6 527 L 551.6 577"
+      },
+      {
+        "id": "e-tr-p",
+        "sources": [
+          "transcode"
+        ],
+        "targets": [
+          "player"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-tr-p_s0",
+            "startPoint": {
+              "x": 256.6,
+              "y": 527
+            },
+            "endPoint": {
+              "x": 494.1,
+              "y": 577
+            },
+            "bendPoints": [
+              {
+                "x": 256.6,
+                "y": 552
+              },
+              {
+                "x": 494.1,
+                "y": 552
+              }
+            ],
+            "incomingShape": "transcode",
+            "outgoingShape": "player"
+          }
+        ],
+        "container": "root",
+        "path": "M 256.6 527 L 256.6 552 L 494.1 552 L 494.1 577"
+      }
+    ]
+  },
+  "Plugin sign-in flow": {
+    "width": 645.4666666666667,
+    "height": 703,
+    "nodes": [
+      {
+        "id": "browser",
+        "width": 230,
+        "height": 71,
+        "$H": 1607,
+        "x": 293.3666666666667,
+        "y": 28,
+        "title": [
+          "Browser"
+        ],
+        "sub": [
+          "clicks \"Sign in with …\""
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "host",
+        "width": 230,
+        "height": 71,
+        "$H": 1609,
+        "x": 312.5333333333333,
+        "y": 229,
+        "title": [
+          "Lumastra host"
+        ],
+        "sub": [
+          "owns state, cookie, txData"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "plugin",
+        "width": 230,
+        "height": 71,
+        "$H": 1611,
+        "x": 312.5333333333333,
+        "y": 418,
+        "title": [
+          "Auth plugin"
+        ],
+        "sub": [
+          "beginLogin / completeLogin"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "idp",
+        "width": 230,
+        "height": 71,
+        "$H": 1613,
+        "x": 274.2,
+        "y": 604,
+        "title": [
+          "External IdP"
+        ],
+        "sub": [
+          "Discord · company SSO"
+        ],
+        "kind": "ext"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-browser-host",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "host"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-host-label",
+            "text": "clicks sign-in",
+            "width": 125.2,
+            "height": 30,
+            "x": 468.8666666666667,
+            "y": 149
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-host_s0",
+            "startPoint": {
+              "x": 465.8666666666667,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 465.8666666666667,
+              "y": 229
+            },
+            "incomingShape": "browser",
+            "outgoingShape": "host"
+          }
+        ],
+        "container": "root",
+        "path": "M 465.8666666666667 99 L 465.8666666666667 229"
+      },
+      {
+        "id": "e-host-plugin",
+        "sources": [
+          "host"
+        ],
+        "targets": [
+          "plugin"
+        ],
+        "labels": [
+          {
+            "id": "e-host-plugin-label",
+            "text": "beginLogin(state)",
+            "width": 148.6,
+            "height": 30,
+            "x": 468.8666666666667,
+            "y": 344
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-host-plugin_s0",
+            "startPoint": {
+              "x": 465.8666666666667,
+              "y": 300
+            },
+            "endPoint": {
+              "x": 465.8666666666667,
+              "y": 418
+            },
+            "incomingShape": "host",
+            "outgoingShape": "plugin"
+          }
+        ],
+        "container": "root",
+        "path": "M 465.8666666666667 300 L 465.8666666666667 418"
+      },
+      {
+        "id": "e-plugin-idp",
+        "sources": [
+          "plugin"
+        ],
+        "targets": [
+          "idp"
+        ],
+        "labels": [
+          {
+            "id": "e-plugin-idp-label",
+            "text": "redirectUrl (https)",
+            "width": 164.2,
+            "height": 30,
+            "x": 430.5333333333333,
+            "y": 524
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-plugin-idp_s0",
+            "startPoint": {
+              "x": 427.5333333333333,
+              "y": 489
+            },
+            "endPoint": {
+              "x": 427.5333333333333,
+              "y": 604
+            },
+            "incomingShape": "plugin",
+            "outgoingShape": "idp"
+          }
+        ],
+        "container": "root",
+        "path": "M 427.5333333333333 489 L 427.5333333333333 604"
+      },
+      {
+        "id": "e-idp-browser",
+        "sources": [
+          "idp"
+        ],
+        "targets": [
+          "browser"
+        ],
+        "labels": [
+          {
+            "id": "e-idp-browser-label",
+            "text": "authenticates user",
+            "width": 156.4,
+            "height": 30,
+            "x": 28,
+            "y": 344
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-idp-browser_s0",
+            "startPoint": {
+              "x": 350.8666666666667,
+              "y": 604
+            },
+            "endPoint": {
+              "x": 350.8666666666667,
+              "y": 99
+            },
+            "bendPoints": [
+              {
+                "x": 350.8666666666667,
+                "y": 579
+              },
+              {
+                "x": 186.4,
+                "y": 579
+              },
+              {
+                "x": 186.4,
+                "y": 124
+              },
+              {
+                "x": 350.8666666666667,
+                "y": 124
+              }
+            ],
+            "incomingShape": "idp",
+            "outgoingShape": "browser"
+          }
+        ],
+        "container": "root",
+        "path": "M 350.8666666666667 604 L 350.8666666666667 579 L 186.4 579 L 186.4 124 L 350.8666666666667 124 L 350.8666666666667 99"
+      },
+      {
+        "id": "e-browser-host-2",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "host"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-host-2-label",
+            "text": "callback: code + state",
+            "width": 187.6,
+            "height": 30,
+            "x": 218.76666666666668,
+            "y": 149
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-host-2_s0",
+            "startPoint": {
+              "x": 408.3666666666667,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 389.2,
+              "y": 229
+            },
+            "bendPoints": [
+              {
+                "x": 408.3666666666667,
+                "y": 204
+              },
+              {
+                "x": 389.2,
+                "y": 204
+              }
+            ],
+            "incomingShape": "browser",
+            "outgoingShape": "host"
+          }
+        ],
+        "container": "root",
+        "path": "M 408.3666666666667 99 L 408.3666666666667 204 L 389.2 204 L 389.2 229"
+      },
+      {
+        "id": "e-host-plugin-2",
+        "sources": [
+          "host"
+        ],
+        "targets": [
+          "plugin"
+        ],
+        "labels": [
+          {
+            "id": "e-host-plugin-2-label",
+            "text": "completeLogin(params,\ntxData)",
+            "width": 179.79999999999998,
+            "height": 48,
+            "x": 207.40000000000003,
+            "y": 335
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-host-plugin-2_s0",
+            "startPoint": {
+              "x": 389.2,
+              "y": 300
+            },
+            "endPoint": {
+              "x": 389.2,
+              "y": 418
+            },
+            "incomingShape": "host",
+            "outgoingShape": "plugin"
+          }
+        ],
+        "container": "root",
+        "path": "M 389.2 300 L 389.2 418"
+      }
+    ]
+  },
+  "Send to Device": {
+    "width": 878.3999999999999,
+    "height": 366,
+    "nodes": [
+      {
+        "id": "phone",
+        "width": 230,
+        "height": 71,
+        "$H": 1708,
+        "x": 70.73333333333332,
+        "y": 28,
+        "title": [
+          "Phone / Web"
+        ],
+        "sub": [
+          "heartbeat every 2-3 min"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "server",
+        "width": 230,
+        "height": 71,
+        "$H": 1710,
+        "x": 32.39999999999999,
+        "y": 267,
+        "title": [
+          "Server"
+        ],
+        "sub": [
+          "presence cache, 10 min TTL"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "action",
+        "width": 230,
+        "height": 71,
+        "$H": 1712,
+        "x": 331.69999999999993,
+        "y": 267,
+        "title": [
+          "Pending action"
+        ],
+        "sub": [
+          "stored, 5 min TTL"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "tvos",
+        "width": 230,
+        "height": 71,
+        "$H": 1714,
+        "x": 538.7333333333332,
+        "y": 28,
+        "title": [
+          "tvOS"
+        ],
+        "sub": [
+          "polls every ~5 s"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-phone-server",
+        "sources": [
+          "phone"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-phone-server-label",
+            "text": "online status",
+            "width": 117.39999999999999,
+            "height": 30,
+            "x": 28,
+            "y": 158
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-phone-server_s0",
+            "startPoint": {
+              "x": 147.39999999999998,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 147.39999999999998,
+              "y": 267
+            },
+            "incomingShape": "phone",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 147.39999999999998 99 L 147.39999999999998 267"
+      },
+      {
+        "id": "e-select",
+        "sources": [
+          "phone"
+        ],
+        "targets": [
+          "action"
+        ],
+        "labels": [
+          {
+            "id": "e-select-label",
+            "text": "POST /devices/{id}/actions",
+            "width": 218.79999999999998,
+            "height": 30,
+            "x": 168.39999999999995,
+            "y": 158
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-select_s0",
+            "startPoint": {
+              "x": 224.06666666666666,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 389.19999999999993,
+              "y": 267
+            },
+            "bendPoints": [
+              {
+                "x": 224.06666666666666,
+                "y": 124
+              },
+              {
+                "x": 389.19999999999993,
+                "y": 124
+              }
+            ],
+            "incomingShape": "phone",
+            "outgoingShape": "action"
+          }
+        ],
+        "container": "root",
+        "path": "M 224.06666666666666 99 L 224.06666666666666 124 L 389.19999999999993 124 L 389.19999999999993 267"
+      },
+      {
+        "id": "e-action-tvos",
+        "sources": [
+          "action"
+        ],
+        "targets": [
+          "tvos"
+        ],
+        "labels": [
+          {
+            "id": "e-action-tvos-label",
+            "text": "GET /devices/{id}/actions",
+            "width": 211,
+            "height": 30,
+            "x": 639.3999999999999,
+            "y": 158
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-action-tvos_s0",
+            "startPoint": {
+              "x": 504.19999999999993,
+              "y": 267
+            },
+            "endPoint": {
+              "x": 692.0666666666666,
+              "y": 99
+            },
+            "bendPoints": [
+              {
+                "x": 504.19999999999993,
+                "y": 242
+              },
+              {
+                "x": 636.3999999999999,
+                "y": 242
+              },
+              {
+                "x": 636.3999999999999,
+                "y": 124
+              },
+              {
+                "x": 692.0666666666666,
+                "y": 124
+              }
+            ],
+            "incomingShape": "action",
+            "outgoingShape": "tvos"
+          }
+        ],
+        "container": "root",
+        "path": "M 504.19999999999993 267 L 504.19999999999993 242 L 636.3999999999999 242 L 636.3999999999999 124 L 692.0666666666666 124 L 692.0666666666666 99"
+      },
+      {
+        "id": "e-tvos-action",
+        "sources": [
+          "tvos"
+        ],
+        "targets": [
+          "action"
+        ],
+        "labels": [
+          {
+            "id": "e-tvos-action-label",
+            "text": "PATCH accepted → session\ndata",
+            "width": 203.2,
+            "height": 48,
+            "x": 410.1999999999999,
+            "y": 149
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-tvos-action_s0",
+            "startPoint": {
+              "x": 615.3999999999999,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 446.69999999999993,
+              "y": 267
+            },
+            "bendPoints": [
+              {
+                "x": 615.3999999999999,
+                "y": 222
+              },
+              {
+                "x": 446.69999999999993,
+                "y": 222
+              }
+            ],
+            "incomingShape": "tvos",
+            "outgoingShape": "action"
+          }
+        ],
+        "container": "root",
+        "path": "M 615.3999999999999 99 L 615.3999999999999 222 L 446.69999999999993 222 L 446.69999999999993 267"
+      }
+    ]
+  },
+  "Ways to sign in": {
+    "width": 653.2,
+    "height": 721,
+    "nodes": [
+      {
+        "id": "apps",
+        "width": 230,
+        "height": 88,
+        "$H": 1771,
+        "x": 78.53333333333332,
+        "y": 28,
+        "title": [
+          "iPhone, iPad, Apple TV"
+        ],
+        "sub": [
+          "show a code, get their own",
+          "token"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "browser",
+        "width": 230,
+        "height": 88,
+        "$H": 1773,
+        "x": 78.53333333333332,
+        "y": 216,
+        "title": [
+          "You, in a browser"
+        ],
+        "sub": [
+          "web app, setup wizard, code",
+          "approval"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "idp",
+        "width": 230,
+        "height": 88,
+        "$H": 1775,
+        "x": 335.2,
+        "y": 419,
+        "title": [
+          "Your identity provider"
+        ],
+        "sub": [
+          "Authentik · Authelia ·",
+          "Keycloak"
+        ],
+        "kind": "ext"
+      },
+      {
+        "id": "native",
+        "width": 230,
+        "height": 71,
+        "$H": 1777,
+        "x": 40.19999999999999,
+        "y": 427.5,
+        "title": [
+          "Built-in accounts"
+        ],
+        "sub": [
+          "username and password"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "lumastra",
+        "width": 230,
+        "height": 71,
+        "$H": 1779,
+        "x": 78.53333333333332,
+        "y": 622,
+        "title": [
+          "Lumastra"
+        ],
+        "sub": [
+          "same account, whichever way"
+        ],
+        "kind": "app"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-apps-browser",
+        "sources": [
+          "apps"
+        ],
+        "targets": [
+          "browser"
+        ],
+        "labels": [
+          {
+            "id": "e-apps-browser-label",
+            "text": "approve the code",
+            "width": 140.8,
+            "height": 30,
+            "x": 50.73333333333329,
+            "y": 151
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-apps-browser_s0",
+            "startPoint": {
+              "x": 193.5333333333333,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 193.5333333333333,
+              "y": 216
+            },
+            "incomingShape": "apps",
+            "outgoingShape": "browser"
+          }
+        ],
+        "container": "root",
+        "path": "M 193.5333333333333 116 L 193.5333333333333 216"
+      },
+      {
+        "id": "e-browser-idp",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "idp"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-idp-label",
+            "text": "forward auth or OIDC",
+            "width": 172,
+            "height": 30,
+            "x": 453.2,
+            "y": 354
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-idp_s0",
+            "startPoint": {
+              "x": 231.86666666666667,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 450.2,
+              "y": 419
+            },
+            "bendPoints": [
+              {
+                "x": 231.86666666666667,
+                "y": 329
+              },
+              {
+                "x": 450.2,
+                "y": 329
+              }
+            ],
+            "incomingShape": "browser",
+            "outgoingShape": "idp"
+          }
+        ],
+        "container": "root",
+        "path": "M 231.86666666666667 304 L 231.86666666666667 329 L 450.2 329 L 450.2 419"
+      },
+      {
+        "id": "e-browser-native",
+        "sources": [
+          "browser"
+        ],
+        "targets": [
+          "native"
+        ],
+        "labels": [
+          {
+            "id": "e-browser-native-label",
+            "text": "built-in login",
+            "width": 125.2,
+            "height": 30,
+            "x": 27.999999999999986,
+            "y": 354
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-browser-native_s0",
+            "startPoint": {
+              "x": 155.2,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 155.2,
+              "y": 427.5
+            },
+            "incomingShape": "browser",
+            "outgoingShape": "native"
+          }
+        ],
+        "container": "root",
+        "path": "M 155.2 304 L 155.2 427.5"
+      },
+      {
+        "id": "e-idp-lumastra",
+        "sources": [
+          "idp"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-idp-lumastra-label",
+            "text": "user and groups",
+            "width": 133,
+            "height": 30,
+            "x": 453.2,
+            "y": 542
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-idp-lumastra_s0",
+            "startPoint": {
+              "x": 450.2,
+              "y": 507
+            },
+            "endPoint": {
+              "x": 231.86666666666667,
+              "y": 622
+            },
+            "bendPoints": [
+              {
+                "x": 450.2,
+                "y": 597
+              },
+              {
+                "x": 231.86666666666667,
+                "y": 597
+              }
+            ],
+            "incomingShape": "idp",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 450.2 507 L 450.2 597 L 231.86666666666667 597 L 231.86666666666667 622"
+      },
+      {
+        "id": "e-native-lumastra",
+        "sources": [
+          "native"
+        ],
+        "targets": [
+          "lumastra"
+        ],
+        "labels": [
+          {
+            "id": "e-native-lumastra-label",
+            "text": "password",
+            "width": 78.4,
+            "height": 30,
+            "x": 74.79999999999998,
+            "y": 542
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-native-lumastra_s0",
+            "startPoint": {
+              "x": 155.2,
+              "y": 498.5
+            },
+            "endPoint": {
+              "x": 155.2,
+              "y": 622
+            },
+            "incomingShape": "native",
+            "outgoingShape": "lumastra"
+          }
+        ],
+        "container": "root",
+        "path": "M 155.2 498.5 L 155.2 622"
+      }
+    ]
+  },
+  "Task execution pipeline": {
+    "width": 321.6,
+    "height": 896,
+    "nodes": [
+      {
+        "id": "triggers",
+        "width": 230,
+        "height": 88,
+        "$H": 1849,
+        "x": 63.599999999999994,
+        "y": 28,
+        "title": [
+          "Triggers"
+        ],
+        "sub": [
+          "scheduler · event · manual ·",
+          "webhook"
+        ],
+        "kind": "source"
+      },
+      {
+        "id": "orchestrator",
+        "width": 230,
+        "height": 88,
+        "$H": 1851,
+        "x": 63.599999999999994,
+        "y": 216,
+        "title": [
+          "Orchestrator"
+        ],
+        "sub": [
+          "leader election · dedup ·",
+          "circuit breaker"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "queues",
+        "width": 230,
+        "height": 88,
+        "$H": 1853,
+        "x": 63.599999999999994,
+        "y": 404,
+        "title": [
+          "BullMQ queues"
+        ],
+        "sub": [
+          "resource classes ·",
+          "concurrency caps"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "worker",
+        "width": 230,
+        "height": 88,
+        "$H": 1855,
+        "x": 63.599999999999994,
+        "y": 592,
+        "title": [
+          "Worker"
+        ],
+        "sub": [
+          "claim · run stages ·",
+          "heartbeat"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "stages",
+        "width": 230,
+        "height": 88,
+        "$H": 1857,
+        "x": 63.599999999999994,
+        "y": 780,
+        "title": [
+          "Pipeline stages"
+        ],
+        "sub": [
+          "per-item coverage ·",
+          "invalidation events"
+        ],
+        "kind": "default"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-trig-orch",
+        "sources": [
+          "triggers"
+        ],
+        "targets": [
+          "orchestrator"
+        ],
+        "labels": [
+          {
+            "id": "e-trig-orch-label",
+            "text": "startRun()",
+            "width": 94,
+            "height": 30,
+            "x": 82.6,
+            "y": 151
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-trig-orch_s0",
+            "startPoint": {
+              "x": 178.6,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 178.6,
+              "y": 216
+            },
+            "incomingShape": "triggers",
+            "outgoingShape": "orchestrator"
+          }
+        ],
+        "container": "root",
+        "path": "M 178.6 116 L 178.6 216"
+      },
+      {
+        "id": "e-orch-q",
+        "sources": [
+          "orchestrator"
+        ],
+        "targets": [
+          "queues"
+        ],
+        "labels": [
+          {
+            "id": "e-orch-q-label",
+            "text": "enqueue",
+            "width": 70.6,
+            "height": 30,
+            "x": 106,
+            "y": 339
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-orch-q_s0",
+            "startPoint": {
+              "x": 178.6,
+              "y": 304
+            },
+            "endPoint": {
+              "x": 178.6,
+              "y": 404
+            },
+            "incomingShape": "orchestrator",
+            "outgoingShape": "queues"
+          }
+        ],
+        "container": "root",
+        "path": "M 178.6 304 L 178.6 404"
+      },
+      {
+        "id": "e-q-worker",
+        "sources": [
+          "queues"
+        ],
+        "targets": [
+          "worker"
+        ],
+        "labels": [
+          {
+            "id": "e-q-worker-label",
+            "text": "dispatch",
+            "width": 78.4,
+            "height": 30,
+            "x": 98.19999999999999,
+            "y": 527
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-q-worker_s0",
+            "startPoint": {
+              "x": 178.6,
+              "y": 492
+            },
+            "endPoint": {
+              "x": 178.6,
+              "y": 592
+            },
+            "incomingShape": "queues",
+            "outgoingShape": "worker"
+          }
+        ],
+        "container": "root",
+        "path": "M 178.6 492 L 178.6 592"
+      },
+      {
+        "id": "e-worker-stages",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "stages"
+        ],
+        "labels": [
+          {
+            "id": "e-worker-stages-label",
+            "text": "stage transitions",
+            "width": 148.6,
+            "height": 30,
+            "x": 28,
+            "y": 715
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-worker-stages_s0",
+            "startPoint": {
+              "x": 178.6,
+              "y": 680
+            },
+            "endPoint": {
+              "x": 178.6,
+              "y": 780
+            },
+            "incomingShape": "worker",
+            "outgoingShape": "stages"
+          }
+        ],
+        "container": "root",
+        "path": "M 178.6 680 L 178.6 780"
+      }
+    ]
+  },
+  "Task state transitions": {
+    "width": 1285.6,
+    "height": 725,
+    "nodes": [
+      {
+        "id": "pending",
+        "width": 230,
+        "height": 71,
+        "$H": 1916,
+        "x": 855.5,
+        "y": 28,
+        "title": [
+          "pending"
+        ],
+        "sub": [
+          "queued, waiting for a slot"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "active",
+        "width": 230,
+        "height": 71,
+        "$H": 1918,
+        "x": 855.5,
+        "y": 199,
+        "title": [
+          "active"
+        ],
+        "sub": [
+          "running"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "cancelling",
+        "width": 230,
+        "height": 88,
+        "$H": 1920,
+        "x": 913,
+        "y": 405,
+        "title": [
+          "cancelling"
+        ],
+        "sub": [
+          "Stop requested, waiting to",
+          "exit"
+        ],
+        "kind": "proxy"
+      },
+      {
+        "id": "completed",
+        "width": 230,
+        "height": 71,
+        "$H": 1922,
+        "x": 323,
+        "y": 405,
+        "title": [
+          "completed"
+        ],
+        "sub": [
+          "terminal"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "failed",
+        "width": 230,
+        "height": 71,
+        "$H": 1924,
+        "x": 28,
+        "y": 405,
+        "title": [
+          "failed"
+        ],
+        "sub": [
+          "terminal"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "cancelled",
+        "width": 230,
+        "height": 71,
+        "$H": 1926,
+        "x": 874.6666666666666,
+        "y": 626,
+        "title": [
+          "cancelled"
+        ],
+        "sub": [
+          "terminal"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "forcestop",
+        "width": 230,
+        "height": 88,
+        "$H": 1928,
+        "x": 618,
+        "y": 405,
+        "title": [
+          "Force stop"
+        ],
+        "sub": [
+          "abandons the job",
+          "immediately, mid-write"
+        ],
+        "kind": "ext"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-pending-active",
+        "sources": [
+          "pending"
+        ],
+        "targets": [
+          "active"
+        ],
+        "labels": [
+          {
+            "id": "e-pending-active-label",
+            "text": "a worker picks it up",
+            "width": 172,
+            "height": 30,
+            "x": 796.5,
+            "y": 134
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pending-active_s0",
+            "startPoint": {
+              "x": 970.5,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 970.5,
+              "y": 199
+            },
+            "incomingShape": "pending",
+            "outgoingShape": "active"
+          }
+        ],
+        "container": "root",
+        "path": "M 970.5 99 L 970.5 199"
+      },
+      {
+        "id": "e-active-completed",
+        "sources": [
+          "active"
+        ],
+        "targets": [
+          "completed"
+        ],
+        "labels": [
+          {
+            "id": "e-active-completed-label",
+            "text": "finishes",
+            "width": 78.4,
+            "height": 30,
+            "x": 357.6,
+            "y": 340
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-active-completed_s0",
+            "startPoint": {
+              "x": 970.5,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 405
+            },
+            "bendPoints": [
+              {
+                "x": 970.5,
+                "y": 315
+              },
+              {
+                "x": 438,
+                "y": 315
+              }
+            ],
+            "incomingShape": "active",
+            "outgoingShape": "completed"
+          }
+        ],
+        "container": "root",
+        "path": "M 970.5 270 L 970.5 315 L 438 315 L 438 405"
+      },
+      {
+        "id": "e-active-failed",
+        "sources": [
+          "active"
+        ],
+        "targets": [
+          "failed"
+        ],
+        "labels": [
+          {
+            "id": "e-active-failed-label",
+            "text": "throws",
+            "width": 62.8,
+            "height": 30,
+            "x": 78.20000000000005,
+            "y": 340
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-active-failed_s0",
+            "startPoint": {
+              "x": 913,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 143,
+              "y": 405
+            },
+            "bendPoints": [
+              {
+                "x": 913,
+                "y": 295
+              },
+              {
+                "x": 143,
+                "y": 295
+              }
+            ],
+            "incomingShape": "active",
+            "outgoingShape": "failed"
+          }
+        ],
+        "container": "root",
+        "path": "M 913 270 L 913 295 L 143 295 L 143 405"
+      },
+      {
+        "id": "e-active-cancelling",
+        "sources": [
+          "active"
+        ],
+        "targets": [
+          "cancelling"
+        ],
+        "labels": [
+          {
+            "id": "e-active-cancelling-label",
+            "text": "Stop",
+            "width": 47.2,
+            "height": 30,
+            "x": 978.8,
+            "y": 340
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-active-cancelling_s0",
+            "startPoint": {
+              "x": 1028,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 1028,
+              "y": 405
+            },
+            "incomingShape": "active",
+            "outgoingShape": "cancelling"
+          }
+        ],
+        "container": "root",
+        "path": "M 1028 270 L 1028 405"
+      },
+      {
+        "id": "e-cancelling-cancelled",
+        "sources": [
+          "cancelling"
+        ],
+        "targets": [
+          "cancelled"
+        ],
+        "labels": [
+          {
+            "id": "e-cancelling-cancelled-label",
+            "text": "task notices, exits cleanly",
+            "width": 226.6,
+            "height": 30,
+            "x": 1031,
+            "y": 537
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-cancelling-cancelled_s0",
+            "startPoint": {
+              "x": 1028,
+              "y": 493
+            },
+            "endPoint": {
+              "x": 1028,
+              "y": 626
+            },
+            "incomingShape": "cancelling",
+            "outgoingShape": "cancelled"
+          }
+        ],
+        "container": "root",
+        "path": "M 1028 493 L 1028 626"
+      },
+      {
+        "id": "e-forcestop-cancelled",
+        "sources": [
+          "forcestop"
+        ],
+        "targets": [
+          "cancelled"
+        ],
+        "labels": [
+          {
+            "id": "e-forcestop-cancelled-label",
+            "text": "skips cleanup — only enabled\nonce cancelling",
+            "width": 234.4,
+            "height": 48,
+            "x": 496.6,
+            "y": 528
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-forcestop-cancelled_s0",
+            "startPoint": {
+              "x": 733,
+              "y": 493
+            },
+            "endPoint": {
+              "x": 951.3333333333333,
+              "y": 626
+            },
+            "bendPoints": [
+              {
+                "x": 733,
+                "y": 601
+              },
+              {
+                "x": 951.3333333333333,
+                "y": 601
+              }
+            ],
+            "incomingShape": "forcestop",
+            "outgoingShape": "cancelled"
+          }
+        ],
+        "container": "root",
+        "path": "M 733 493 L 733 601 L 951.3333333333333 601 L 951.3333333333333 626"
+      }
+    ]
+  },
+  "Task state and persistence": {
+    "width": 779.7333333333333,
+    "height": 568,
+    "nodes": [
+      {
+        "id": "writers",
+        "width": 230,
+        "height": 71,
+        "$H": 2013,
+        "x": 365.73333333333335,
+        "y": 45,
+        "title": [
+          "Orchestrator + worker"
+        ],
+        "sub": [
+          "write run & stage state"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "reconciler",
+        "width": 230,
+        "height": 88,
+        "$H": 2015,
+        "x": 70.73333333333332,
+        "y": 28,
+        "title": [
+          "Reconciler"
+        ],
+        "sub": [
+          "heartbeat-age + Valkey",
+          "state-hash guard · 30s sweep"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "postgres",
+        "width": 230,
+        "height": 88,
+        "$H": 2017,
+        "x": 521.7333333333333,
+        "y": 266,
+        "title": [
+          "Postgres"
+        ],
+        "sub": [
+          "task_history · stage_state ·",
+          "source of truth"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 2019,
+        "x": 70.73333333333332,
+        "y": 266,
+        "title": [
+          "Valkey"
+        ],
+        "sub": [
+          "queues · run hashes · locks",
+          "· hot cache"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "adminui",
+        "width": 230,
+        "height": 71,
+        "$H": 2021,
+        "x": 109.06666666666665,
+        "y": 469,
+        "title": [
+          "Admin operations"
+        ],
+        "sub": [
+          "runs · coverage · attention"
+        ],
+        "kind": "viewer"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-w-pg",
+        "sources": [
+          "writers"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [
+          {
+            "id": "e-w-pg-label",
+            "text": "write-first",
+            "width": 101.8,
+            "height": 30,
+            "x": 619.4000000000001,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-w-pg_s0",
+            "startPoint": {
+              "x": 519.0666666666667,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 675.0666666666667,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 519.0666666666667,
+                "y": 141
+              },
+              {
+                "x": 723.2,
+                "y": 141
+              },
+              {
+                "x": 723.2,
+                "y": 241
+              },
+              {
+                "x": 675.0666666666667,
+                "y": 241
+              }
+            ],
+            "incomingShape": "writers",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 519.0666666666667 116 L 519.0666666666667 141 L 723.2 141 L 723.2 241 L 675.0666666666667 241 L 675.0666666666667 266"
+      },
+      {
+        "id": "e-w-vk",
+        "sources": [
+          "writers"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-w-vk-label",
+            "text": "hot state",
+            "width": 86.2,
+            "height": 30,
+            "x": 354.20000000000005,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-w-vk_s0",
+            "startPoint": {
+              "x": 442.40000000000003,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 224.06666666666666,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 442.40000000000003,
+                "y": 241
+              },
+              {
+                "x": 224.06666666666666,
+                "y": 241
+              }
+            ],
+            "incomingShape": "writers",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 442.40000000000003 116 L 442.40000000000003 241 L 224.06666666666666 241 L 224.06666666666666 266"
+      },
+      {
+        "id": "e-r-pg",
+        "sources": [
+          "reconciler"
+        ],
+        "targets": [
+          "postgres"
+        ],
+        "labels": [
+          {
+            "id": "e-r-pg-label",
+            "text": "reclaim orphans",
+            "width": 133,
+            "height": 30,
+            "x": 463.4000000000001,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-r-pg_s0",
+            "startPoint": {
+              "x": 224.06666666666666,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 598.4,
+              "y": 266
+            },
+            "bendPoints": [
+              {
+                "x": 224.06666666666666,
+                "y": 161
+              },
+              {
+                "x": 598.4000000000001,
+                "y": 161
+              }
+            ],
+            "incomingShape": "reconciler",
+            "outgoingShape": "postgres"
+          }
+        ],
+        "container": "root",
+        "path": "M 224.06666666666666 116 L 224.06666666666666 161 L 598.4000000000001 161 L 598.4 266"
+      },
+      {
+        "id": "e-r-vk",
+        "sources": [
+          "reconciler"
+        ],
+        "targets": [
+          "valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-r-vk-label",
+            "text": "check signals",
+            "width": 117.39999999999999,
+            "height": 30,
+            "x": 28,
+            "y": 186
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-r-vk_s0",
+            "startPoint": {
+              "x": 147.39999999999998,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 147.39999999999998,
+              "y": 266
+            },
+            "incomingShape": "reconciler",
+            "outgoingShape": "valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 147.39999999999998 116 L 147.39999999999998 266"
+      },
+      {
+        "id": "e-pg-admin",
+        "sources": [
+          "postgres"
+        ],
+        "targets": [
+          "adminui"
+        ],
+        "labels": [
+          {
+            "id": "e-pg-admin-label",
+            "text": "reads",
+            "width": 55,
+            "height": 30,
+            "x": 639.7333333333333,
+            "y": 389
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pg-admin_s0",
+            "startPoint": {
+              "x": 636.7333333333333,
+              "y": 354
+            },
+            "endPoint": {
+              "x": 262.4,
+              "y": 469
+            },
+            "bendPoints": [
+              {
+                "x": 636.7333333333333,
+                "y": 444
+              },
+              {
+                "x": 262.4,
+                "y": 444
+              }
+            ],
+            "incomingShape": "postgres",
+            "outgoingShape": "adminui"
+          }
+        ],
+        "container": "root",
+        "path": "M 636.7333333333333 354 L 636.7333333333333 444 L 262.4 444 L 262.4 469"
+      },
+      {
+        "id": "e-vk-admin",
+        "sources": [
+          "valkey"
+        ],
+        "targets": [
+          "adminui"
+        ],
+        "labels": [
+          {
+            "id": "e-vk-admin-label",
+            "text": "live runs",
+            "width": 86.2,
+            "height": 30,
+            "x": 97.53333333333332,
+            "y": 389
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-vk-admin_s0",
+            "startPoint": {
+              "x": 185.73333333333332,
+              "y": 354
+            },
+            "endPoint": {
+              "x": 185.73333333333332,
+              "y": 469
+            },
+            "incomingShape": "valkey",
+            "outgoingShape": "adminui"
+          }
+        ],
+        "container": "root",
+        "path": "M 185.73333333333332 354 L 185.73333333333332 469"
+      }
+    ]
+  },
+  "Buffer-gated resume": {
+    "width": 876,
+    "height": 692,
+    "nodes": [
+      {
+        "id": "host",
+        "width": 230,
+        "height": 71,
+        "$H": 2103,
+        "x": 28,
+        "y": 48,
+        "title": [
+          "Host"
+        ],
+        "sub": [
+          "playing"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "guest",
+        "width": 230,
+        "height": 71,
+        "$H": 2105,
+        "x": 618,
+        "y": 48,
+        "title": [
+          "Guest"
+        ],
+        "sub": [
+          "joining"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "server",
+        "width": 230,
+        "height": 71,
+        "$H": 2107,
+        "x": 307.6666666666667,
+        "y": 234,
+        "title": [
+          "Server"
+        ],
+        "sub": [
+          "broadcasts buffer_check"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "pause",
+        "width": 230,
+        "height": 91,
+        "$H": 2109,
+        "x": 323,
+        "y": 28,
+        "title": [
+          "All pause + seek +",
+          "buffer"
+        ],
+        "sub": [
+          "each sends ready"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "allready",
+        "width": 230,
+        "height": 71,
+        "$H": 2111,
+        "x": 307.6666666666667,
+        "y": 405,
+        "title": [
+          "all_ready"
+        ],
+        "sub": [
+          "resumeAt = now + ~1.5 s"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "resume",
+        "width": 230,
+        "height": 88,
+        "$H": 2113,
+        "x": 307.6666666666667,
+        "y": 576,
+        "title": [
+          "All resume"
+        ],
+        "sub": [
+          "play at resumeAt if still at",
+          "target"
+        ],
+        "kind": "default"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-host-server",
+        "sources": [
+          "host"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-host-server-label",
+            "text": "POST join",
+            "width": 86.2,
+            "height": 30,
+            "x": 54.8,
+            "y": 154
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-host-server_s0",
+            "startPoint": {
+              "x": 143,
+              "y": 119
+            },
+            "endPoint": {
+              "x": 353.6666666666667,
+              "y": 234
+            },
+            "bendPoints": [
+              {
+                "x": 143,
+                "y": 209
+              },
+              {
+                "x": 353.6666666666667,
+                "y": 209
+              }
+            ],
+            "incomingShape": "host",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 143 119 L 143 209 L 353.6666666666667 209 L 353.6666666666667 234"
+      },
+      {
+        "id": "e-guest-server",
+        "sources": [
+          "guest"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-guest-server-label",
+            "text": "POST join",
+            "width": 86.2,
+            "height": 30,
+            "x": 644.8,
+            "y": 154
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-guest-server_s0",
+            "startPoint": {
+              "x": 733,
+              "y": 119
+            },
+            "endPoint": {
+              "x": 491.6666666666667,
+              "y": 234
+            },
+            "bendPoints": [
+              {
+                "x": 733,
+                "y": 209
+              },
+              {
+                "x": 491.6666666666667,
+                "y": 209
+              }
+            ],
+            "incomingShape": "guest",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 733 119 L 733 209 L 491.6666666666667 209 L 491.6666666666667 234"
+      },
+      {
+        "id": "e-server-pause",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "pause"
+        ],
+        "labels": [
+          {
+            "id": "e-server-pause-label",
+            "text": "buffer_check",
+            "width": 109.6,
+            "height": 30,
+            "x": 479.33333333333337,
+            "y": 154
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-server-pause_s0",
+            "startPoint": {
+              "x": 445.6666666666667,
+              "y": 234
+            },
+            "endPoint": {
+              "x": 476.33333333333337,
+              "y": 119
+            },
+            "bendPoints": [
+              {
+                "x": 445.6666666666667,
+                "y": 209
+              },
+              {
+                "x": 476.33333333333337,
+                "y": 209
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "pause"
+          }
+        ],
+        "container": "root",
+        "path": "M 445.6666666666667 234 L 445.6666666666667 209 L 476.33333333333337 209 L 476.33333333333337 119"
+      },
+      {
+        "id": "e-pause-server",
+        "sources": [
+          "pause"
+        ],
+        "targets": [
+          "server"
+        ],
+        "labels": [
+          {
+            "id": "e-pause-server-label",
+            "text": "POST ready (×N)",
+            "width": 133,
+            "height": 30,
+            "x": 264.6666666666667,
+            "y": 154
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-pause-server_s0",
+            "startPoint": {
+              "x": 399.6666666666667,
+              "y": 119
+            },
+            "endPoint": {
+              "x": 399.6666666666667,
+              "y": 234
+            },
+            "incomingShape": "pause",
+            "outgoingShape": "server"
+          }
+        ],
+        "container": "root",
+        "path": "M 399.6666666666667 119 L 399.6666666666667 234"
+      },
+      {
+        "id": "e-server-allready",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "allready"
+        ],
+        "labels": [
+          {
+            "id": "e-server-allready-label",
+            "text": "all ready",
+            "width": 86.2,
+            "height": 30,
+            "x": 334.4666666666667,
+            "y": 340
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-server-allready_s0",
+            "startPoint": {
+              "x": 422.6666666666667,
+              "y": 305
+            },
+            "endPoint": {
+              "x": 422.6666666666667,
+              "y": 405
+            },
+            "incomingShape": "server",
+            "outgoingShape": "allready"
+          }
+        ],
+        "container": "root",
+        "path": "M 422.6666666666667 305 L 422.6666666666667 405"
+      },
+      {
+        "id": "e-allready-resume",
+        "sources": [
+          "allready"
+        ],
+        "targets": [
+          "resume"
+        ],
+        "labels": [
+          {
+            "id": "e-allready-resume-label",
+            "text": "resumeAt",
+            "width": 78.4,
+            "height": 30,
+            "x": 342.26666666666665,
+            "y": 511
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-allready-resume_s0",
+            "startPoint": {
+              "x": 422.6666666666667,
+              "y": 476
+            },
+            "endPoint": {
+              "x": 422.6666666666667,
+              "y": 576
+            },
+            "incomingShape": "allready",
+            "outgoingShape": "resume"
+          }
+        ],
+        "container": "root",
+        "path": "M 422.6666666666667 476 L 422.6666666666667 576"
+      }
+    ]
+  },
+  "Playback during a rolling update": {
+    "width": 690.8666666666667,
+    "height": 685,
+    "nodes": [
+      {
+        "id": "client",
+        "width": 230,
+        "height": 71,
+        "$H": 2196,
+        "x": 66.33333333333333,
+        "y": 28,
+        "title": [
+          "Viewer"
+        ],
+        "sub": [
+          "mid-playback"
+        ],
+        "kind": "viewer"
+      },
+      {
+        "id": "proxy",
+        "width": 230,
+        "height": 71,
+        "$H": 2198,
+        "x": 66.33333333333333,
+        "y": 199,
+        "title": [
+          "Sticky proxy"
+        ],
+        "sub": [
+          "fails over on error"
+        ],
+        "kind": "default"
+      },
+      {
+        "id": "webA",
+        "width": 230,
+        "height": 71,
+        "$H": 2200,
+        "x": 28,
+        "y": 385,
+        "title": [
+          "Web replica A"
+        ],
+        "sub": [
+          "being replaced"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "webB",
+        "width": 230,
+        "height": 71,
+        "$H": 2202,
+        "x": 323,
+        "y": 385,
+        "title": [
+          "Web replica B"
+        ],
+        "sub": [
+          "healthy · serving"
+        ],
+        "kind": "app"
+      },
+      {
+        "id": "cache",
+        "width": 230,
+        "height": 71,
+        "$H": 2204,
+        "x": 66.33333333333333,
+        "y": 586,
+        "title": [
+          "Shared transcode cache"
+        ],
+        "sub": [
+          "TRANSCODE_TEMP_DIR · RWX"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "db",
+        "width": 230,
+        "height": 71,
+        "$H": 2206,
+        "x": 432.8666666666667,
+        "y": 586,
+        "title": [
+          "PostgreSQL"
+        ],
+        "sub": [
+          "session state · resumable"
+        ],
+        "kind": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-client-proxy",
+        "sources": [
+          "client"
+        ],
+        "targets": [
+          "proxy"
+        ],
+        "labels": [
+          {
+            "id": "e-client-proxy-label",
+            "text": "stream_token",
+            "width": 109.6,
+            "height": 30,
+            "x": 69.73333333333332,
+            "y": 134
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-client-proxy_s0",
+            "startPoint": {
+              "x": 181.33333333333331,
+              "y": 99
+            },
+            "endPoint": {
+              "x": 181.33333333333331,
+              "y": 199
+            },
+            "incomingShape": "client",
+            "outgoingShape": "proxy"
+          }
+        ],
+        "container": "root",
+        "path": "M 181.33333333333331 99 L 181.33333333333331 199"
+      },
+      {
+        "id": "e-proxy-webA",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "webA"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-webA-label",
+            "text": "draining",
+            "width": 78.4,
+            "height": 30,
+            "x": 62.599999999999994,
+            "y": 320
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-webA_s0",
+            "startPoint": {
+              "x": 143,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 143,
+              "y": 385
+            },
+            "incomingShape": "proxy",
+            "outgoingShape": "webA"
+          }
+        ],
+        "container": "root",
+        "path": "M 143 270 L 143 385"
+      },
+      {
+        "id": "e-proxy-webB",
+        "sources": [
+          "proxy"
+        ],
+        "targets": [
+          "webB"
+        ],
+        "labels": [
+          {
+            "id": "e-proxy-webB-label",
+            "text": "fails over here",
+            "width": 133,
+            "height": 30,
+            "x": 441,
+            "y": 320
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-proxy-webB_s0",
+            "startPoint": {
+              "x": 219.66666666666669,
+              "y": 270
+            },
+            "endPoint": {
+              "x": 438,
+              "y": 385
+            },
+            "bendPoints": [
+              {
+                "x": 219.66666666666669,
+                "y": 295
+              },
+              {
+                "x": 438,
+                "y": 295
+              }
+            ],
+            "incomingShape": "proxy",
+            "outgoingShape": "webB"
+          }
+        ],
+        "container": "root",
+        "path": "M 219.66666666666669 270 L 219.66666666666669 295 L 438 295 L 438 385"
+      },
+      {
+        "id": "e-webA-cache",
+        "sources": [
+          "webA"
+        ],
+        "targets": [
+          "cache"
+        ],
+        "labels": [],
+        "sections": [
+          {
+            "id": "e-webA-cache_s0",
+            "startPoint": {
+              "x": 143,
+              "y": 456
+            },
+            "endPoint": {
+              "x": 143,
+              "y": 586
+            },
+            "incomingShape": "webA",
+            "outgoingShape": "cache"
+          }
+        ],
+        "container": "root",
+        "path": "M 143 456 L 143 586"
+      },
+      {
+        "id": "e-webB-cache",
+        "sources": [
+          "webB"
+        ],
+        "targets": [
+          "cache"
+        ],
+        "labels": [
+          {
+            "id": "e-webB-cache-label",
+            "text": "resumes segments",
+            "width": 140.8,
+            "height": 30,
+            "x": 256.8666666666667,
+            "y": 506
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-webB-cache_s0",
+            "startPoint": {
+              "x": 399.6666666666667,
+              "y": 456
+            },
+            "endPoint": {
+              "x": 219.66666666666669,
+              "y": 586
+            },
+            "bendPoints": [
+              {
+                "x": 399.6666666666667,
+                "y": 561
+              },
+              {
+                "x": 219.66666666666669,
+                "y": 561
+              }
+            ],
+            "incomingShape": "webB",
+            "outgoingShape": "cache"
+          }
+        ],
+        "container": "root",
+        "path": "M 399.6666666666667 456 L 399.6666666666667 561 L 219.66666666666669 561 L 219.66666666666669 586"
+      },
+      {
+        "id": "e-webB-db",
+        "sources": [
+          "webB"
+        ],
+        "targets": [
+          "db"
+        ],
+        "labels": [
+          {
+            "id": "e-webB-db-label",
+            "text": "claims session",
+            "width": 125.2,
+            "height": 30,
+            "x": 420.6666666666667,
+            "y": 506
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-webB-db_s0",
+            "startPoint": {
+              "x": 476.33333333333337,
+              "y": 456
+            },
+            "endPoint": {
+              "x": 547.8666666666667,
+              "y": 586
+            },
+            "bendPoints": [
+              {
+                "x": 476.33333333333337,
+                "y": 481
+              },
+              {
+                "x": 547.8666666666667,
+                "y": 481
+              }
+            ],
+            "incomingShape": "webB",
+            "outgoingShape": "db"
+          }
+        ],
+        "container": "root",
+        "path": "M 476.33333333333337 456 L 476.33333333333337 481 L 547.8666666666667 481 L 547.8666666666667 586"
+      }
+    ]
+  }
+}

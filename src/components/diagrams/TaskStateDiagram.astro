@@ -1,0 +1,23 @@
+---
+	import ArchDiagram from './ArchDiagram.astro';
+	import type { Node, Edge } from '@xyflow/svelte';
+
+	const nodes: Node[] = [
+		{ id: 'writers', type: 'flow', position: { x: 150, y: 0 }, data: { title: 'Orchestrator + worker', sub: 'write run & stage state', kind: 'app', hasSource: true } },
+		{ id: 'reconciler', type: 'flow', position: { x: 470, y: 0 }, data: { title: 'Reconciler', sub: 'heartbeat-age + Valkey state-hash guard · 30s sweep', kind: 'app', hasSource: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 40, y: 190 }, data: { title: 'Postgres', sub: 'task_history · stage_state · source of truth', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 380, y: 190 }, data: { title: 'Valkey', sub: 'queues · run hashes · locks · hot cache', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'adminui', type: 'flow', position: { x: 215, y: 380 }, data: { title: 'Admin operations', sub: 'runs · coverage · attention', kind: 'viewer', hasTarget: true } },
+	];
+
+	const edges: Edge[] = [
+		{ id: 'e-w-pg', source: 'writers', target: 'postgres', label: 'write-first' },
+		{ id: 'e-w-vk', source: 'writers', target: 'valkey', label: 'hot state' },
+		{ id: 'e-r-pg', source: 'reconciler', target: 'postgres', label: 'reclaim orphans' },
+		{ id: 'e-r-vk', source: 'reconciler', target: 'valkey', label: 'check signals' },
+		{ id: 'e-pg-admin', source: 'postgres', target: 'adminui', label: 'reads' },
+		{ id: 'e-vk-admin', source: 'valkey', target: 'adminui', label: 'live runs' },
+	];
+---
+
+<ArchDiagram nodes={nodes} edges={edges} title="Task state and persistence" />
