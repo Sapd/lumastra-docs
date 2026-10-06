@@ -120,15 +120,16 @@ line added to the wrong service, so also confirm that `docker compose config` li
 ## 6. Start and verify
 
 ```bash
-docker compose up -d
+docker compose up -d --wait --wait-timeout 600
 docker compose logs --tail=100 lumastra
 ```
 
-Wait until the log shows `Schema migration completed successfully`. The first start
-also downloads the transcoder, so give it a few minutes, then check:
+`--wait` returns once every container is healthy; the first start runs the database
+migrations and downloads the transcoder, which can take several minutes. The log must
+show `Schema migration completed successfully`. Then check:
 
 ```bash
-timeout 300 sh -c 'until curl -fsS http://localhost:3000/api/health; do sleep 5; done'
+curl -fsS http://localhost:3000/api/health
 ```
 
 It must return `{"status":"pass"}`. If not, run `docker compose exec lumastra npm run doctor`
