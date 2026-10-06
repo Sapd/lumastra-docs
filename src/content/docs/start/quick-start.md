@@ -149,10 +149,10 @@ function Hex($n) { $b = New-Object byte[] $n; [Security.Cryptography.RandomNumbe
 Or set the three lines by hand: `DATABASE_PASSWORD` and `CACHE_PASSWORD` take 48 hex
 characters each, `LUMASTRA_MASTER_KEY` takes 64 (and remove the `# ` in front of it).
 
-That's all `.env` needs to start. Every optional integration in it is commented out.
-The one worth adding early is a free [TMDB API key](/guides/integrations/)
-(`TMDB_API_KEY`): without it, titles and artwork come from file names only, and the
-setup wizard says so after the first scan.
+That's all `.env` needs to start. Integrations and metadata keys are entered in the
+setup wizard and under **Admin → Settings**. The one worth adding early is a free
+[TMDB API key](/guides/integrations/), which the setup wizard asks for: without it,
+titles and artwork come from file names only.
 
 Use hex, not base64. Both passwords end up inside `DATABASE_URL` and `CACHE_URL`, where
 a `/`, `+` or `=` breaks the connection string. `JWT_SECRET` is optional: without it,

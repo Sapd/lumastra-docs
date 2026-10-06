@@ -8,31 +8,54 @@ sidebar:
 The variables below are grouped by area: core settings, performance tuning,
 authentication, AI, and the optional integrations.
 
-The canonical variable names are those in `.env.example`. Most service URLs and
-keys can also be set in the admin **Settings** UI; the secrets below are
+Most settings are easier to change in the setup wizard and under **Admin → Settings**,
+and every field there can also be set as an environment variable with the same name.
+A value from the environment wins: the field in Admin → Settings then shows it and
+can't be edited. `.env.example` lists only what a deployment needs before the app
+runs; this page is the full list. The secrets and deployment settings below are
 environment-only.
 
 ## Core
 
 | Variable              | Required           | Default                  | Description                                          |
 | --------------------- | ------------------- | -------------------------- | ------------------------------------------------------ |
+| `DATABASE_PASSWORD` / `CACHE_PASSWORD` | Yes, with the example compose file | — (`.env.example` ships them empty) | Passwords for the bundled PostgreSQL and Valkey. The compose file builds `DATABASE_URL` / `CACHE_URL` from them and refuses to start while either is empty. Use hex (`openssl rand -hex 24`): they end up in connection strings. |
 | `DATABASE_URL`        | Yes                 | —                          | PostgreSQL connection string (needs pgvector)        |
 | `CACHE_URL`           | Yes                 | —                          | Valkey/Redis URL (cache + task queues)               |
 | `TASK_CACHE_URL`      | No                  | falls back to `CACHE_URL` | Separate Valkey for task/BullMQ state. Point at a `noeviction` instance to isolate it from cache eviction (multi-replica). |
 | `LUMASTRA_MASTER_KEY` | **Yes** for multi-replica | auto-generated at `<config>/master.key` | Encrypts stored secrets and client credentials; derives `JWT_SECRET` when that is unset. Keep stable and back it up. Replicas that share neither this variable nor the `/config` volume generate **different** keys. See [Configuration → Secrets at rest](/guides/configuration/#secrets-at-rest). |
-| `JWT_SECRET`          | For token auth      | —                          | Signs session / access tokens (≥ 32 chars)           |
+| `JWT_SECRET`          | No                  | derived from the master key | Signs access tokens for the apps and the public API (≥ 32 chars). Usually left unset. |
 | `NODE_ENV`            | Recommended         | —                          | Set `production` for deployments                     |
 | `ORIGIN`              | Recommended         | —                          | Public origin (`https://host`). When it's `https`, login cookies are always `Secure`. The host must match the address in the browser, or sign-in and other form posts fail with `403`. Leave it unset for plain-HTTP access on your local network. |
 | `BASE_PATH`           | No                  | container default          | Where artwork / trickplay / the ffmpeg cache are written. Mount it as a shared **RWX** volume so web + worker share it. |
 | `PORT`                | No                  | `3000`                     | App listen port                                      |
+| `BODY_SIZE_LIMIT`     | No                  | `50M` (image)              | Largest request body the app accepts (Node's own default is 512K). Uploads fail with `413` if this, or your reverse proxy's limit, is lower than the upload. |
+| `SETUP_UNLOCK`        | No                  | —                          | Set to `1` and restart to reopen `/setup` on a server with no administrator left. Applies only while no admin exists; remove it afterwards (the Security Self-Check warns while it is set). |
+| `PUBLIC_BASE_URL`     | No                  | —                          | Public origin used for absolute links the server builds without a request: the Trakt sign-in redirect, poster links in notification webhooks, and the Security Self-Check's edge probes. |
 | `WORKER_MODE`         | No                  | `enabled`                  | `enabled` / `disabled` / `auto`. Multiple `enabled` replicas are supported: per-class leader locks elect leadership independently across them. Running **exactly one** is still the recommended deployment, since it's simpler to reason about. |
 | `INSTANCE_ID`         | No                  | hostname + random suffix   | Node name for the cluster/admin UI. The random suffix means the default is **not** stable across restarts (it avoids a Valkey key collision when the same hostname restarts in a new container); set it explicitly if you need a name that persists. |
 | `LOG_LEVEL`           | No                  | `info`                     | `debug` / `info` / `warn` / `error`                  |
 | `TZ`                  | No                  | UTC (container default)    | The container's time zone (e.g. `Europe/Berlin`, set in `docker-compose.yml`). Daily and weekly [task triggers](/guides/task-monitoring/#triggers-when-a-task-runs) fire in this zone. There's no separate in-app setting for it. |
 | `LUMASTRA_SKIP_PREFLIGHT` | No              | `false`                    | Boot past preflight **errors**. The check still runs and logs its findings; this only stops it blocking startup. |
 | `TRICKPLAY_ENABLED`   | No                  | `false`                    | Generate hover-preview thumbnail sprite sheets with `ffmpeg` |
-| `FFMPEG_PATH`         | No                  | `ffmpeg`                   | Path to the `ffmpeg` binary (override to use a custom build) |
-| `FFPROBE_PATH`        | No                  | `ffprobe`                  | Path to the `ffprobe` binary                         |
+| `FFMPEG_PATH`         | No                  | `/config/bin/ffmpeg` (image), `ffmpeg` otherwise | Path to the `ffmpeg` binary (override to use a custom build) |
+| `FFPROBE_PATH`        | No                  | `/config/bin/ffprobe` (image), `ffprobe` otherwise | Path to the `ffprobe` binary                         |
+| `FFMPEG_AUTO_DOWNLOAD` | No                 | `true` (image)             | The image downloads jellyfin-ffmpeg into `/config/bin` on first start. Set `false` for offline installs and point the two paths above at your own binaries. |
+
+## Transcoding hardware
+
+Also under **Admin → Settings → Transcoding**. A GPU must also be passed into the
+container; see [GPU transcoding](/guides/gpu-transcoding/).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `GPU_ACCELERATION` | `none` | `none`, `nvenc` (NVIDIA), `qsv` (Intel), `vaapi` (Intel/AMD on Linux), `amf` (AMD on Windows, untested), `videotoolbox` (macOS bare metal, untested) |
+| `VAAPI_DEVICE` | `/dev/dri/renderD128` | Render node for `vaapi` |
+| `QSV_DEVICE` | (auto) | Device for `qsv` |
+| `NVENC_PRESET` / `NVENC_TUNE` / `NVENC_RC` / `NVENC_CQ` | `p4` / — / `auto` / `23` | NVENC tuning |
+| `AMF_QUALITY` | `balanced` | `quality`, `balanced` or `speed` |
+| `FFMPEG_TRANSCODE_DIR` | `/tmp/lumastra-transcode` | Working directory for HLS segments; a tmpfs mount is faster |
+| `FFMPEG_INACTIVITY_TIMEOUT_SECONDS` | `1800` | Remove a transcode nobody has used for this long |
 
 ## Performance tuning
 
@@ -84,9 +107,16 @@ applies to both forward auth and OIDC.
 | `TRUSTED_PROXY_IPS`        | Behind a proxy   | (unset → fail-closed) | IPs/CIDRs allowed to set identity headers (with `FORWARD_AUTH_ENABLED`) and `X-Forwarded-For`|
 | `LUMASTRA_TRUST_ANY_PROXY` | No               | `false`               | Trust any peer's identity headers (single host only)  |
 | `USERHEADER`               | No               | `X-Forwarded-User`    | Header carrying the authenticated username             |
-| `GROUPHEADER`              | No               | `X-Forwarded-Groups`  | Header carrying the user's groups (`\|`-separated)    |
-| `ADMIN_GROUPS`             | No               | `admin`               | Groups granted admin (case-insensitive)               |
-| `DEFAULT_USER`             | No (dev only)    | `admin`               | Fallback user when no header is present (development only) |
+| `GROUPHEADER`              | No               | `X-Forwarded-Groups`  | Header carrying the user's groups (`\|`- or comma-separated) |
+| `NAMEHEADER`               | No               | `X-Authentik-Name`    | Header carrying the display name; empty ignores it    |
+| `FORWARD_AUTH_GROUPS_ALWAYS_SENT` | No        | `false`               | The proxy sends `GROUPHEADER` on every signed-in request, so a missing header means "no groups" (stored groups are cleared, admin removed). Needed behind nginx `auth_request`, which drops empty headers |
+| `ADMIN_GROUPS`             | No               | `admin`               | Groups whose members are administrators (case-insensitive). Also used by OIDC. Set it before the first SSO sign-in |
+| `WATCH_PERMISSION_GROUPS`  | No               | `admin,stream-monitors` | Groups that see every user's streaming sessions     |
+| `LIVETV_GROUPS`            | No               | `livetv,admin`        | Groups with Live TV access                            |
+| `ARR_MANAGER_GROUPS`       | No               | `arrmanager,admin`    | Groups (besides admins) that see the debug panel and connected service URLs |
+| `PUBLIC_AUTHURL`           | No               | —                     | Link to your identity provider's account page, shown in Settings when users don't use built-in login |
+| `PUBLIC_LOGOUTURL`         | No               | —                     | Where "Sign out" sends the browser, e.g. the identity provider's logout URL |
+| `DEFAULT_USER`             | No (dev only)    | `admin`               | Under `npm run dev`, the user assumed when no header is present. With Jellyfin connected, also the Jellyfin account used for some metadata lookups |
 | `PROTOCOL_HEADER`          | Behind TLS proxy | `x-forwarded-proto`   | Header the app reads to learn the external scheme for the addresses it builds. Lumastra reads `X-Forwarded-Proto` for the session cookie's `Secure` flag on its own; set this when your proxy sends the scheme in another header. |
 | `HOST_HEADER`              | Behind a proxy   | `x-forwarded-host`    | Header the app reads to learn the external host      |
 
@@ -94,7 +124,7 @@ applies to both forward auth and OIDC.
 
 | Variable                       | Required | Default | Description                                                         |
 | --------------------------------- | ---------- | --------- | ------------------------------------------------------------------------ |
-| `AUTH_NATIVE_LOGIN_ENABLED`    | No       | `false` | Enable username/password login (auto-set when first native admin is created) |
+| `AUTH_NATIVE_LOGIN_ENABLED`    | No       | `false` | Enable username/password login. The setup wizard turns it on when it creates the first admin. `.env.example` sets it to `true`, because the startup check refuses to boot with no sign-in method configured; while it is set there, the switch in Admin → Settings is read-only |
 | `NATIVE_AUTH_SESSION_TTL_DAYS` | No       | `30`    | Session-cookie lifetime in days                                     |
 
 ### OIDC
@@ -125,11 +155,15 @@ admin Settings UI under **AI assistant**.
 
 | Variable               | Required | Default        | Description                                       |
 | ---------------------- | -------- | -------------- | --------------------------------------------------- |
-| `OPENAI_API_KEY`       | No       | —              | OpenAI embeddings + chat                          |
-| `OPENAI_CHAT_MODEL`    | No       | `gpt-4o-mini`  | Chat model for the assistant                      |
-| `VOYAGE_API_KEY`       | No       | —              | Alternative: Voyage AI embeddings                 |
+| `OPENAI_API_KEY`       | No       | —              | OpenAI embeddings (used when `VOYAGE_API_KEY` is unset) |
+| `VOYAGE_API_KEY`       | No       | —              | Voyage AI embeddings; wins when both keys are set |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | No | — | Custom OpenAI-compatible embedding endpoint (e.g. Ollama). Needs both; there is no fallback to `OPENAI_API_KEY` |
 | `EMBEDDING_MODEL`      | No       | (auto-detect)  | e.g. `text-embedding-3-small`, `voyage-3-large`   |
-| `EMBEDDING_DIMENSIONS` | No       | `0` (auto)     | Vector dims (**must match the model**)            |
+| `EMBEDDING_DIMENSIONS` | No       | `0` (auto)     | Vector width, fixed when the database is created (**must match the model**). Changing it later is not migrated: startup stops with a column-width mismatch |
+| `OPENAI_CHAT_API_KEY`  | No       | —              | Key for the assistant's OpenAI-compatible chat backend (any non-empty value for a local server) |
+| `OPENAI_CHAT_MODEL`    | No       | `gpt-4o-mini`  | Chat model for the assistant                      |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_CHAT_MODEL` | No | — / `claude-opus-4-8` | Claude as the assistant's chat backend |
+| `ASSISTANT_PROVIDER`   | No       | `auto`         | `auto` uses Claude when `ANTHROPIC_API_KEY` is set and `OPENAI_CHAT_API_KEY` is not |
 
 ## Sonic music embedder
 
@@ -142,6 +176,7 @@ runtime, not bundled by Lumastra (review the
 | Variable                 | Set on            | Required          | Default                    | Description                                                                                          |
 | --------------------------- | ------------------- | -------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `SONIC_EMBEDDER_URL`     | app + worker      | For sonic         | —                          | HTTP URL of the embedder sidecar (e.g. `http://lumastra-sonic-embedder:8000`). Required by any `FEATURE_MUSIC_SONIC*`. |
+| `SONIC_READER_PASSWORD`  | `.env` (compose)  | For sonic         | —                          | Password of the sidecar's read-only database role, interpolated by the example compose file's `sonic` profile |
 | `SONIC_EMBEDDER_THREADS` | sidecar           | No                | (all cores)                | PyTorch CPU thread cap. Keep it modest (e.g. `4`) on shared hardware so playback stays responsive     |
 | `MODEL_ID`               | sidecar           | No                | `msclap-2023`              | Model identifier recorded with the embeddings                                                         |
 | `HF_HOME`                | sidecar           | No                | `/app/.cache/huggingface`  | HuggingFace cache for the downloaded CLAP weights. Mount a persistent volume here to download once    |
@@ -149,8 +184,10 @@ runtime, not bundled by Lumastra (review the
 
 ## Branding
 
-All optional; defaults render the bundled Lumastra identity. Logo values are
-absolute URLs or paths relative to `/static/`.
+All optional; defaults render the bundled Lumastra identity. Custom name, logos,
+description and background take effect only with the custom-branding licence module
+(see [Editions & Licensing](/guides/licensing/)); the two colours always apply. Logo
+values are `http(s)` URLs or paths starting with `/`, such as `/custom/logo.png`.
 
 | Variable               | Default          | Description                                                            |
 | ------------------------- | ------------------- | --------------------------------------------------------------------------- |
@@ -207,23 +244,24 @@ See [SSO with Authentik](/guides/sso-authentik/#2-wire-up-the-reverse-proxy).
 
 ## Navigation links
 
-Three JSON-array variables replace the default footer buttons, sidebar entries and
-avatar-menu items. Each entry takes `label`, `url`, `icon` (a Heroicons name or a path
-under `/static/`) and optional `external` (default `true`; set `false` for in-app
-routes). Sidebar entries also accept `groups`, a list of group names that must match
-for the entry to show; the special group `__ADMIN__` means "admins only".
+Three JSON-array variables customise the footer, the sidebar and the avatar menu.
+Each entry takes `label`, `url` and optional `external` (default `true`; set `false`
+for in-app routes). Sidebar and avatar-menu entries also take `icon` (a Heroicons name,
+or a path such as `/custom/icon.svg` from the [custom asset folder](#custom-asset-folder)).
+Sidebar entries also accept `groups`, a list of group names that must match for the
+entry to show; the special group `__ADMIN__` means "admins only".
 
-| Variable          | Replaces                                  |
+| Variable          | Effect                                    |
 | -------------------- | ---------------------------------------------- |
-| `FOOTER_LINKS`    | The action buttons in the footer area     |
-| `SIDEBAR_LINKS`   | The sidebar / dock navigation             |
-| `USER_MENU_LINKS` | The avatar popup menu                     |
+| `FOOTER_LINKS`    | Links in the footer bar, which shows only with `SHOW_FOOTER=true` (default `false`) |
+| `SIDEBAR_LINKS`   | Replaces the whole sidebar / dock navigation, so include Home and Browse yourself |
+| `USER_MENU_LINKS` | Extra links in the avatar menu (empty by default; Settings and Sign out are always there) |
 
 ```bash
+SHOW_FOOTER=true
 FOOTER_LINKS='[
-  {"id":"request","label":"Request Movie","url":"https://requests.example.com","icon":"film","variant":"ghost-secondary"},
-  {"id":"chat","label":"AI Assistant","url":"/chat","icon":"sparkles","variant":"ghost-primary","external":false},
-  {"id":"quickconnect","label":"Quick Connect","icon":"command-line"}
+  {"id":"docs","label":"Help","url":"https://wiki.example.com"},
+  {"id":"quickconnect","label":"Quick Connect"}
 ]'
 SIDEBAR_LINKS='[
   {"label":"Home","url":"/","icon":"home","external":false},
@@ -237,8 +275,10 @@ USER_MENU_LINKS='[
 ```
 
 Footer entries carry an `id`; the special id `quickconnect` opens the Jellyfin Quick
-Connect dialog and needs no `url`. The same links can be managed from the admin UI
-under **Settings → Homepage & navigation**, which is the easier route if you don't
+Connect dialog, needs no `url` and shows only when Jellyfin is connected.
+`SIDEBAR_SECTIONS` (a JSON array of `{"id","label","icon","collapsed"}`) defines
+collapsible groups; a sidebar entry joins one with `"section":"<id>"`. The same links
+can be managed from the admin UI under **Settings → Homepage & navigation**, which is the easier route if you don't
 manage configuration as code.
 
 ## Optional integrations
@@ -257,8 +297,12 @@ the default relay is run by the Lumastra maintainer and is covered on that page.
 | `LASTFM_API_KEY`                  | Music popularity                     |
 | `DISCOGS_TOKEN`                   | Artist / album enrichment            |
 | `JELLYFINURL` / `JELLYFINAPIKEY`  | Jellyfin background **sync** (the `/j` compat API needs neither) |
+| `PUBLIC_JELLYFINURL`              | Public Jellyfin address for links users click (homepage button, Quick Connect hint). Environment only |
 | `AUDIOURL` / `AUDIOAPIKEY`        | AudiobookShelf: the key needs **admin** rights so per-listener keys can be minted. See [Audiobooks](/guides/audiobooks/) |
+| `PUBLIC_AUDIOBOOKURL`             | Public AudiobookShelf address for the "open in AudiobookShelf" button. Environment only |
 | `KAVITAURL` / `KAVITAAPIKEY`      | Kavita (books / manga / comics)      |
+| `PUBLIC_KAVITAURL`                | Public Kavita address for links from search results. Environment only |
+| `ANIDB_CLIENT` / `ANIDB_CLIENT_VER` | Registered AniDB client name and version, for libraries that use the AniDB metadata provider. The value in the plugin settings wins |
 | `SONARRURL` / `SONARRAPIKEY`      | Sonarr (TV calendar)                 |
 | `RADARRURL` / `RADARRAPIKEY`      | Radarr (movie calendar)              |
 | `SEERRURL` / `SEERRAPIKEY` | Seerr (requests)             |
@@ -280,7 +324,8 @@ Most Live TV settings are managed in the admin UI and covered in the
 | --- | --- | --- |
 | `LIVETV_SOURCE` | `standalone` | `standalone` uses Lumastra's own Live TV stack; `disabled` turns the subsystem off entirely. |
 | `STREAM_PROXY_URL` | (unset) | Base URL of the Live TV stream proxy that pulls and re-serves channel streams. |
-| `STREAM_PROXY_SECRET` | (unset) | Shared secret authenticating Lumastra to the stream proxy. Set the same value on both. |
+| `STREAM_PROXY_SECRET` | (unset) | Shared secret authenticating Lumastra to the stream proxy. Set the same value on both; the proxy refuses to start without it. |
+| `LIVETV_CAP_FALLBACK` | `source` | When a requested quality can't be produced: `source` serves the original, `refuse` fails playback |
 | `LIVETV_UPSTREAM_PROXY_URL` | (unset → direct) | Forward **HTTP CONNECT** proxy for *all* outbound Live TV traffic to the source (M3U/XMLTV import, channel logos, Xtream validation, and live stream pulls), for networks that require an outbound proxy. Inline credentials supported. **Must be set on the app, worker, and stream-proxy containers** (each reads it independently). Fail-closed. See the [Live TV guide](/guides/live-tv/#sending-live-tv-through-an-outbound-proxy) and the [HTTPS-stream caveat](/architecture/live-tv/#outbound-proxy). |
 
 ## Sharing & privacy

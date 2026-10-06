@@ -69,14 +69,15 @@ most UI can be exercised without it.
    Key optional vars for richer local testing:
 
    ```bash
-   OPENAI_API_KEY=sk-...                 # AI recommendations and chat
+   OPENAI_API_KEY=sk-...                 # embeddings for AI recommendations
+   OPENAI_CHAT_API_KEY=sk-...            # the assistant's chat backend
    VOYAGE_API_KEY=...                    # alternative embedding provider
    LUMASTRA_MASTER_KEY=$(openssl rand -hex 32)  # encrypts stored secrets
-   JWT_SECRET=$(openssl rand -hex 32)           # required for device auth
    LOG_LEVEL=debug                       # verbose server logs
    ```
 
-   A full annotated reference is in `.env.example`.
+   Every variable is listed in the
+   [environment variables reference](/reference/environment-variables/).
 
 4. **Run migrations and check config.**
 
