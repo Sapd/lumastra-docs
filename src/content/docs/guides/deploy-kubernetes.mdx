@@ -404,8 +404,8 @@ The header names above are Authentik's. Use your provider's. See
 [Authentik single sign-on](/guides/sso-authentik/) for the provider side. How the router
 treats paths:
 
-- `bypassPaths` (`/j/`, `/subsonic/`, `/oauth/`) skip the identity provider, because the
-  app authenticates those itself.
+- `bypassPaths` (`/j/`, `/subsonic/`, `/oauth/`, `/api/plugin-webhooks/`, `/api/health`,
+  `/metrics`) skip the identity provider, because the app authenticates those itself.
 - `/api/v1/` tries the identity provider first. On a `401` it passes the request through
   without an identity, so personal access tokens and device tokens work.
   `extraPassthroughPaths` adds more prefixes with this behaviour, for example

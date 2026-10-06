@@ -135,6 +135,29 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
     }
 
+    # Webhooks that other services send to plugins (signed per integration),
+    # uptime checks, and the Prometheus endpoint (which checks its own token).
+    # None of these callers can sign in through Authentik.
+    location ^~ /api/plugin-webhooks/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
+    location ~ ^/(api/health(/ready)?|metrics)/?$ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups   "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
     location / {
         auth_request /outpost.goauthentik.io/auth/nginx;
         error_page 401 = @authentik_signin;
@@ -178,8 +201,9 @@ server {
 Use a `forwardAuth` middleware pointing at
 `http://<outpost>:9000/outpost.goauthentik.io/auth/traefik` with
 `X-authentik-username` and `X-authentik-groups` in `authResponseHeaders`. Apply the
-same bypass rules as the Nginx tab: routers for `/j/`, `/subsonic/`, `/api/v1/`, and
-`/oauth/` must skip the `forwardAuth` middleware entirely. See Authentik's
+same bypass rules as the Nginx tab: routers for `/j/`, `/subsonic/`, `/api/v1/`,
+`/oauth/`, `/api/plugin-webhooks/`, `/api/health` and `/metrics` must skip the
+`forwardAuth` middleware entirely. See Authentik's
 proxy-provider docs for the full Traefik snippet.
 
 </TabItem>
@@ -205,7 +229,8 @@ exemption with any other proxy (Traefik, Caddy, …).
 :::
 
 :::caution[Bypass locations are required, not optional]
-`/j/`, `/subsonic/`, `/api/v1/`, and `/oauth/` must ALL bypass the `auth_request` gate.
+`/j/`, `/subsonic/`, `/api/v1/`, `/oauth/`, `/api/plugin-webhooks/`, `/api/health` and
+`/metrics` must ALL bypass the `auth_request` gate.
 Gating the whole domain behind Authentik (the default pattern most tutorials show)
 silently breaks Jellyfin clients, Subsonic clients, TV apps, and PATs/service tokens.
 

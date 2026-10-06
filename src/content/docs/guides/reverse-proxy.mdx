@@ -42,6 +42,25 @@ set `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
 Every proxy below is set up for this list. If you use another one, check each line.
 
 - [ ] Forward to Lumastra on port 3000 over plain `http://`.
+- [ ] Forward every path on Lumastra's domain or subdomain to it. Besides the web app,
+      the apps and clients use these paths, and none of them may be blocked or sent to a
+      login page:
+      - `/api/v1/` for the [public API](/developers/api/), the iPhone, iPad and Apple TV
+        apps, personal access tokens, and casting to AirPlay and Chromecast
+      - `/oauth/` for signing in on a TV or app with a code (device sign-in)
+      - `/j` and `/j/` for Jellyfin clients, which use `https://<your domain>/j` as the
+        server address
+      - `/subsonic/` for Subsonic music apps, which use `https://<your domain>/subsonic`
+      - `/api/plugin-webhooks/` for webhooks that other services send to plugins
+      - `/api/health` for uptime monitors, and `/metrics` if you scrape it with
+        Prometheus
+      - `/manifest.json` and the app icons, which browsers fetch without the session
+        cookie when you install the web app
+
+      Each of these checks its own credentials (tokens, app sign-in or the client's
+      password). The setups below forward everything, so they all work without extra
+      lines. If you put a sign-in layer such as Authentik in front, these paths must
+      skip it; see [Authentik](/guides/sso-authentik/).
 - [ ] Pass the `Host` header through, and set `X-Forwarded-For` and `X-Forwarded-Proto`.
 - [ ] Remove the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and
       `X-Authentik-Name` from every request it forwards. Lumastra reads them for
