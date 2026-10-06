@@ -120,7 +120,6 @@ curl -fsS http://localhost:3000/api/health
 It must return `{"status":"pass"}`. If not, run `docker compose exec lumastra npm run doctor`
 and show the person the result.
 
-
 ## 7. Reverse proxy and HTTPS
 
 Do this step by default, using the answers to question 4. Skip it only if the person
@@ -137,9 +136,10 @@ configuration: https://lumastra.org/guides/reverse-proxy/
   streams, a request body limit of at least 50 MB, the forwarded headers, and removing
   the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and `X-Authentik-Name`.
   Copy the guide's config for that proxy as it is, including those lines.
-- Set `ORIGIN=https://<their domain>` in `.env`. If the proxy runs as a container,
+- Add the line `ORIGIN=https://<their domain>` to `.env` (the example file has none). If the proxy runs as a container,
   give it the fixed address the guide shows and set `TRUSTED_PROXY_IPS` to that address
-  so Lumastra sees real client IPs. If the proxy runs on the host, leave
+  so Lumastra sees real client IPs. Adding the subnet to `lumastra-network` changes the
+  network, so run `docker compose down` once before `docker compose up -d`. If the proxy runs on the host, leave
   `TRUSTED_PROXY_IPS` empty.
 - Restart with `docker compose up -d`.
 - If the proxy runs as a container, remove the `ports:` block from the `lumastra`

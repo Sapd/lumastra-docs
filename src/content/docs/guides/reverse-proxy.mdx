@@ -210,7 +210,8 @@ networks:
 ```
 
 `ip_range` keeps Docker's automatic addresses away from the one you picked. Then set
-`TRUSTED_PROXY_IPS=172.28.0.10` in `.env`. If `172.28.0.0/24` is already used on your
+`TRUSTED_PROXY_IPS=172.28.0.10` in `.env`. A changed network takes effect after
+`docker compose down` and `docker compose up -d`. If `172.28.0.0/24` is already used on your
 host, pick another private range and change all three addresses.
 
 Caddy writes no access log unless you add a `log` block. If you do, filter the query
@@ -460,7 +461,8 @@ networks:
 ```
 
 Set `TRUSTED_PROXY_IPS=172.28.0.10` in `.env`. If `172.28.0.0/24` is already used on
-your host, pick another private range and change all three addresses.
+your host, pick another private range and change all three addresses. A changed network
+takes effect after `docker compose down` and `docker compose up -d`.
 
 Remove the `ports:` block from `lumastra`, run `docker compose up -d`, and open the NPM
 admin UI on port 81. On first start it asks you to create the admin account. Then add a
