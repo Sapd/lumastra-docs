@@ -19,7 +19,9 @@ Everything here is optional, but these make the biggest difference. Set them up 
 roughly this order:
 
 1. **TMDB API key** (free): metadata, posters, backdrops, search and discovery. Without
-   it, titles fall back to file-name metadata with no artwork.
+   it, titles fall back to file-name metadata with no artwork. Either credential from
+   [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) works: the
+   short **API Key** or the long **API Read Access Token**.
 2. **An embeddings key** (OpenAI or Voyage AI, paid per use, usually cheap):
    recommendations, For You, mood picks and semantic search. The music features below
    build on it.
