@@ -34,8 +34,9 @@ See [Backup & recovery](/guides/backup-recovery/) for backup and rotation.
 | `CACHE_URL`           | Yes                 | Valkey/Redis URL (cache + task queues)           |
 | `LUMASTRA_MASTER_KEY` | Yes (with secrets)  | Encrypts stored secrets                          |
 | `JWT_SECRET`          | For token auth      | Signs session / access tokens                    |
-| `FORWARD_AUTH_ENABLED` | For forward auth   | Read identity headers at all (default off)       |
-| `TRUSTED_PROXY_IPS`   | Behind a proxy      | IPs/CIDRs allowed to set identity headers        |
+| `FORWARD_AUTH_ENABLED` | For forward auth   | Read identity headers at all (default off), environment only |
+| `TRUSTED_PROXY_IPS`   | Behind a proxy      | Proxy addresses allowed to set identity headers  |
+| `ORIGIN`              | Behind a proxy / HTTPS | Public address, marks the login cookie `Secure` |
 | `NODE_ENV`            | Recommended         | Set `production` for deployments                 |
 
 See the full [Environment Variables reference](/reference/environment-variables/)
@@ -73,8 +74,8 @@ trusts them from known peers:
 | --------------------------- | ----------------------- | --------------------------------------------------------------------------- |
 | `USERHEADER`               | `X-Forwarded-User`     | Header carrying the authenticated username                                |
 | `GROUPHEADER`              | `X-Forwarded-Groups`   | Header carrying the user's groups (`\|`-separated)                        |
-| `FORWARD_AUTH_ENABLED`     | `false`                | Read the identity headers at all. Off: ignored from every peer, so `TRUSTED_PROXY_IPS` alone signs nobody in |
-| `TRUSTED_PROXY_IPS`        | unset (fail-closed)    | Comma-separated proxy IPs/CIDRs allowed to set the identity headers, **required** behind a reverse proxy |
+| `FORWARD_AUTH_ENABLED`     | `false`                | Read the identity headers at all. Off: ignored from every peer, so `TRUSTED_PROXY_IPS` alone signs nobody in. Environment only: Admin → Settings cannot change it |
+| `TRUSTED_PROXY_IPS`        | unset (fail-closed)    | Comma-separated proxy addresses allowed to set the identity headers, **required** behind a reverse proxy. List every proxy hop and no LAN range (see [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips)) |
 | `LUMASTRA_TRUST_ANY_PROXY` | `false`                | Trust identity headers from any peer, single private host only            |
 
 Forward auth fails closed when neither proxy-trust setting is configured.
@@ -82,7 +83,9 @@ Forward auth fails closed when neither proxy-trust setting is configured.
 The built-in-login session cookie is marked `Secure` unless the request shows plain
 HTTP: the browser's `Origin` on the sign-in request, or the proxy's `X-Forwarded-Proto` header
 from a `TRUSTED_PROXY_IPS` address (or from any address while that list is empty).
-Set `ORIGIN` to your `https` address to make the cookie `Secure` on every request.
+Behind a reverse proxy or on HTTPS, set `ORIGIN` to your `https` address. It is required
+there: it makes the cookie `Secure` on every request, also for an app sign-in that sends
+no `Origin` header through an inner proxy that reports `http`.
 
 These paths authenticate their own clients and must bypass the proxy's identity gate.
 Otherwise token/device clients fail or enter redirect loops:

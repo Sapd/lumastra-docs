@@ -28,13 +28,17 @@ ORIGIN=https://lumastra.example.com
 Use the exact public address: scheme, host and port (leave the port out if it is 443).
 Restart the stack after changing it.
 
-Lumastra uses it for every address it builds and for its same-origin check on sign-in
-and other form posts. If you leave it unset, Lumastra takes the host from the `Host`
-header. That works with every setup on this page. If you set it, the host and port must
-match the address in your browser. A wrong host, or a leftover `:3000`, makes sign-in
-fail with `403`. With an `https` address in `ORIGIN` the session cookie is always
-`Secure`, so sign-in only works over HTTPS at that address. Instead of `ORIGIN`, you can
-set `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. See
+`ORIGIN` is required behind a reverse proxy and on every HTTPS install. Lumastra uses it
+for every address it builds and for its same-origin check on sign-in and other form
+posts, and an `https` address in `ORIGIN` marks the session cookie `Secure` on every
+request. Without it, Lumastra guesses the protocol from the request. A sign-in from an
+app that sends no `Origin` header, through an inner proxy that reports `http` (for
+example nginx behind Cloudflare), can then get a session cookie without `Secure` on an
+HTTPS site.
+
+The host and port must match the address in your browser. A wrong host, or a leftover
+`:3000`, makes sign-in fail with `403`. Because the cookie is `Secure`, sign-in only
+works over HTTPS at that address. See
 [Authentication](/guides/authentication/#proxy-trust-fail-closed) for the details.
 
 ## What the proxy must do
@@ -126,6 +130,27 @@ when two things are true:
 
 - Your proxy removes the sign-in headers, as every setup on this page does.
 - The address you list belongs to your proxy alone, if you turn forward auth on.
+
+List only the addresses of your proxies. Every address in the list can choose
+the client IP Lumastra sees, and with `FORWARD_AUTH_ENABLED=true` it can also send the
+sign-in headers itself. A range such as `192.168.0.0/16` hands that to every device on
+your network: any of them could sign in as any user, including an admin. `npm run
+doctor`, the admin config check and the Security Self-Check warn when the list contains
+an IPv4 range wider than `/24`. On Kubernetes the warning is informational, because the
+documented value there is the router's pod range behind a NetworkPolicy. IPv6 ranges
+are not supported and match no address; list IPv6 proxies as exact addresses.
+
+When a request passes through more than one proxy, for example Cloudflare, then nginx,
+then Lumastra, every hop that adds an address to `X-Forwarded-For` has to be in the
+list. Lumastra takes the rightmost address in `X-Forwarded-For` that isn't a listed
+proxy. If the outer proxy is missing, its address counts as the client: everyone shares
+one budget for failed sign-ins, and stream tokens bound to an IP address stop working
+when the outer proxy's address changes. The simpler way is to let the inner proxy restore
+the real client address and pass on only that address. Then only the inner proxy belongs
+in the list. For Cloudflare in front of nginx, see the nginx setup under [Setups](#setups).
+Don't list Cloudflare's own ranges: they are wider than `/24`, its IPv6 ranges match
+nothing, and with forward auth on, any connection that reaches Lumastra from a Cloudflare
+address could send sign-in headers.
 
 Which address to use depends on where the proxy runs:
 
@@ -316,9 +341,27 @@ sudo nginx -t && sudo systemctl reload nginx
 nginx 1.25.1 and newer print a warning that `listen ... http2` is deprecated. It still
 works. To silence it, use `listen 443 ssl;` and add `http2 on;` on its own line.
 
-`X-Forwarded-For $remote_addr` sends only the address nginx sees. If another proxy or a
-CDN sits in front of nginx, use `$proxy_add_x_forwarded_for` and list that proxy in
-`TRUSTED_PROXY_IPS` too.
+`X-Forwarded-For $remote_addr` sends only the address nginx sees.
+
+**A CDN or a second proxy in front of nginx.** With Cloudflare or another proxy in front of nginx, nginx sees that proxy's address. Let
+nginx restore the client's address with its realip module, which the Debian, Ubuntu and
+nginx.org packages include. Keep `X-Forwarded-For $remote_addr`: it then carries the
+restored address. For Cloudflare, add one `set_real_ip_from` line per range listed at
+[cloudflare.com/ips](https://www.cloudflare.com/ips/), IPv4 and IPv6, to the `server`
+block:
+
+```nginx
+    # Cloudflare's ranges, from https://www.cloudflare.com/ips/
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 2400:cb00::/32;
+    # ... the remaining ranges ...
+    real_ip_header CF-Connecting-IP;
+```
+
+For another proxy, list its address and use `real_ip_header X-Forwarded-For;` with
+`real_ip_recursive on;`. Lumastra then gets one address per request and needs only nginx
+in `TRUSTED_PROXY_IPS`, if it needs anything (see [`TRUSTED_PROXY_IPS`](#trusted_proxy_ips)).
+Update the Cloudflare ranges when Cloudflare changes them.
 
 With nginx installed on the host, leave `TRUSTED_PROXY_IPS` empty (see
 [`TRUSTED_PROXY_IPS`](#trusted_proxy_ips)).

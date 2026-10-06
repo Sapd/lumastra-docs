@@ -26,8 +26,8 @@ cache always run separately and should stay on a private network.
 
 ## Reverse proxy
 
-Terminate TLS at Caddy, Traefik, or nginx and forward to port 3000. Set `ORIGIN` for
-secure login cookies. Forward auth additionally requires `FORWARD_AUTH_ENABLED=true`,
+Terminate TLS at Caddy, Traefik, or nginx and forward to port 3000. `ORIGIN` is
+required for secure login cookies. Forward auth additionally requires `FORWARD_AUTH_ENABLED=true`,
 identity headers and `TRUSTED_PROXY_IPS`; see [Authentication](/guides/authentication/).
 
 The [Reverse proxy guide](/guides/reverse-proxy/) has copy-paste setups for Caddy, nginx,

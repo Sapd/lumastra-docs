@@ -155,9 +155,11 @@ configuration: https://lumastra.org/guides/reverse-proxy/
   streams, a request body limit of at least 50 MB, the forwarded headers, and removing
   the sign-in headers `X-Forwarded-User`, `X-Forwarded-Groups` and `X-Authentik-Name`.
   Copy the guide's config for that proxy as it is, including those lines.
-- Add the line `ORIGIN=https://<their domain>` to `.env` (the example file has none). If the proxy runs as a container,
+- Add the line `ORIGIN=https://<their domain>` to `.env` (the example file has none). It is
+  required behind a proxy. If the proxy runs as a container,
   give it the fixed address the guide shows and set `TRUSTED_PROXY_IPS` to that address
-  so Lumastra sees real client IPs. Adding the subnet to `lumastra-network` changes the
+  so Lumastra sees real client IPs. Put only that address there, never the network's
+  subnet. Adding the subnet to `lumastra-network` changes the
   network, so run `docker compose down` once before `docker compose up -d`. If the proxy runs on the host, leave
   `TRUSTED_PROXY_IPS` empty.
 - Restart with `docker compose up -d`.

@@ -161,8 +161,9 @@ and both work per client again.
 
 Before you set it, make sure the proxy removes the sign-in headers (`X-Forwarded-User`,
 `X-Forwarded-Groups`, `X-Authentik-Name`) from client requests. Lumastra believes them
-from every trusted address, whichever sign-in method you use. List only an address that
-belongs to your proxy alone: with a proxy installed on the Docker host, that address is
+from every trusted address once forward auth is on. List only addresses that belong to
+your proxies, with no LAN range, and every proxy in a chain such as Cloudflare in front
+of nginx: with a proxy installed on the Docker host, that address is
 the network gateway, which every local program shares, so leave the variable empty
 there. The [Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips) shows both
 parts for each proxy.

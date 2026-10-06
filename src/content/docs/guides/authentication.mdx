@@ -50,8 +50,10 @@ from any IP address while that list is empty.
 
 This lets built-in sign-in work over plain HTTP on your local network, and HTTPS sites
 keep `Secure`. OIDC sign-in over plain HTTP needs `ORIGIN` set to that `http://` address.
-Set `ORIGIN=https://your-domain` to mark the cookie `Secure` on every request. Forward
-auth alone (no login cookie) is unaffected.
+Behind a reverse proxy or on HTTPS, `ORIGIN=https://your-domain` is required: it marks
+the cookie `Secure` on every request, including an app sign-in that sends no `Origin`
+header through an inner proxy that reports `http`. Forward auth alone (no login cookie)
+is unaffected.
 :::
 
 ## Built-in login
@@ -121,6 +123,10 @@ Forward auth is **off by default**. Turn it on with:
 FORWARD_AUTH_ENABLED=true
 ```
 
+It can only be set as an environment variable (in `.env` or the container environment),
+like `TRUSTED_PROXY_IPS`. Admin → Settings shows its value but can't change it, and a
+value in `settings.json` is ignored with a warning in the startup log.
+
 While it's off, Lumastra ignores the identity headers from every address, so setting
 `TRUSTED_PROXY_IPS` to get real client IP addresses can never sign anyone in. The setup
 wizard tells you when your proxy sends identity headers while forward auth is off.
@@ -145,8 +151,11 @@ identical).
 Because identity arrives in plain HTTP headers, Lumastra only trusts them from known
 peers, and only with `FORWARD_AUTH_ENABLED=true`:
 
-- Set **`TRUSTED_PROXY_IPS`** to your reverse proxy's IP(s)/CIDR(s). **Required in
-  production**.
+- Set **`TRUSTED_PROXY_IPS`** to your reverse proxy's address, or the address of every
+  proxy in a chain. **Required in production**. List proxies only: with forward auth on,
+  every address in a range such as `192.168.0.0/16` can send identity headers and sign
+  in as anyone. The Security Self-Check warns about IPv4 ranges wider than `/24`. See
+  [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips).
 - Or set **`LUMASTRA_TRUST_ANY_PROXY=true`** on a single private host where the
   container isn't directly reachable.
 

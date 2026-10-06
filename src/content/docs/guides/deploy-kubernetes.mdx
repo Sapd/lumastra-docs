@@ -435,7 +435,9 @@ Only do this if nothing else can reach the router.
 addresses in `TRUSTED_PROXY_IPS`. See [Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-you-run-behind-a-reverse-proxy).
 The chart renders that variable only with forward auth. With built-in login or OIDC,
 set it yourself to the pod range the router runs in. `10.42.0.0/16` is the k3s default;
-use your cluster's pod CIDR:
+use your cluster's pod CIDR. A range this wide is safe only because the chart's
+NetworkPolicy lets nothing but the router reach the app; the Security Self-Check reports
+it as information on Kubernetes:
 
 ```yaml
 app:
