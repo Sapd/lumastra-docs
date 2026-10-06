@@ -87,7 +87,7 @@ applies to both forward auth and OIDC.
 | `GROUPHEADER`              | No               | `X-Forwarded-Groups`  | Header carrying the user's groups (`\|`-separated)    |
 | `ADMIN_GROUPS`             | No               | `admin`               | Groups granted admin (case-insensitive)               |
 | `DEFAULT_USER`             | No (dev only)    | `admin`               | Fallback user when no header is present (development only) |
-| `PROTOCOL_HEADER`          | Behind TLS proxy | `x-forwarded-proto`   | Header the app reads to learn the external scheme. Needed so session cookies get their `Secure` flag when TLS terminates at the proxy. |
+| `PROTOCOL_HEADER`          | Behind TLS proxy | `x-forwarded-proto`   | Header the app reads to learn the external scheme for the addresses it builds. Lumastra reads `X-Forwarded-Proto` for the session cookie's `Secure` flag on its own; set this when your proxy sends the scheme in another header. |
 | `HOST_HEADER`              | Behind a proxy   | `x-forwarded-host`    | Header the app reads to learn the external host      |
 
 ### Built-in (native) login

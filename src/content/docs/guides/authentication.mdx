@@ -42,13 +42,16 @@ once recovery is complete; `settings.json` cannot unlock setup. Local/dev recove
 also documented in `scripts/setup-unlock.ts`.
 
 :::note[When the session cookie is Secure]
-Built-in and OIDC sessions use a cookie that's marked `Secure` unless the request shows
-that the browser is on plain HTTP. Lumastra sees that from the browser's own `Origin`
-header on the sign-in request, or from `X-Forwarded-Proto` (or `Forwarded`) sent by your
-reverse proxy. The proxy header counts only from an address in `TRUSTED_PROXY_IPS`, or from any
-address while that list is empty. So sign-in works over plain HTTP on your local
-network, and HTTPS sites keep `Secure`. Set `ORIGIN=https://your-domain` to mark the
-cookie `Secure` on every request. Forward auth alone (no login cookie) is unaffected.
+Built-in and OIDC sessions use a cookie that's marked `Secure` unless Lumastra detects
+plain HTTP. It detects that on the built-in sign-in request, from the `Origin` header the
+browser sends or from the `X-Forwarded-Proto` (or `Forwarded`) header your reverse proxy
+sends. Lumastra uses the proxy header only from an IP address in `TRUSTED_PROXY_IPS`, or
+from any IP address while that list is empty.
+
+This lets built-in sign-in work over plain HTTP on your local network, and HTTPS sites
+keep `Secure`. OIDC sign-in over plain HTTP needs `ORIGIN` set to that `http://` address.
+Set `ORIGIN=https://your-domain` to mark the cookie `Secure` on every request. Forward
+auth alone (no login cookie) is unaffected.
 :::
 
 ## Built-in login

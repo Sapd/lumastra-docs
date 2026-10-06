@@ -59,12 +59,14 @@ Ask these before you continue, and use the answers in the later steps:
      `media.example.com`), and does its DNS already point at this server?
    - If they have no reverse proxy, set one up in step 7: Traefik with Docker labels
      fits Docker Compose well; Caddy is also simple. Let them choose.
-   - Only if they explicitly want Lumastra without HTTPS, skip the proxy. It then works
-     at `http://localhost:3000` on this machine. For other devices on their local
-     network, change the port mapping to `3000:3000` and leave `ORIGIN` unset; they open
-     `http://<server-ip>:3000`. Tell them that plain HTTP sends passwords unencrypted
-     over the network, that the iPhone, iPad and Apple TV apps need HTTPS, and not to
-     forward port 3000 on their router.
+   - Only if they explicitly want to run Lumastra without HTTPS, skip the proxy.
+     Lumastra then works at `http://localhost:3000` on this machine. If they ask for
+     access from other devices on their local network, change the port mapping to
+     `3000:3000` and leave `ORIGIN` unset; they open `http://<server-ip>:3000`.
+     Built-in accounts work there; single sign-on (OIDC) needs HTTPS. Tell them that
+     plain HTTP sends passwords unencrypted over the network and that the iPhone, iPad
+     and Apple TV apps need HTTPS. Also tell them not to forward port 3000 on their
+     router.
 5. How should people sign in? Built-in accounts work out of the box. Single sign-on via
    OIDC or forward auth can be added later: https://lumastra.org/guides/authentication/
 6. Do they have a free TMDB API key for movie and series metadata? It's optional but
