@@ -6,8 +6,9 @@ sidebar:
 ---
 
 Lumastra mirrors an AudiobookShelf library and syncs listening progress both ways.
-It does not scan audiobook files itself. Audio is proxied through Lumastra, so
-AudiobookShelf need not be reachable from listeners' browsers.
+It does not scan audiobook files itself: a folder of audiobooks on disk can't be a
+Lumastra library, so you need an AudiobookShelf server. Audio is proxied through
+Lumastra, so AudiobookShelf need not be reachable from listeners' browsers.
 
 ## Before you start
 
@@ -17,7 +18,7 @@ Three things must be in place.
 | -------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
 | `AUDIOURL` + `AUDIOAPIKEY` | Environment / `settings.json`           | Your AudiobookShelf base URL and an **admin-or-up** API key.       |
 | `FEATURE_AUDIOBOOKS`       | Environment                              | Defaults to **on**; the feature stays dormant until the two above are set. |
-| A library path             | **Library → Sources & scanning**        | One path with the AudiobookShelf provider, in its own library group. |
+| A library path             | **Library → Sources & scanning**        | Create an empty library, then **Add folder** with **Source: AudiobookShelf** and pick the AudiobookShelf library. |
 
 The API key needs admin rights because Lumastra mints **per-listener keys** from
 it (see [Progress sync](#progress-sync) below). A read-only key can import the

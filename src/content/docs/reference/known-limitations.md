@@ -267,6 +267,11 @@ works on the web for now.
 Jellyfin. When sync is on, users are matched by username, so a Lumastra username must
 match the Jellyfin one.
 
+**Audiobooks need AudiobookShelf.** Lumastra doesn't scan audiobook files from a folder.
+Audio files in a folder library are imported only when it's a music library, so the
+library dialogs offer audiobooks only from an AudiobookShelf server. See
+[Audiobooks](/guides/audiobooks/).
+
 **Media on S3 or other object storage: new files aren't picked up right away.** The live
 file watcher relies on file-system events, which a mounted bucket doesn't send. Use a
 scheduled scan instead.

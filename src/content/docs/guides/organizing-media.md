@@ -29,8 +29,8 @@ Lumastra's library model has two layers:
 - A **library path** is one on-disk root folder. Each path has a single
   **media type**: `movie`, `tv`, `anime`, `music`, `audiobook`, or one of the
   personal types (`home_video`, `training`, `educational`, `personal`).
-  Audiobooks are mirrored from AudiobookShelf, not scanned from disk. See
-  [Audiobooks](/guides/audiobooks/).
+  Audiobooks are mirrored from AudiobookShelf, not scanned from disk, so a folder
+  can't be an `audiobook` path. See [Audiobooks](/guides/audiobooks/).
 
 :::note[One media type per group]
 Because each path carries one media type, keep **one media type per group**:
