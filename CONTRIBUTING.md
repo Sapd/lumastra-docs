@@ -75,14 +75,22 @@ import AuthFlowDiagram from '../../../components/diagrams/AuthFlowDiagram.astro'
 
 ## Licensing and the CLA
 
-By contributing you agree that your text is published under
-[CC BY 4.0](LICENSE) and your code samples under [0BSD](LICENSE-CODE).
+Merged contributions are published under the [MIT No Attribution License](LICENSE) (MIT-0),
+like the rest of this repository (except the logo files, see the README). You keep your
+copyright.
 
-Contributions also need the
+Contributions need the
 [Lumastra Contributor License Agreement](https://github.com/Sapd/lumastra/blob/main/.github/CLA.md).
-It is the same agreement as for the main repository. You keep your copyright. On your
-first pull request a bot asks you to sign it by posting one sentence as a comment. If you
-have already signed for the main repository, that signature counts here too.
+It is one agreement for all Lumastra repositories, including this one. On your first pull
+request a bot asks you to sign it by posting one sentence as a comment. If you have already
+signed on another Lumastra repository, you won't be asked again.
+
+Screenshots, images and quoted text have to be your own, or their license has to allow
+publishing them under MIT-0 (public domain, CC0, MIT-0, 0BSD); name the source in the pull
+request. Material that needs attribution is accepted only if the page keeps its notice and the
+pull request says so. Screenshots must not show
+real user names, hostnames, e-mail addresses or other people's media. Use the demo data or
+public-domain titles.
 
 ## Code of conduct
 

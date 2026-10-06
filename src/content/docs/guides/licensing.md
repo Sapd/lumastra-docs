@@ -90,8 +90,9 @@ exception is recording (DVR).
 Contributions need a Contributor License Agreement, as in many open-source projects:
 Kubernetes, the Apache Software Foundation projects, Python and Go all ask for one. It's
 what makes the commercial license below and the supporter features possible. You keep
-the copyright to your code, your contribution stays available under the AGPL, and anyone
-can fork Lumastra under the AGPL at any time.
+the copyright to your code, contributions to the open-source core stay available under the
+AGPL (or another open-source license), and anyone can fork the core under the AGPL at any time. Contributions to the
+source-available supporter features are distributed under their license.
 
 If you have questions or concerns about the licensing or the CLA, feel free to open a
 discussion in [Discussions](https://github.com/Sapd/lumastra/discussions/categories/general).

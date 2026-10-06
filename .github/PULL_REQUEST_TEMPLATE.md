@@ -8,5 +8,6 @@
 - [ ] `npm run build` passes (or CI is green).
 - [ ] The facts match the software. Anything I'm unsure about is noted above.
 - [ ] I followed the style rules in CONTRIBUTING.md.
+- [ ] Screenshots, images and quotes are my own, or their source and license are named above.
 - [ ] I agree to the [CLA](https://github.com/Sapd/lumastra/blob/main/.github/CLA.md). The bot asks on your first pull request.
 - [ ] AI tools: none / some (say which, and that you checked the result yourself).

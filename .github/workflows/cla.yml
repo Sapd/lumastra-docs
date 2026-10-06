@@ -8,7 +8,7 @@ name: CLA Assistant
 # written to the PRIVATE repository Sapd/lumastra-cla-signatures (the record is a legal asset
 # and must live somewhere we control), via the fine-grained PAT in `CLA_SIGNATURES_TOKEN`
 # (Contents: read/write on that one repo). The action stores only GitHub username, user id,
-# PR number and timestamp — no names or e-mails, on purpose.
+# repository id, PR number, signing-comment id and timestamp — no names or e-mails, on purpose.
 #
 # Uses pull_request_target + issue_comment as the action documents. NEVER add a checkout of the
 # PR head to this workflow: pull_request_target runs with write permissions in this repo.

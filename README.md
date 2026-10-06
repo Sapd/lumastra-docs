@@ -45,15 +45,21 @@ anything by hand.
 
 ## License
 
-- The documentation text and images are licensed under
-  [Creative Commons Attribution 4.0 International](LICENSE) (CC BY 4.0). You can reuse
-  and adapt them if you credit "Lumastra documentation" and link to the source.
-- Code samples in the pages, and the source files of this site (configuration,
-  components, scripts), are licensed under the [BSD Zero Clause License](LICENSE-CODE)
-  (0BSD). You can paste them into your own setup without attribution.
-- The Lumastra name and logos are trademarks of Denis Arnst. Neither license covers
-  them. The logo files in `src/assets/` and `public/favicon.svg` are here so the preview
-  looks like the real site.
+Everything in this repository is licensed under the [MIT No Attribution License](LICENSE)
+(MIT-0): the documentation text, images, code samples and the site's source files. You can
+copy, adapt and republish it, and paste the samples into your own setup, without keeping a
+notice. A link back to the page you used is appreciated, not required.
 
-The Lumastra software itself is licensed separately. See its
-[repository](https://github.com/Sapd/lumastra).
+Two exceptions:
+
+- The Lumastra logo files in `src/assets/` and `public/favicon.svg` are brand assets, all
+  rights reserved
+  ([LicenseRef-Lumastra-Branding](https://github.com/Sapd/lumastra/blob/main/LICENSES/LicenseRef-Lumastra-Branding.txt)).
+  They are here only so the preview looks like the real site. The Lumastra name and logos
+  are trademarks of Denis Arnst.
+- Material that a page marks as third-party keeps its own license.
+
+Contributions are accepted under the
+[Lumastra Contributor License Agreement](https://github.com/Sapd/lumastra/blob/main/.github/CLA.md),
+and the project publishes them under the license above. The Lumastra software itself is
+licensed separately; see its [repository](https://github.com/Sapd/lumastra).
