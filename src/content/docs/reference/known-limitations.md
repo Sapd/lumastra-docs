@@ -130,6 +130,16 @@ and `allkeys-lru` (`CACHE_URL`), and keep the task keys on the `noeviction` one
 (`TASK_CACHE_URL`). The admin Health page warns when the instance holding task data
 uses an evicting policy.
 
+**While Valkey is unreachable, signed-in apps cost database reads.** On each request from
+a phone, TV app or other device-flow client, Lumastra checks whether that device was
+signed out. Normally the answer is cached, and Valkey carries sign-outs to the other
+replicas. While Valkey is unreachable, or a replica has lost its Valkey subscription
+(`authCacheBus` on the admin Health page), the replica asks PostgreSQL instead, about
+once every 5 seconds per active device. If PostgreSQL can't answer either, those requests
+get `503` with `Retry-After`, not a sign-out: the apps retry and stay signed in. This is
+deliberate, so that a signed-out device can't keep working just because the cache
+couldn't be checked.
+
 **Kubernetes support is in beta.** Lumastra ships a Helm chart, and lumastra.org's own
 instance runs on it. It is the only production install so far. Docker Compose stays the
 main supported way to run Lumastra, and Kubernetes support is best-effort until 1.0. The
