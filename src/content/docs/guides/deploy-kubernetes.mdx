@@ -693,7 +693,9 @@ pod. The numbers below were measured on lumastra.org's instance and a k3s rehear
 Plan a limit of about 1.5 GiB plus 1 GiB per concurrent CPU transcode per pod. 4K and
 HEVC sources need more. The app's cap `LUMASTRA_MAX_CONCURRENT_TRANSCODES` is per pod and
 defaults to 3 times the CPU cores (12 to 32). That is far above what a 4 Gi pod survives
-without a GPU, so set it to match the limit. If a GPU install can fall back to the CPU
+without a GPU, so set it to match the limit. When a pod is at its cap, a new stream only
+replaces one nobody has played for 2 minutes (`LUMASTRA_TRANSCODE_EVICTION_MIN_IDLE_SECONDS`);
+if everyone is still watching, the new stream gets a 503 with `Retry-After` instead. If a GPU install can fall back to the CPU
 (no free device plugin slot, GPU moved), size for the CPU case. The worker follows the
 same rule for its own FFmpeg jobs (thumbnails, trickplay, audio analysis).
 
