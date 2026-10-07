@@ -28,7 +28,9 @@ installed version.
 
 **Stop** requests graceful cancellation. **Force stop** becomes available once a run
 is in `cancelling`; it abandons the job immediately and bypasses cleanup. Give Stop
-time to finish before escalating.
+time to finish before escalating. Stopping every run of a task (the attention
+board's **Stop runs**, or the bulk API without `force`) is graceful too; a repeated
+Stop on a run that is already stopping changes nothing.
 
 Force stop normally releases the task's exclusivity/dedup lock so the same input can
 run again. If lock release fails, it expires on its TTL (up to 24 hours by default).
@@ -42,6 +44,12 @@ that exhausted retries (`failed_permanent`). The **Stuck items** panel flags
 
 The map covers the selected time window (24 hours by default). A quiet map can hide
 older queued work; widen the window when investigating a backlog.
+
+The header counts (in flight, dead letter, degraded, running, failed in the last
+hour) leave out items you removed from the library, as the lists below them do.
+**Accept as expected** on a stage changes exactly the items its
+"needs re-identification" count includes: removed items and items that were never
+matched are left alone.
 
 ## Coverage grid (Completion view)
 

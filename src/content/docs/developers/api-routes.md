@@ -174,8 +174,8 @@ detailed scan and ingest documentation.
 | `GET` | `/runs/{id}` | `runs:read` | One run + result |
 | `GET` | `/runs/{id}/logs` | `runs:read` | Log lines for one run |
 | `GET` | `/runs/stream` | `runs:read` | SSE live-run stream |
-| `POST` | `/runs/{id}/cancel` | `tasks:run` | Cancel one run |
-| `POST` | `/runs/cancel?byTask={id}` | `tasks:run` | Cancel all runs for a task |
+| `POST` | `/runs/{id}/cancel` | `tasks:run` | Cancel one run: graceful, `{ "force": true }` hard-kills. `404` unknown run, `409` already finished, `alreadyCancelling: true` when a graceful cancel was already in progress |
+| `POST` | `/runs/cancel?byTask={id}` | `tasks:run` | Cancel all runs for a task: graceful unless `{ "force": true }`. Returns `cancelled`, `orphaned` (already finished or gone) and `escalated` (hard-kills scheduled) |
 | `GET` | `/queues` | `tasks:admin` | Queue class status (`queue ∈ cpu\|io\|embedding\|maintenance\|ingest\|bulk\|analysis\|discovery`) |
 | `POST` | `/queues/{queue}/pause` | `tasks:admin` | Pause a queue class |
 | `POST` | `/queues/{queue}/resume` | `tasks:admin` | Resume a queue class |

@@ -441,7 +441,6 @@ A device-flow token from either grant carries:
 | `media:write` | ✓ | — | Ratings, watchlist, playback progress |
 | `sessions:read` | ✓ | ✓ | Read your own play sessions |
 | `requests:read` | ✓ | ✓ | See your own media requests |
-| `tasks:read`, `runs:read` | ✓ | ✓ | Read-only task/run status |
 
 If your client only ever reads (a companion "now playing" display, a read-only
 dashboard), request `"media:read"`. The resulting token cannot write even if the

@@ -32,6 +32,10 @@ are independent.
 Tasks are grouped by purpose. Internal tasks are hidden by default but remain
 visible when they have an active problem; `?system=1` includes all system tasks.
 
+A failed lookup is never shown as healthy: when the auto-pause state cannot be read,
+the task page says so with a Retry button instead of "Running normally". Missing
+lane data shows `—` rather than a green `0` for backlog and failed runs.
+
 A **stale-edge warning** means an upstream task finished but a downstream task
 hasn't started within its staleness window. It can clear at the next scheduled
 sweep. Persistent warnings need
@@ -63,6 +67,21 @@ with `tasks:admin` scope. `PUT` replaces the set with `{ triggers: [...] }`
 `PUT /api/v1/tasks/{id}/schedule` endpoint remains supported: presets become
 interval triggers, `"never"` pauses the task, and custom trigger sets read back
 as `"custom"`.
+
+## Run options on the task page
+
+**Run now** on the task list runs one catch-up batch, the same slice the schedule
+runs. A task's page (Overview tab) offers more where the task supports it:
+
+- **Process all pending** works through everything still waiting in one long run.
+  Tasks that can discard their own results also offer **Discard and rebuild
+  everything**, which deletes existing results first and must be acknowledged.
+- **Re-detect segments…** (intro analyzer only) refreshes intro markers, outro
+  markers, or both.
+
+Both are disabled while a run of the task is in progress. If a run is already
+going, the result says so; after a confirmed rebuild it says that nothing was
+rebuilt.
 
 ## Cleaning up unavailable media
 
@@ -126,11 +145,22 @@ follow their own retention settings, not this policy.
 
 ## Run access and cancellation
 
-The admin Runs page requires admin access. The API's `GET /runs` and
-`/api/v1/runs` endpoints accept `runs:read`, allowing scoped non-admin access to
-runs and their logs. Mutations need their corresponding scopes or admin access.
+The admin Runs page requires admin access. Run history, run details, logs and the
+live run stream are operator data (inputs, scopes and error text of every run), so
+the `runs:read` scope comes only with `tasks:admin` or `admin`; an ordinary user
+session or a device-flow token no longer has it. Mutations need their own scopes or
+admin access.
 
-For graceful cancellation and Force stop behavior, see
+On the **Runs** page, the **Running** tab ignores the 24 h / 7 d window: a run that
+started two days ago and is still active, or stuck stopping, is exactly what that
+tab is for. The window applies to the other tabs. When you have used **Load more**,
+the extra pages stay through the live refresh; if a refresh fails, the rows stay
+with a "Could not refresh" notice.
+
+Cancelling is graceful unless you ask for more, both for one run and for all runs
+of a task (`POST /api/v1/runs/cancel?byTask=…`, `{ "force": true }` to escalate).
+A run that finished between loading the page and confirming **Stop** is reported
+as already finished. For Force stop, see
 [Run states and cancellation](/guides/administration-operations/#run-states-and-cancellation).
 
 ## Runs interrupted by a restart
@@ -157,6 +187,37 @@ Sync**:
 
 Start the task again by hand once the cause of the restarts is fixed. Tasks that do
 not support resuming fail as before when a restart interrupts them.
+
+## Reading System → Health
+
+The verdict at the top weighs every check the page reads: the attention items, each
+component check (database, Valkey, Valkey capacity and the rest) and the task-system
+rollup. It is **Critical** when any component fails or the task system is unhealthy,
+**Degraded** for warnings, and **Check incomplete** only when nothing is known to be
+wrong but something could not be read. A known problem is never hidden behind
+"Check incomplete".
+
+- **Providers:** a tile is green only when Lumastra reached the service (Sonarr,
+  Radarr, Seerr and Audiobookshelf are probed about once a minute). Unreachable
+  services are red and listed first. Configured services that are not probed show
+  **Configured · not checked**.
+- **Configuration check:** the banner above admin pages is re-checked every five
+  minutes and after you save settings. If the check itself fails, it says so.
+- **Safe to restart:** shows **Can't tell** when the task database or the
+  pending-write queue cannot be read; it never reports "safe" then.
+- **Cluster:** a cluster with fewer live nodes than registered ones shows the
+  degraded banner, even when only one node is left.
+- **What changed?:** if the recent-failure lookup fails, the heading says it could
+  not check instead of "No recent failures".
+
+**Transcode failures** lists the newest 100 incident groups and says when there are
+more. A link from a health finding to one encoder lists all of that encoder's
+groups. Clearing removes only failures up to the newest one shown, so failures that
+arrive while you look stay; with the list cut off, **Clear all** clears only the
+groups shown.
+
+The **Audit log** CSV export stops at 10,000 rows and warns when it did; narrow the
+filters (for example a later start date) to export the rest.
 
 ## Diagnose stalled work
 

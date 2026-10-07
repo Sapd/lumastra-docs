@@ -306,9 +306,9 @@ deterministically at token-issuance time:
 - `write` → `read` + `media:read` + `media:write` + `sessions:read` +
   `requests:read`. It does **not** grant `tasks:run`, `webhooks:write`, or any
   `*:admin` scope. Those require explicit fine-grained scopes.
-- `read` → `runs:read` + `media:read` + `sessions:read` + `requests:read`. It
-  does **not** grant `tasks:read`. Task/ops routes need an explicit
-  fine-grained scope even for read access.
+- `read` → `media:read` + `sessions:read` + `requests:read`. It does **not**
+  grant `tasks:read` or `runs:read`. Task/ops routes, run history included, need
+  an explicit fine-grained scope even for read access.
 
 Several fine-grained `*:admin` scopes also imply their `:read` counterpart:
 `users:admin`, `library:admin`, `providers:admin`, `media:admin` (implies both
@@ -323,7 +323,7 @@ additionally implies `tasks:read`, `runs:read`, and `metrics:read`.
 | `tasks:read` | Read task definitions and run history |
 | `tasks:run` | Enqueue and cancel runs |
 | `tasks:admin` | Pause/resume tasks, manage queues and plugins |
-| `runs:read` | Read run history and stream run logs |
+| `runs:read` | Read run history and stream run logs (operator data: comes with `tasks:admin`) |
 | `webhooks:write` | Create, update, and delete webhooks |
 | `media:read` | Read catalog items |
 | `media:write` | Update catalog metadata |

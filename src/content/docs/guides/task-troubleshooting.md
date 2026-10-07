@@ -623,6 +623,29 @@ task is needed.
 Skip the full wipe unless you need library-wide badges promptly; existing files
 otherwise gain them when next probed.
 
+## Recipe 13: Task stays auto-paused in "half-open" with no run
+
+**Symptom:** the task's auto-pause shows *Recovering* (`half_open`) or **Run now**
+answers `503` with "Circuit breaker is half_open … circuit_open", but no probe run
+appears in Runs.
+
+### Diagnosis
+
+On builds before 2026-10-07, opening the task page or reading
+`GET /api/v1/tasks/{id}/state` after the cooldown took the circuit's one probe
+slot (a 5-minute lock in Valkey) and moved it to `half_open` without starting a run.
+Real runs were refused until the lock expired. Current builds read the state
+without touching the circuit.
+
+**Run now** against an open circuit returns `503` with the reason; a quota stop
+returns `422`.
+
+### Resolution
+
+Wait up to 5 minutes: the next start after the lock expires claims the probe.
+To resume immediately, use **Resume now** on the task page (or
+`PUT /api/v1/tasks/{id}/state` with `{ "breaker": "enable", "force": true }`).
+
 ---
 
 <span id="quick-reference-useful-sql--valkey--bash-snippets"></span>
