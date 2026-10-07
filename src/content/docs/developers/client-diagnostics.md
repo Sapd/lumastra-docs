@@ -21,7 +21,7 @@ kinds:
 | `api_failures` | Counts of failed API calls, by endpoint | `FEATURE_CLIENT_DIAGNOSTICS` |
 | `playback_incident` | A playback failure or stall | always on |
 | `log_bundle` | A submitted log bundle (see below) | `FEATURE_CLIENT_LOG_BUNDLES` |
-| `compat_incident` | A Jellyfin app that could not play an item (see [Jellyfin apps](#jellyfin-apps)) | `FEATURE_JELLYFIN_COMPAT` |
+| `compat_incident` | A Jellyfin app that could not play an item (see [Jellyfin apps](#jellyfin-apps)) | `FEATURE_CLIENT_DIAGNOSTICS` |
 
 `playback_incident` is always recorded regardless of the feature switch: it's
 the same report a client sends when a stream stalls or fails, and it's exempt
@@ -68,11 +68,15 @@ deduplicated, and subject to `FEATURE_CLIENT_LOG_BUNDLES` and the per-user daily
 byte budget.
 
 **Report on GitHub.** On these rows an admin can open a report preview. The
-report removes titles, user and device names, file paths, IP addresses and
-tokens, and replaces ids with short tags that are only meaningful on your
-server. From the preview an admin can download the report file or open a
-prefilled GitHub issue form. Nothing is sent by the server; the admin decides
-whether to submit anything.
+report removes IP addresses, tokens, e-mail addresses, URL host names and your
+server's own host names, and replaces ids with short tags that are only
+meaningful on your server. An incident report holds only the app name and
+version and the technical shape of the media. A crash log excerpt is different:
+it can still contain titles, user or device names and file paths, so the preview
+shows the excerpt in full and you should read it before posting. From the
+preview an admin can download the report file or open a prefilled GitHub issue
+form. Nothing is sent by the server; the admin decides whether to submit
+anything.
 
 ## Redaction
 
