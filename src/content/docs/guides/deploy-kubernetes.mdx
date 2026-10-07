@@ -411,6 +411,10 @@ treats paths:
   without an identity, so personal access tokens and device tokens work.
   `extraPassthroughPaths` adds more prefixes with this behaviour, for example
   `/api/playback/` for cookieless players that fetch `stream_token` URLs.
+- `/oauth/links/` (the MyAnimeList account-linking callback) behaves like `/api/v1/` even
+  though `/oauth/` bypasses the identity provider, because linking needs the signed-in
+  user (`forwardAuth.oauthLinksPassthrough`, on by default). Don't add `/oauth/links/` to
+  `bypassPaths`.
 - If the auth endpoint answers with an error (a 3xx, 400, 404, 405, 408, 429 or 5xx) or
   times out, the router treats it as a `401`. On `/api/v1/` and the passthrough paths the
   request goes on without an identity, so tokens still work. Everything else gets the

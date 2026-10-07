@@ -290,6 +290,7 @@ by the proxy so token clients are never redirected to a login page.
 | `/api/*`      | Browser session (built-in / OIDC) or forward auth           | Browser UI only               |
 | `/api/v1/*`   | Bearer token (JWT / PAT / service)                          | TV apps, scripts, automation  |
 | `/oauth/*`    | Public                                                       | Device authorization flow     |
+| `/oauth/links/*` | Browser session (built-in / OIDC) or forward auth        | Account-linking callback (MyAnimeList) |
 | `/j/*`        | Emby token / `api_key` param / `jellyfin_compat` PAT scope   | Jellyfin-compatible clients   |
 | `/subsonic/*` | Subsonic `u`+`t`/`s`, `p`, or `apiKey` params                 | Subsonic/OpenSubsonic clients |
 
@@ -347,7 +348,8 @@ For endpoint parameters, expiry settings, polling limits, and error handling, se
 
 :::caution[Proxy bypass required]
 Add `/oauth/.*`, `/api/v1/.*`, `/j/.*`, and `/subsonic/.*` to your proxy's
-unauthenticated (bypass) paths. Every one of these surfaces authenticates itself per
+unauthenticated (bypass) paths, but keep `/oauth/links/` behind forward auth: account
+linking needs the signed-in user. Every one of these surfaces authenticates itself per
 request and none of them can complete a forward-auth redirect, so gating them behind
 your IdP breaks Jellyfin clients, Subsonic clients, TV apps, and PAT/service-token
 clients alike. See [Connecting third-party apps](/using/third-party-players/) and the

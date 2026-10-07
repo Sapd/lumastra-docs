@@ -135,6 +135,24 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
     }
 
+    # Account linking (MyAnimeList) returns the browser here and needs the
+    # signed-in user, so this one /oauth/ path goes through Authentik like
+    # `location /` (the longer prefix wins over /oauth/).
+    location ^~ /oauth/links/ {
+        auth_request /outpost.goauthentik.io/auth/nginx;
+        error_page 401 = @authentik_signin;
+        auth_request_set $user   $upstream_http_x_authentik_username;
+        auth_request_set $groups $upstream_http_x_authentik_groups;
+        proxy_set_header X-authentik-username $user;
+        proxy_set_header X-authentik-groups   $authentik_groups_sent;
+
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+
     # Webhooks that other services send to plugins (signed per integration),
     # uptime checks, and the Prometheus endpoint (which checks its own token).
     # None of these callers can sign in through Authentik.
@@ -203,7 +221,8 @@ Use a `forwardAuth` middleware pointing at
 `X-authentik-username` and `X-authentik-groups` in `authResponseHeaders`. Apply the
 same bypass rules as the Nginx tab: routers for `/j/`, `/subsonic/`, `/api/v1/`,
 `/oauth/`, `/api/plugin-webhooks/`, `/api/health` and `/metrics` must skip the
-`forwardAuth` middleware entirely. See Authentik's
+`forwardAuth` middleware entirely, except `/oauth/links/`, which keeps it (give
+that router a higher priority than the `/oauth/` one). See Authentik's
 proxy-provider docs for the full Traefik snippet.
 
 </TabItem>
@@ -230,7 +249,10 @@ exemption with any other proxy (Traefik, Caddy, …).
 
 :::caution[Bypass locations are required, not optional]
 `/j/`, `/subsonic/`, `/api/v1/`, `/oauth/`, `/api/plugin-webhooks/`, `/api/health` and
-`/metrics` must ALL bypass the `auth_request` gate.
+`/metrics` must ALL bypass the `auth_request` gate. The one exception is
+`/oauth/links/`: account linking needs the signed-in user, so keep it behind
+`auth_request` as shown above. If it bypasses Authentik, account linking through
+that callback fails with an error on the Connections page.
 Gating the whole domain behind Authentik (the default pattern most tutorials show)
 silently breaks Jellyfin clients, Subsonic clients, TV apps, and PATs/service tokens.
 
