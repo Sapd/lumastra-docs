@@ -137,9 +137,11 @@ Licensing works **offline** and sends almost nothing:
    period*, *early access until &lt;date&gt;*, *valid*, *expiring soon*, *expired* or
    *free tier*.
 3. The key is **checked offline** against a public key built into the app, so the check
-   itself needs no connection. The app keeps working with the stored key and only
-   contacts the licensing server again when the key is missing, invalid or less than 14
-   days from expiring, or to renew the push relay token (see the privacy note below).
+   itself needs no connection. The app keeps working with the stored key. It contacts
+   the licensing server again when the key is missing, invalid or less than 14 days from
+   expiring, to renew the push relay token, and otherwise about once a week to check in
+   (see the privacy note below). A check-in that fails changes nothing: the install keeps
+   its key until that key really expires.
 4. If your install can't reach the licensing server (offline, behind a firewall, during
    an outage), get a key by hand at [lumastra.org/license](https://lumastra.org/license/):
    paste your install ID, copy the key, and paste it into **Settings → General →
@@ -166,13 +168,23 @@ blocks sign-in, browsing or free-tier playback.
 :::
 
 :::note[Privacy]
-When the install enrolls or renews, the only things that leave your server are the
-**install ID** and a small status code that shows the license check is working normally.
-Never your media, metadata, accounts or AI prompts. Apart from enrolling and renewing,
-nothing leaves your server for licensing. The same call also hands out the 24-hour token
-for the iOS push relay, so while push notifications are on (the default) and use the
-standard relay, the install repeats it every six hours even with a valid key. See
-[What Lumastra sends where](/reference/data-flows/).
+When the install enrolls, renews or checks in, the only things that leave your server
+are the **install ID**, the **Lumastra version** it runs, and a small status code that
+shows the license check is working normally. Never your media, metadata, accounts or AI
+prompts.
+
+How often: once at first start, then about once a week. The same call also hands out the
+24-hour token for the iOS push relay, so while push notifications are on (the default)
+and use the standard relay, the install makes it every six hours instead.
+
+What the licensing server keeps: for each successful call, the call type, the license
+tier, the version (release number only, such as `0.1.3`), the country Cloudflare derives
+from the connection, and an anonymised install ID: a keyed hash of the install ID, so the
+real ID is not stored. It does not store your IP address or the license key. These
+records are counts, kept for three months.
+
+Why: to issue and renew license keys, and to know roughly how many Lumastra installs
+exist and run which versions. See [What Lumastra sends where](/reference/data-flows/).
 :::
 
 ## Trademarks & forks

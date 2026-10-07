@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | 5 to 30 seconds after the first start, then about every six hours | The install ID and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | Can't be switched off; blocking it is safe |
+| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | Can't be switched off; blocking it is safe |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -67,15 +67,17 @@ under Apple's own terms, the same as with any iOS app.
 ### `lumastra.org/api/license/refresh`: licence renewal
 
 Licence *verification* is fully offline against a baked-in public key; this
-endpoint only *issues and renews* keys, and hands out the push-relay token.
+endpoint (and `/api/license/issue` for the first key) only *issues and renews*
+keys, and hands out the push-relay token.
 
 | | |
 | --- | --- |
 | **On by default?** | **Yes.** |
-| **When** | 5 to 30 seconds after the server starts, then about every six hours. The call is made when the stored licence key is missing, invalid or expiring, **or** when push is on and uses the default relay without a `PUSH_RELAY_TOKEN`. The relay token lasts 24 hours, so that second case renews it on every six-hour tick. The token is shared by all processes and replicas of the install through Valkey, so a restart or a split web/worker deployment does not add calls while the token is still fresh. Without a usable key a failed call is retried after about 30 minutes. |
-| **Sent** | Two fields: a random per-install UUID and a one-digit licensing state code. |
+| **When** | 5 to 30 seconds after the server starts, then the server checks every six hours whether a call is needed. The call is made when the stored licence key is missing (then to `/api/license/issue`), invalid or expiring; when push is on and uses the default relay without a `PUSH_RELAY_TOKEN`; and otherwise about once a week (a check-in, at a time that differs per install). The last contact is shared through Valkey, so restarts and replicas do not add check-ins. A failed check-in leaves the stored key as it is and is tried again on a later six-hour tick. The relay token lasts 24 hours, so that second case renews it on every six-hour tick. The token is shared by all processes and replicas of the install through Valkey, so a restart or a split web/worker deployment does not add calls while the token is still fresh. Without a usable key a failed call is retried after about 30 minutes. |
+| **Sent** | Three fields: a random per-install UUID, the Lumastra version string, and a one-digit licensing state code. |
 | **Received** | A signed licence key, and a relay token valid for 24 hours and bound to that UUID. |
 | **Not sent** | Titles, files, users, prompts, library contents. |
+| **What the server keeps** | Per successful call: issue or refresh, the licence tier, the release number (`0.1.3`; anything after it is cut), the country Cloudflare derives from the connection, and a keyed hash of the install UUID instead of the UUID. Not the IP address, not the UUID, not the key. Kept as counts for three months, to know how many installs exist and which versions they run. |
 | **Avoid it** | Blocking it leaves the server on its current key until that expires, then on the free tier (never a lockout), and turns push off unless you run your own relay or use your own Apple key. See [iOS push notifications](/guides/push-notifications/). |
 
 Full detail is in the repository's
