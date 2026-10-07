@@ -228,6 +228,22 @@ because its buffer filled. Any participant can pause or resume the party with
 `sync`. The host reports its live state on `host_position` every ~5 s, so a
 guest may additionally honor it to self-correct.
 
+#### A `host_position` can be old when it arrives
+
+`host_position.timestamp` is the server time when the host's heartbeat was
+processed. After a reconnect the replay ring delivers frames that are seconds
+old, and a stalled connection can hold one up. If you anchor such a frame at the
+moment it arrives, a playing host looks seconds behind and your guest seeks
+back. Anchor it at its send time instead: age = your server-clock estimate −
+`timestamp`, and extrapolate the host's position by that age.
+
+Trust only the age **beyond the uncertainty of your clock estimate**, which is
+half the round trip of the handshake you estimated it from, capped at 1 s. A
+slow first request (cold server, TLS, auth) makes that estimate run ahead, and
+then every live frame would look old and your guest would sit ahead of the
+host. The cap stops a very slow handshake from letting a replay that is many
+seconds old pass as live.
+
 #### Explicit seeks are target-authoritative
 
 `buffer_check.seekInitiated` distinguishes a deliberate host seek (`true`) from
@@ -237,6 +253,16 @@ not replace it with a locally reported position, or a rapid backward seek
 turns into a resume at the old position. For join/drift barriers (`false`), a
 host may retain a clearly newer local position as a guard against a stale
 server snapshot; keep that exception narrow.
+
+#### A second host seek during the first one's barrier
+
+The barrier of a host seek pauses the host's own player until `all_ready`. If
+the host seeks again in that window (two quick presses of "skip forward"), the
+`isPlaying` of the second `seek` must be the play state the party **intends**,
+not the paused state of your player. Otherwise the second seek is sent with
+`isPlaying: false` and the whole party ends up paused. Remember the play state
+of your own last seek until its barrier settles, and clear it on any explicit
+play/pause, a remote `sync`, or an `all_ready` that ends paused.
 
 #### Error frames
 
@@ -329,6 +355,12 @@ code (e.g. `"MOVIE-7X3K"`) used in all subsequent requests, and carries
 `hostClientId` (the host device, see `clientId` vs `userId` above),
 `isPublic`, `participants[]`, and `createdAt`/`lastSync`.
 
+If the user is already in another party, creating one first ends that party
+when the user is its host, or leaves it when the user is a guest there.
+`GET /api/v1/watch-together` returns the user's current party (the one a
+Rejoin prompt should offer). A party the user left earlier ending later never
+clears that.
+
 ## Join a session (guest)
 
 ```http
@@ -402,6 +434,11 @@ heartbeat. Otherwise it keeps the host's position, so a guest whose player
 still sits at 0 cannot rewind the party. For `isPlaying: true` from a guest,
 the position is ignored. In every other case only the host sets the position.
 
+Play and Pause from the lock screen, a headset, a remote, media keys or the
+OS "Now Playing" controls are user actions like the on-screen button: send
+`sync` for them. Pausing only your local player leaves the rest of the party
+playing.
+
 ### Echo suppression
 
 After you apply a remote play, pause, or seek, your own player changes state
@@ -410,6 +447,25 @@ toward the state the remote command asked for. A user press the other way,
 inside the same window, is a real action and must be sent. A blanket time
 window after every remote command swallows a host's Play pressed right after a
 join.
+
+### The host's app goes to the background
+
+Send nothing when the app goes to the background; do not `leave`. But the
+operating system or browser may pause the host's player while it is in the
+background (iOS and mobile browsers suspend background media; Chromium can
+freeze a background tab). That is not a party pause, and no `sync` goes out
+for it. Make sure your heartbeat does not report it either:
+
+- When you go to the background while playing, remember the position and the
+  time.
+- While the system keeps your player paused, do not send `heartbeat`. A
+  "paused" heartbeat would mark the party paused while the guests keep
+  playing.
+- On return, if the party is still playing (`GET /api/v1/watch-together`), seek
+  **your own** player to the remembered position plus the elapsed time and play.
+  The guests never stopped, so do not move them with a party-wide `seek`.
+- A pause the user made on the lock screen while in the background is a real
+  pause: send `sync` for it (see above) and do not catch up afterwards.
 
 ### Starting an item
 
@@ -484,7 +540,9 @@ converge on the same outcome; this variant just changes rate less often.
 - Never broadcast state you did not cause (see
   [Echo suppression](#echo-suppression)).
 - An explicit `leave` (or `disband` for the host) when the user exits. Send
-  nothing when the app goes to the background or the user switches apps.
+  nothing when the app goes to the background or the user switches apps, and
+  no heartbeat while the system keeps a host paused there (see
+  [The host's app goes to the background](#the-hosts-app-goes-to-the-background)).
 
 ## Optional: reactions and screen effects
 
@@ -577,6 +635,13 @@ the feature is off or the session does not exist.
   never after `session_ended`.
 - Enter the barrier in `connected.bufferCheck` and send `ready`.
 - Never auto-play on load; stay in the session when your own media ends.
+- Age `host_position` by its `timestamp`, trusting only the age beyond your
+  clock estimate's uncertainty (half the round trip, at most 1 s).
+- Send `sync` for lock-screen, headset and remote Play/Pause.
+- A second host seek inside a barrier carries the intended play state, not
+  the paused player's.
+- Host in the background: never report a pause the system imposed; catch up
+  locally on return.
 
 ## Next
 
