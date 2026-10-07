@@ -177,11 +177,14 @@ How often: once at first start, then about once a week. The same call also hands
 24-hour token for the iOS push relay, so while push notifications are on (the default)
 and use the standard relay, the install makes it every six hours instead.
 
-What the licensing server keeps: for each successful call, the call type, the license
-tier, the version (release number only, such as `0.1.3`), the country Cloudflare derives
-from the connection, and an anonymised install ID: a keyed hash of the install ID, so the
-real ID is not stored. It does not store your IP address or the license key. These
-records are counts, kept for three months.
+What the licensing server records for its install counts: for each successful call, the
+call type, the license tier, the version (release number only, such as `0.1.3`), the
+country Cloudflare derives from the connection, and a pseudonymised install ID (a keyed
+hash of the install ID) instead of the install ID itself. These records contain no IP
+address and no license key, and are kept for three months. Like every request to
+lumastra.org, the connection itself is handled by Cloudflare, whose short-lived request
+logs can contain your server's IP address (see the
+[privacy policy](https://lumastra.org/privacy/)).
 
 Why: to issue and renew license keys, and to know roughly how many Lumastra installs
 exist and run which versions. See [What Lumastra sends where](/reference/data-flows/).
