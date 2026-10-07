@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | Can't be switched off; blocking it is safe |
+| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | The weekly check-in: **Weekly licence check-in** in Admin → Settings → General → Diagnostics (also offered in setup), or `LICENSE_CHECK_IN_ENABLED=false`. Renewal itself can't be switched off; blocking it is safe |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -78,6 +78,7 @@ keys, and hands out the push-relay token.
 | **Received** | A signed licence key, and a relay token valid for 24 hours and bound to that UUID. |
 | **Not sent** | Titles, files, users, prompts, library contents. |
 | **What the server records** | For its install counts, per successful call: issue or refresh, the licence tier, the release number (`0.1.3`; anything after it is cut), the country Cloudflare derives from the connection, and a pseudonymised install ID (a keyed hash of the UUID) instead of the UUID. No IP address, no licence key. Kept for three months, to know how many installs exist and which versions they run. Cloudflare's short-lived request logs for lumastra.org can contain the IP address, as for any request. |
+| **Switch off the check-in** | **Weekly licence check-in** in Admin → Settings → General → Diagnostics, the same switch in the setup wizard's privacy section, or `LICENSE_CHECK_IN_ENABLED=false`. The install then only calls when its key is missing or within 14 days of expiring, and for the push relay token while push uses the standard relay. |
 | **Avoid it** | Blocking it leaves the server on its current key until that expires, then on the free tier (never a lockout), and turns push off unless you run your own relay or use your own Apple key. See [iOS push notifications](/guides/push-notifications/). |
 
 Full detail is in the repository's
@@ -267,11 +268,12 @@ disabled, and prevent the default contacts:
   `FFMPEG_PATH` / `FFPROBE_PATH`;
 - `DISABLE_FRIBB_ANIME_SYNC=true`;
 - `UPDATE_CHECK_ENABLED=false` (or the switch in Admin → Settings);
+- `LICENSE_CHECK_IN_ENABLED=false` (or the switch in Admin → Settings) to stop the weekly licence check-in;
 - `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` before adding a music library;
 - `SONIC_MODEL_FP` if you run the sonic sidecar;
 - `FEATURE_PUSH_NOTIFICATIONS=false`, unless you use your own Apple key.
 
-The licence call to `lumastra.org` has no switch; when it can't get through, the
+Licence renewal itself has no switch; when it can't get through, the
 install keeps its current key and then falls back to the free tier, as described
 [above](#lumastraorgapilicenserefresh-licence-renewal).
 

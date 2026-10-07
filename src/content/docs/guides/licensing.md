@@ -187,7 +187,12 @@ logs can contain your server's IP address (see the
 [privacy policy](https://lumastra.org/privacy/)).
 
 Why: to issue and renew license keys, and to know roughly how many Lumastra installs
-exist and run which versions. See [What Lumastra sends where](/reference/data-flows/).
+exist and run which versions.
+
+To stop the weekly check-in, turn off **Weekly licence check-in** in **Admin → Settings →
+General → Diagnostics** (the setup wizard offers the same switch under privacy). The
+install then contacts the licensing server only to enroll, to renew a key that is close to
+expiring, and for the push relay token while push uses the standard relay. See [What Lumastra sends where](/reference/data-flows/).
 :::
 
 ## Trademarks & forks
