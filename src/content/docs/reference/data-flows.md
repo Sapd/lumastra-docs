@@ -19,6 +19,7 @@ configuration; default contacts are listed below.
 | --- | --- | --- | --- |
 | `lumastra.org` | 5 to 30 seconds after the first start, then about every six hours | The install ID and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | Can't be switched off; blocking it is safe |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
+| `api.github.com` | About once a day, at a random time | Nothing but the request (a `Lumastra/<version>` User-Agent, no token); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
 | `raw.githubusercontent.com` | Every 48 hours, once the library has a movie or show with a TMDB id | Nothing; a download of a public anime id list ([Fribb anime list](#fribb-anime-list)) | `DISABLE_FRIBB_ANIME_SYNC=true` |
 | `huggingface.co` and its CDN | First start of the optional sonic sidecar | Nothing; a download of the model weights ([sonic sidecar](#sonic-sidecar-model-weights)) | `SONIC_MODEL_FP` pointing at a local copy |
@@ -176,6 +177,19 @@ weights file to skip it; see
 
 ## Other outbound calls
 
+### Update check
+
+About once a day, at a time that differs per install, the server reads the list of
+Lumastra releases from `https://api.github.com/repos/Sapd/lumastra/releases`. It
+sends no token and nothing about your server except the request itself, with a
+`Lumastra/<version>` User-Agent (GitHub requires one) and, after the first
+answer, an `If-None-Match` header so unchanged answers are free. GitHub sees your
+server's IP address and the version in the User-Agent. Admins then see a newer
+version in the bell, on the admin home and on Admin → System → Instance; a
+release marked as a security fix shows in red until the install runs it. Turn
+it off with **Check for Lumastra updates** in Admin → Settings → General →
+Diagnostics (or `UPDATE_CHECK_ENABLED=false`). Then no request is made.
+
 ### Gravatar
 
 Off by default (`FEATURE_GRAVATAR`). When on, and a user has no avatar of their
@@ -237,7 +251,7 @@ What stops: new metadata, artwork and ratings (already-cached artwork keeps
 serving), the AI assistant and embedding-based recommendations and search
 (unless pointed at a local model), lyrics fetching, iOS push (unless you run the
 direct Apple route and *that* has a path out), Gravatar, Trakt and MAL sync,
-HDHomeRun guide updates, user webhooks, plugin installs by URL, and YouTube
+HDHomeRun guide updates, update notices, user webhooks, plugin installs by URL, and YouTube
 trailers in the browser.
 
 For an air-gapped install, omit cloud credentials, leave default-off features
@@ -246,6 +260,7 @@ disabled, and prevent the default contacts:
 - `FFMPEG_AUTO_DOWNLOAD=false`, with ffmpeg and ffprobe provided at
   `FFMPEG_PATH` / `FFPROBE_PATH`;
 - `DISABLE_FRIBB_ANIME_SYNC=true`;
+- `UPDATE_CHECK_ENABLED=false` (or the switch in Admin → Settings);
 - `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` before adding a music library;
 - `SONIC_MODEL_FP` if you run the sonic sidecar;
 - `FEATURE_PUSH_NOTIFICATIONS=false`, unless you use your own Apple key.

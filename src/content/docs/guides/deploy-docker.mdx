@@ -612,6 +612,13 @@ and worker start together. Avoid running mismatched image versions against the s
 database for long. Roll updates promptly. For rolling updates with no dropped
 requests or interrupted streams, see [Zero-downtime updates](/guides/zero-downtime-updates/).
 
+Security notices are published as
+[GitHub Security Advisories](https://github.com/Sapd/lumastra/security/advisories) and in the
+[release notes](https://github.com/Sapd/lumastra/releases). Lumastra checks the releases once a
+day and shows admins a newer version in the bell and on Admin → System → Instance. A security
+release shows in red until you have installed it. On `:edge` the notice compares the release
+tag your build came from, and skips releases published before the build.
+
 ## Live TV stream proxy
 
 Only needed when `LIVETV_SOURCE=standalone` (you bring your own M3U/EPG). Add a `proxy`
