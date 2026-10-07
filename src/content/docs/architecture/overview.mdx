@@ -101,6 +101,25 @@ flow, a personal access token, or a service token. See
 dev-only `devUser`/`DEFAULT_USER` overrides) and
 [API & tokens](/developers/api/) for the token surface.
 
+### How access is decided
+
+Every request passes `hooks.server.ts` before any route code runs. There,
+`resolveAuth` works out who is calling: a session cookie, forward-auth headers
+from a trusted proxy, or a token. Access gates then decide by the route
+SvelteKit will dispatch to (`event.route.id`), never by the raw URL path, so
+percent-encoded paths, a language prefix and `__data.json` requests are judged
+like the plain page. A layout `load` is never an access gate, because data
+requests and form actions skip it.
+
+The route policy table (`src/lib/server/auth/route-policy/rules.ts`) gives every
+route one policy: `public`, `user`, `admin`, `admin-scoped` (an admin, or a token
+whose scope the route checks) or a token surface whose route authenticates
+itself (`/j`, `/subsonic`, signed URLs, webhooks). A unit test fails for a route
+without a rule, and a snapshot lists every route with its policy, so every change
+to who may reach what shows up in review. The table currently runs in shadow
+mode next to the existing gates and logs where they disagree; checks on a single
+object (this title, this playlist) stay in the route handler.
+
 ### Configuration
 
 Configuration merges three layers at runtime, in ascending priority: compiled
