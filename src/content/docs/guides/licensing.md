@@ -191,8 +191,10 @@ exist and run which versions.
 
 To stop the weekly check-in, turn off **Weekly licence check-in** in **Admin → Settings →
 General → Diagnostics** (the setup wizard offers the same switch under privacy). The
-install then contacts the licensing server only to enroll, to renew a key that is close to
-expiring, and for the push relay token while push uses the standard relay. See [What Lumastra sends where](/reference/data-flows/).
+install then contacts the licensing server only to enroll, to renew a key that is missing,
+invalid, expired or close to expiring, and for the push relay token while push uses the
+standard relay (every six hours). A moved early-access end date then reaches the install
+only in the last 14 days before its key expires. See [What Lumastra sends where](/reference/data-flows/).
 :::
 
 ## Trademarks & forks
