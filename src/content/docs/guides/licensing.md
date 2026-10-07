@@ -190,7 +190,7 @@ Why: to issue and renew license keys, and to know roughly how many Lumastra inst
 exist and run which versions.
 
 To stop the weekly check-in, turn off **Weekly licence check-in** in **Admin → Settings →
-General → Diagnostics** (the setup wizard offers the same switch under privacy). The
+General → Diagnostics** (the setup wizard offers the same switch on its main settings step). The
 install then contacts the licensing server only to enroll, to renew a key that is missing,
 invalid, expired or close to expiring, and for the push relay token while push uses the
 standard relay (every six hours). A moved early-access end date then reaches the install
