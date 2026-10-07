@@ -187,7 +187,10 @@ first answer an `If-None-Match` header makes unchanged answers free. GitHub sees
 your server's IP address. Admins then see a newer version in the bell, on the
 admin home and on Admin → System → Instance; a release marked as a security fix
 shows in red until the install runs it (`:edge` and other development builds get
-the quiet notice only). Turn it off with **Check for Lumastra updates** in Admin →
+the quiet notice only). If you have checked that a security fix does not apply
+to your server, mark it as reviewed on Admin → System → Instance; it then shows
+as a normal update. If the check cannot reach GitHub for three days, admins get
+a quiet notice saying so. Turn it off with **Check for Lumastra updates** in Admin →
 Settings → General → Diagnostics (or `UPDATE_CHECK_ENABLED=false`). Then no
 request is made.
 
