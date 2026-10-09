@@ -114,7 +114,7 @@ elsewhere). **Keep playing.** Never interrupt for a bookkeeping failure:
 reopen a session at the current position and carry on syncing.
 
 Keep the session alive while paused with
-`POST /api/v1/audiobooks/session/{sessionId}/heartbeat { "status": "PAUSED" }`.
+`POST /api/v1/audiobooks/session/{sessionId}/heartbeat { "mediaId": "<book-uuid>", "status": "PAUSED" }`.
 A paused session holds a concurrent-stream slot, so release it (stop
 heartbeating, close) when the listener actually leaves, or a forgotten tab can
 exhaust the stream budget and block their next book.
