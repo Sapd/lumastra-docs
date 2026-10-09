@@ -40,7 +40,8 @@ Check for partially applied writes before retrying.
 
 The Flow view distinguishes failures still retrying (`failed_transient`) from those
 that exhausted retries (`failed_permanent`). The **Stuck items** panel flags
-`attempt ≥ 3`, `pending > 2h`, or `running > 15m`.
+`attempt ≥ 3`, `running > 15m`, or `pending > 30m` in a stage that has stopped
+draining and is not waiting for a scheduled run.
 
 The map covers the selected time window (24 hours by default). A quiet map can hide
 older queued work; widen the window when investigating a backlog.
