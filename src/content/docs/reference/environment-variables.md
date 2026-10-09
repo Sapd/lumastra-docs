@@ -12,8 +12,8 @@ Most settings are easier to change in the setup wizard and under **Admin → Set
 and every field there can also be set as an environment variable with the same name.
 A value from the environment wins: the field in Admin → Settings then shows it and
 can't be edited. `.env.example` lists only what a deployment needs before the app
-runs; this page is the full list. The secrets and deployment settings below are
-environment-only.
+runs; this page covers common deployment and tuning settings. The secrets and
+deployment settings below are environment-only.
 
 ## Core
 
@@ -44,9 +44,13 @@ environment-only.
 | `FFPROBE_PATH`        | No                  | `/config/bin/ffprobe` (image), `ffprobe` otherwise | Path to the `ffprobe` binary                         |
 | `FFMPEG_AUTO_DOWNLOAD` | No                 | `true` (image)             | The image downloads jellyfin-ffmpeg into `/config/bin` on first start. Set `false` for offline installs and point the two paths above at your own binaries. |
 
+`LIBRARY_ALLOWED_ROOTS` accepts comma-separated absolute paths, such as `/data,/media`.
+When set, library folders and the folder browser must stay within those roots.
+When unset, any existing folder except `/` can be a library folder.
+
 ## Transcoding hardware
 
-Also under **Admin → Settings → Transcoding**. A GPU must also be passed into the
+Also under **Admin → Settings → Playback → Encoder & Hardware Tuning**. A GPU must also be passed into the
 container; see [GPU transcoding](/guides/gpu-transcoding/).
 
 | Variable | Default | Description |
@@ -58,6 +62,12 @@ container; see [GPU transcoding](/guides/gpu-transcoding/).
 | `AMF_QUALITY` | `balanced` | `quality`, `balanced` or `speed` |
 | `FFMPEG_TRANSCODE_DIR` | `/tmp/lumastra-transcode` | Working directory for HLS segments; a tmpfs mount is faster |
 | `FFMPEG_INACTIVITY_TIMEOUT_SECONDS` | `1800` | Remove a transcode nobody has used for this long |
+| `LUMASTRA_MAX_CONCURRENT_TRANSCODES` | CPU cores × 3, clamped 12–32 | Global active-job cap for this instance |
+| `FFMPEG_MAX_JOBS_PER_USER` | `10` | Concurrent transcoding jobs one account can hold |
+
+If some accounts are untrusted, keep `FFMPEG_MAX_JOBS_PER_USER` well below
+`LUMASTRA_MAX_CONCURRENT_TRANSCODES`: one account can occupy up to its per-user
+limit in global slots. Configure both under **Settings → Playback**.
 
 ## Performance tuning
 
@@ -68,7 +78,7 @@ Mostly relevant for **very large libraries** or busy servers. See
 | ------------------------------------ | --------- | ---------------------------------------------------------------------------- |
 | `LUMASTRA_SCAN_CONCURRENCY`        | `8`     | Files processed in parallel per library scan. Keep ≤ the task DB pool; match it to NFS `nconnect`. |
 | `SCAN_ENRICH_INLINE`               | `false` | `true` fills TMDB metadata inline during scan (offline installs); off defers it to a background stage. |
-| `DISABLE_FILE_LIBRARY_SCAN`        | `false` | `true` disables the periodic (hourly) full library scan **and** the scheduled fallback. Set it only if you drive scans yourself (e.g. via the API after uploads). Note: on inotify-less media (S3/Mountpoint) this periodic scan is what ingests new files; don't disable it there. |
+| `DISABLE_FILE_LIBRARY_SCAN` | `false` | `true` stops scheduled, manual and API-triggered library scans and file reconciliation. Leave it `false` if you trigger scans yourself. On inotify-less media (S3/Mountpoint), periodic scans ingest new files. |
 | `LUMASTRA_SCAN_STAT_BATCH_SIZE`    | `200`   | Files `stat()`-ed per triage batch. Lower only for very slow storage.   |
 | `LUMASTRA_DB_POOL_WEB_MAX`         | `8`     | Postgres pool size for user-facing web/API requests                     |
 | `LUMASTRA_DB_POOL_TASK_MAX`        | `7`     | Postgres pool size for background tasks/scans (raise on a worker container) |
@@ -202,8 +212,8 @@ values are `http(s)` URLs or paths starting with `/`, such as `/custom/logo.png`
 | `APP_THEME_COLOR`      | `#7c3aed`        | Tints the installed PWA titlebar + the mobile browser address bar     |
 | `APP_BACKGROUND_COLOR` | `#0f172a`        | PWA splash-screen background shown while the app boots                 |
 | `WEB_APP_INSTALL_HINT` | `true`           | "Get the app" hint for Safari on iPhone/iPad (HTTPS only); `false` hides it |
-| `CHATBOT_NAME`         | (bundled)        | Display name of the AI assistant, if enabled                           |
-| `CHATBOT_AVATAR`       | (bundled)        | Avatar image for the AI assistant                                      |
+| `ASSISTANT_NAME` | `Assistant` | AI assistant display name; requires `FEATURE_AI_ASSISTANT` |
+| `ASSISTANT_AVATAR` | (bundled) | AI assistant avatar; requires `FEATURE_AI_ASSISTANT` |
 
 ### Custom asset folder
 
@@ -288,7 +298,7 @@ manage configuration as code.
 Each key below enables outbound calls to that service; what each one receives is
 listed in [What Lumastra sends where](/reference/data-flows/). The iOS push
 settings (`FEATURE_PUSH_NOTIFICATIONS`, `PUSH_RELAY_URL`, `PUSH_RELAY_TOKEN`,
-`PUSH_TRANSPORT`, `APNS_KEY_P8`) live in the admin Settings UI under **Social**;
+`PUSH_TRANSPORT`, `APNS_KEY_P8`) live under **Admin → Settings → Access → Push Notifications**;
 the default relay is run by the Lumastra maintainer and is covered on that page.
 
 | Variable                          | Description                          |
