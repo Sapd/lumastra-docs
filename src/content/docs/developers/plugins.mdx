@@ -90,7 +90,7 @@ Drop it in `$PLUGINS_EXTERNAL_DIR/hello/index.js` and it answers at
 TypeScript works without a build step, for a drop-in plugin directory. For a
 hand-placed directory under `PLUGINS_EXTERNAL_DIR` (no registry entry), the loader
 resolves `package.json#main`, then `index.js`, then `index.ts`, and the host runs
-Node 25, which strips types on import. `index.js` is tried before `index.ts` on
+Node 24, which strips types on import. `index.js` is tried before `index.ts` on
 purpose: if you ship a build alongside your source, the build is what runs, since
 that is the artifact your signature and tree digest were taken over.
 
