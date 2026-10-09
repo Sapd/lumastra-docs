@@ -12,7 +12,7 @@ Docker with Compose, and Git.
 
 | Requirement | Minimum | Notes |
 | --- | --- | --- |
-| **Node.js** | 22.0.0 | The codebase uses Svelte 5 / Vitest 4 APIs that require Node 22+. Use `.nvmrc` (pin: 25) or any Node ≥ 22. |
+| **Node.js** | 22.0.0 | The codebase uses Svelte 5 / Vitest 5 APIs that require Node 22+. Use `.nvmrc` (pin: 24) or any Node ≥ 22. |
 | **npm** | 10.x | Bundled with Node 22+ |
 | **Docker + Compose** | Docker ≥ 24, Compose ≥ 2.20 | Runs PostgreSQL 18 + pgvector and Valkey locally |
 | **Git** | any recent | — |
@@ -128,8 +128,9 @@ npm test -- src/lib/utils/...     # single file
 npm test -- --coverage
 ```
 
-Unit tests use Vitest with happy-dom. They are co-located with the source files
-they test.
+Unit tests use Vitest in the Node environment. Component tests use happy-dom
+through `vitest.config.components.ts`; `npm test` runs both suites. Tests are
+co-located with their source files.
 
 ### Integration tests
 
@@ -189,7 +190,7 @@ Vite. It requires Node ≥ 22 and approximately 4 GB of heap
 | Cache / queues | Valkey 9 (Redis-compatible), BullMQ |
 | Background jobs | Separate BullMQ worker process |
 | AI | OpenAI or Voyage AI embeddings, pgvector similarity, RAG chat |
-| Testing | Vitest 4 (unit + integration), Playwright (E2E) |
+| Testing | Vitest 5 (unit + integration), Playwright (E2E) |
 | Build | Vite 8 |
 
 ## Code conventions
@@ -260,8 +261,8 @@ ID 1429 maps to both a movie and a TV series. Always identify media by the
 composite key `(provider_id, media_type)`:
 
 ```typescript
-import { TmdbMap } from '$lib/server/utils/tmdb-composite-key';
-const map = new TmdbMap<string>();
+import { ExternalIdMap } from '$lib/server/utils/tmdb-composite-key';
+const map = new ExternalIdMap<string>();
 map.set(tmdbId, mediaType, internalId);
 
 // SQL — always include media_type
