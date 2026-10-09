@@ -87,7 +87,7 @@ feature, follow the linked guide.
 | `FEATURE_SOCIAL` | `true` | Social features (activity, presence). |
 | `FEATURE_SOCIAL_REVIEWS` | `true` | Community reviews. |
 | `FEATURE_COMMENTS` | `false` | Comments and emoji reactions on media, playlists, and people. No moderation queue: a comment is removable only by its author or an operator. Leave it off unless your users know each other. |
-| `FEATURE_SESSIONS` | `true` | The "Now Streaming" widget. |
+| `FEATURE_SESSIONS` | `true` | The Streaming Sessions widget. |
 | `FEATURE_SESSIONS_PUBLIC` | `true` | Other users seeing your active sessions (subject to Sharing & privacy settings). |
 | `FEATURE_SESSIONS_DEVICE_INFO_PUBLIC` | `false` | Including device info in the public session view. |
 | `FEATURE_PLAYLISTS` | `true` | Playlists. |
