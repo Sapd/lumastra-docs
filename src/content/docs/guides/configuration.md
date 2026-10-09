@@ -139,13 +139,14 @@ covered in full in the [Live TV guide](/guides/live-tv/):
 
 ## Feature flags
 
-Features are toggled with `FEATURE_*` variables and default **on**, but each only
-does something once its backing service is configured. For example,
+Features are toggled with `FEATURE_*` variables. Most default **on**, but Live TV,
+Subsonic compatibility, comments, media downloads, Gravatar and some preview features
+default **off**. Each only does something once its backing service is configured. For example,
 `FEATURE_AI_RECOMMENDATIONS` needs an AI provider key, and `FEATURE_JELLYFIN_SYNC`
 needs a Jellyfin URL and key. Set a flag to `false` to disable a feature outright.
 
-The **sonic music** features (`FEATURE_MUSIC_SONIC` and friends) are the exception:
-they default **off**, and need the embedder sidecar reachable at `SONIC_EMBEDDER_URL`.
+The **sonic music** features (`FEATURE_MUSIC_SONIC` and friends) also default **off**,
+and need the embedder sidecar reachable at `SONIC_EMBEDDER_URL`.
 That sidecar runs Microsoft's CLAP-2023 model whose weights download from HuggingFace
 at runtime; for air-gapped hosts set `SONIC_MODEL_FP` to a local weights file. See
 [Music discovery](/guides/music-discovery/) and the
