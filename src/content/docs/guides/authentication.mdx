@@ -304,7 +304,7 @@ prefix:
 | Device flow JWT | *(none: compact JWT)* | `POST /oauth/token` | `FEATURE_DEVICE_AUTH` | Short-lived (~1 h, HS256); carries `device_session_id`. Refresh token rotates on every use. |
 | Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/user/tokens` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
 | Service token | `svc_` | Admin: `POST /api/v1/service-tokens` | `FEATURE_DEVICE_AUTH` | Path/method-gated; optional act-as-user impersonation; IP allowlist. |
-| Stream token | `stream_` | Playback session | *(always on)* | Short-lived; IP-locked; accepted as a query parameter on HLS endpoints only. |
+| Stream token | `stream_` | Playback session | *(always on)* | Short-lived; accepts any IP by default for casting. Set `STREAM_TOKEN_WILDCARD_IP=false` to bind new tokens to the requester’s IP. Accepted as a query parameter on HLS endpoints. |
 
 All token values are shown once at creation and stored only as SHA-256 hashes. A
 signing secret is required for device JWTs, PATs, and stream tokens. Set `JWT_SECRET`
@@ -321,10 +321,12 @@ accepted on `/api/v1/*` endpoints.
 
 ### Scope taxonomy
 
-PAT and service-token scopes use `resource:action` names, such as `media:read`,
-`tasks:run`, and `tokens:admin`. Coarse aliases expand as follows:
+PATs and service tokens accept the coarse aliases `read`, `write`, and `admin`.
+PATs also accept either exclusive Jellyfin-compatibility scope. Fine-grained scopes
+such as `media:read` describe the expanded permissions; they cannot be minted
+independently. Coarse aliases expand as follows:
 
-- `read`: all resource read scopes.
+- `read`: `media:read`, `sessions:read`, and `requests:read`. Other read scopes are not granted by `read`.
 - `write`: read plus writable scopes; excludes `tasks:run`, `webhooks:write`, and
   admin scopes.
 - `admin`: all scopes.
@@ -361,7 +363,9 @@ clients alike. See [Connecting third-party apps](/using/third-party-players/) an
 Users create PATs in **Settings → Account → API tokens** (or via
 `POST /api/v1/user/tokens`) once an admin turns on **User PAT Creation** under
 **Admin → Settings → Access → Public API & Device Auth** (`FEATURE_USER_PATS`, off by
-default; it needs only `JWT_SECRET`, not `FEATURE_DEVICE_AUTH`).
+default). The toggle appears only while the Public API (`FEATURE_DEVICE_AUTH`) is on;
+with it off, set `FEATURE_USER_PATS` through the environment. Token creation needs a
+signing secret (explicit `JWT_SECRET` or one derived from the master key).
 `FEATURE_DEVICE_AUTH` matters only for where a minted PAT can *authenticate*: without
 it, a PAT still works against the `/j` Jellyfin-compatible surface, but is rejected on
 `/api/v1/*`. Turn both flags on to use PATs against `/api/v1/*`. Each PAT carries
