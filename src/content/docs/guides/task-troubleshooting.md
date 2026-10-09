@@ -85,7 +85,7 @@ docker exec "$VALKEY_CONTAINER" valkey-cli --no-auth-warning -a "$VPASS" EXISTS 
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Wedged-running, owner dead | Wait for the reconciler (30s sweep, but it only reclaims once the heartbeat is 5 min stale), or `UPDATE media_item_stage_state SET status='failed_transient', next_eligible_at=now() WHERE …`. The next sweep picks it up. |
 | Wedged-running, owner alive | Kill the worker (forces re-enqueue) or `POST /api/v1/runs/{runId}/cancel` for a graceful abort. |
-| Retry loop with a real error | Fix the underlying issue, then `POST /api/v1/tasks/{taskId}/retry-pending` to reset backoff. |
+| Retry loop with a real error | Fix the underlying issue, then use **Retry all failed items** in the task’s **Failures** tab. For one item, use `POST /api/v1/tasks/{taskId}/failures/{itemId}/retry`. |
 | `failed_permanent` (no further retries) | `last_error.code` says what went wrong; once fixed: `UPDATE media_item_stage_state SET status='pending', attempt=0, next_eligible_at=null WHERE media_item_id='<UUID>' AND stage_id='<stage>'`. |
 
 A common "owner alive" case resolves itself: a `failedReason: "claimRun
@@ -106,16 +106,17 @@ job.
 
 ### Diagnosis
 
-**1. Worker started for the class.** Expect one line per class (`cpu`, `io`,
-`embedding`, `maintenance`, `ingest`, `bulk`, `analysis`, `discovery`); a
-missing class means it never spun one up:
+**1. Worker started for the task.** With the default per-task queues, expect a
+startup line for the affected task. The legacy class layout logs one line per
+class instead:
 
 ```bash
-docker logs "$WORKER_CONTAINER" --since 5m 2>&1 | grep 'Worker started for class'
+docker logs "$WORKER_CONTAINER" --since 5m 2>&1 | grep -E 'Worker started for (task|class)'
 ```
 
-**2. Leader is held.** A PTTL of 1000–5000 ms means a leader is alive and
-renewing:
+**2. Leader is held.** With the default 15 s TTL and 5 s renewal interval, a
+healthy leader’s PTTL repeatedly rises from about 10000 to 15000 ms. A value
+that falls to zero without recovering means leadership is being lost:
 
 ```bash
 VPASS="$VALKEY_PASSWORD"
@@ -140,7 +141,7 @@ docker exec "$WORKER_CONTAINER" ps -ef | grep -E 'ffmpeg|chromaprint' | grep -v 
 
 | Case | Action |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker class missing | The worker process isn't booting a queue for that class. Report it if you're not building from source yourself. |
+| Worker missing | The worker process isn't booting a queue for that task (or class in legacy mode). Report it if you're not building from source yourself. |
 | No leader | Restart the orchestrator-role container. Leader election races again on boot. |
 | Cap = 0 | Raise `LUMASTRA_CONCURRENCY_<CLASS>` (see the [environment variable reference](/reference/environment-variables/)) via env or the admin UI. |
 | Hung worker | Kill the worker container; the orchestrator re-enqueues the in-flight work. |
@@ -167,11 +168,12 @@ SELECT id, state, owner_instance_id,
  WHERE id = '<runId>';
 ```
 
-If `hb_age > 5 min`, the reconciler should catch it next tick. A `Boot
-recovery complete {inspected:N, reclaimed:M}` line confirms it's running:
+If `hb_age > 5 min`, the reconciler should catch it next tick. Startup recovery
+records **Boot recovery on &lt;instance&gt; inspected N, reclaimed M orphan(s)**
+in the boot-recovery audit log. Check worker logs for recovery and reconciler activity:
 
 ```bash
-docker logs "$WORKER_CONTAINER" --since 5m 2>&1 | grep -iE 'BootRecovery|Reconciler' | tail -10
+docker logs "$WORKER_CONTAINER" --since 5m 2>&1 | grep -iE 'Boot recovery|Reconciler' | tail -10
 ```
 
 If `reclaimed:0` for many ticks but stale rows persist, check the Valkey
@@ -262,7 +264,8 @@ SELECT task_id, state, count(*),
 
 **Check BullMQ presence for the oldest pending rows.** A present key means
 **legitimate backlog** (queued behind others); a missing key means an
-**orphan** (boot-recovery should clear it within ~2 minutes of pending age):
+**orphan**. The reconciler sweeps every 30 s and reclaims pending rows once
+they are about 3 minutes old. Startup boot recovery uses a 2-minute threshold:
 
 ```bash
 VPASS="$VALKEY_PASSWORD"
