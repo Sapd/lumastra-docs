@@ -42,7 +42,9 @@ assistant falls back automatically.
 
 ## Usage limits
 
-Two kinds of limit apply per person, set separately for regular users and admins:
+Daily token budgets and informational message counts have separate user and admin
+settings. The per-user rate limit and concurrency cap use the same settings for
+everyone:
 
 - **A daily token budget.** This is the limit that stops a reply. A tool-calling
   reply can cost several times as much as a simple one, so the cap is on AI tokens
