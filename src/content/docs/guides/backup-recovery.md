@@ -175,7 +175,7 @@ regenerate; see the table above for what that costs.)
 Rotating it invalidates all in-flight access tokens immediately. There's no key-ID
 header yet, so old and new signatures can't coexist and there's no graceful rollover
 window. Refresh tokens (database-backed, not JWT-signed) survive, so clients silently
-call `/api/auth/refresh` and keep working.
+call `POST /oauth/token` with `grant_type=refresh_token` and keep working.
 
 1. Generate a new key: `openssl rand -hex 32`
 2. Update `JWT_SECRET` in your env.
