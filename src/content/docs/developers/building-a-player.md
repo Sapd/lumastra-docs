@@ -85,12 +85,12 @@ one continuing to work.
 | Convention | Rule |
 |---|---|
 | IDs | `id` is the canonical UUID. Item routes also accept a composite key (`tmdb:603:movie`) or `?externalId=provider:id:type`. Use the UUID once you have it. |
-| Media type | Canonical discriminator is `type`, a closed enum: `movie \| series \| season \| episode \| track \| album \| artist`. Legacy `tv`/`show` are retired. |
+| Media type | Canonical discriminator is `type`, a closed enum: `movie \| series \| season \| episode \| track \| album \| artist \| audiobook`. Ignore or filter types your client does not render. Legacy `tv`/`show` are retired. |
 | Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. Cursor-based endpoints replace `offset` with `cursor`. |
 | Images | `images{}` hrefs follow `/api/v1/{entity}/{id}/images/{role}[/{index}]`; add `?width=600&format=webp` for sizing. |
-| Errors | Every `/api/v1/*` error is `application/problem+json`. Switch on `code`, never `status` or `error` text. |
+| Errors | Resource errors use `application/problem+json`; HLS startup has a JSON exception documented in [Streaming](/developers/building-a-player-streaming/). Switch on `code` for problem responses. |
 | Header-less bearer | Pass the token as `?api_key=<token>`, or for long content a stream-session `?stream_token=stream_…` (see [Streaming](/developers/building-a-player-streaming/)). |
-| Time units | Every `/api/v1` time field is **milliseconds**. Jellyfin "ticks" (10,000,000 = 1 s) only appear on `/j`. |
+| Time units | Playback progress uses **milliseconds**. On `/api/v1/playback/{id}/chapters`, `runTimeTicks` and `chapters[].startPositionTicks` use **ticks** (10,000,000 = 1 s), while `mediaSegments[].startTime/endTime` use **seconds**. Follow each field’s schema. |
 
 ## Errors
 
