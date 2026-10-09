@@ -124,8 +124,9 @@ rather than whole libraries, for example `ARR_MANAGER_GROUPS` (who can manage th
 media-acquisition backend, default `arrmanager,admin`), `WATCH_PERMISSION_GROUPS` (who
 can see everyone's streaming sessions, default `admin,stream-monitors`),
 `MODERATOR_GROUPS` (empty by default), `PLAYLIST_PUBLIC_GROUPS` (who may publish a
-playlist publicly, empty by default), and `NAVIGATION_AVAILABLE_GROUPS` (empty by
-default). Each is independent of library-level permissions above and of `ADMIN_GROUPS`.
+playlist publicly, empty by default). Each is independent of library-level permissions
+above and of `ADMIN_GROUPS`. `NAVIGATION_AVAILABLE_GROUPS` (empty by default) is under
+**Settings → Homepage & navigation**, in the navigation section.
 
 ### Branding and appearance
 
