@@ -11,8 +11,9 @@ Every time you press play, Lumastra decides the cheapest way to get the file ont
 your screen: **direct play** if the client can handle it, **remux** if only the
 container is wrong, or **transcode** if a stream has to be re-encoded. The goal is
 to transcode as little as possible. It's the only expensive option. HLS transcoding
-requires `FFMPEG_PATH` to be configured; without it, only direct file serving is
-available and every file that isn't natively compatible can't play.
+uses `FFMPEG_PATH`, which defaults to `ffmpeg` on PATH; the Docker image
+provides its own binary. If the binary is missing or the path is explicitly
+emptied, only direct file serving is available.
 
 For the concrete per-client support tables, see
 [Codec & client support](/reference/codec-support/).
@@ -172,7 +173,7 @@ servers flatten this case to SDR, but transcoding for an HDR-capable-but-not-DV
 client keeps the picture in HDR here. This is on by default
 (`ENABLE_HDR10_PRESERVATION`). Profile 5/7 has no HDR10 base layer, so it always
 tone-maps to SDR for non-DV clients. The tone-mapping curve is configurable
-(`TONEMAPPING_ALGORITHM`, default `bt2390`; also `hable`, `mobius`, `reinhard`). Preview
+(`TONEMAPPING_ALGORITHM`, default `bt2390`; also `hable`, `mobius`, `reinhard`, `linear`). Preview
 clips always render in SDR regardless of source, since they're throwaway.
 
 ## Subtitles
@@ -240,11 +241,11 @@ remuxing to fMP4 regardless of mode.
 
 | Setting | Values | Default | Purpose |
 | --- | --- | --- | --- |
-| `FFMPEG_PATH` | path | (none) | Enables HLS transcoding at all; unset means direct-file-serving only |
-| `FFPROBE_PATH` | path | (none) | Path to the FFprobe binary used for codec detection |
+| `FFMPEG_PATH` | path | `ffmpeg` | FFmpeg binary resolved from PATH; Docker sets `/config/bin/ffmpeg` |
+| `FFPROBE_PATH` | path | `ffprobe` | FFprobe binary resolved from PATH; Docker sets `/config/bin/ffprobe` |
 | `TRANSCODING_MODE` | `full` | `full` | Video source strategy |
-| `GPU_TYPE` | `nvidia`, `intel`, `amd`, `apple`, `none` | `none` | GPU hardware used for hardware encoding |
-| `TONEMAPPING_ALGORITHM` | `bt2390`, `hable`, `mobius`, `reinhard` | `bt2390` | HDR-to-SDR tone-mapping curve |
+| `GPU_ACCELERATION` | `none`, `nvenc`, `qsv`, `vaapi`, `amf`, `videotoolbox` | `none` | Hardware encoder |
+| `TONEMAPPING_ALGORITHM` | `bt2390`, `hable`, `mobius`, `reinhard`, `linear` | `bt2390` | HDR-to-SDR tone-mapping curve |
 | `FFMPEG_SEGMENT_DURATION` | seconds | `6` | HLS segment length |
 
 ## Quality and bitrate ladder (ABR)
