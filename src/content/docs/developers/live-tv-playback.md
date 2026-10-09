@@ -59,9 +59,9 @@ Returns `{ items, page }` where each item is a channel object:
 |---|---|---|
 | `id` | string | Channel UUID |
 | `name` | string | Display name |
-| `number` | string \| null | Channel number (optional) |
+| `channelNumber` | integer (optional) | Dense 1-based global lineup position |
 | `logoUrl` | string \| null | Ready proxy URL, use directly |
-| `qualityTier` | `uhd` \| `fhd` \| `hd` \| `sd` | Stream quality |
+| `qualityTier` | `uhd` \| `fhd` \| `hd` \| `sd` (optional) | Stream quality |
 | `currentProgram` | object \| null | Currently-airing program (see below) |
 
 `currentProgram` carries `id`, `channelId`, `title`, `startTime`, `endTime`, and
@@ -69,9 +69,9 @@ optional metadata: the same `LiveTvProgram` shape as [§2](#2-programs--epg). It
 resolves to exactly one program; see the
 [non-overlap guarantee](#non-overlap-guarantee).
 
-`GET /api/v1/livetv/channels/{id}` returns a bare `{ channel }` object instead
-of a collection envelope, useful for deep-link flows. It returns the channel
-as listed, with its logo URL resolved; it does not add a `viewerCount` field.
+`GET /api/v1/livetv/channels/{id}` returns the channel object itself, useful for
+deep-link flows. It includes the list-item fields, a resolved logo URL and the
+enriched current program. Read the fields directly on the response object.
 
 | Status | `code` | Meaning |
 |---|---|---|
