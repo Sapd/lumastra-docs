@@ -67,7 +67,7 @@ version, rather than share one built into Lumastra. Register at
 [AniDB's UDP API page](https://wiki.anidb.net/UDP_API_Definition) and set
 `ANIDB_CLIENT` (the registered id) and `ANIDB_CLIENT_VER` (an integer you
 increment if you ever re-register). Both can also be set from **Settings →
-Plugins & features → AniDB** instead of the environment.
+Metadata → AniDB provider card** instead of the environment.
 :::
 
 ## Media servers & tools
@@ -76,19 +76,16 @@ Plugins & features → AniDB** instead of the environment.
 | -------------------- | ------------------------------------------------ | ---------------------------------- |
 | **Jellyfin sync**   | Bidirectional watch-state sync and "now streaming" sessions | `JELLYFINURL` + `JELLYFINAPIKEY` |
 | **Jellyfin-compatible `/j` API** | Connect existing Jellyfin / Streamyfin TV & mobile apps to Lumastra (**no Jellyfin server required**) | (built-in) |
-| **Subsonic**        | Use any Subsonic music client                 | (built-in, AGPL)                |
+| **Subsonic** | Use any Subsonic music client | Enable OpenSubsonic API Compatibility under Settings → Music, or set `FEATURE_SUBSONIC_COMPAT=true` (off by default) |
 | **AudiobookShelf**  | Audiobook library, see [Audiobooks](/guides/audiobooks/) | `AUDIOURL` + `AUDIOAPIKEY`      |
 | **Kavita**          | Books / manga / comics                        | `KAVITAURL` + `KAVITAAPIKEY`    |
 | **Sonarr / Radarr** | Release calendar                              | `SONARRURL` / `RADARRURL` + keys |
 | **Seerr**      | Media requests                                | `SEERRURL` + `SEERRAPIKEY` |
 
-### Connecting Seerr
+### Connecting Jellyfin tools
 
-Seerr connects to Lumastra's Jellyfin-compatible `/j` API, no Jellyfin server needed:
-create a token under your username menu → **Jellyfin Connect** → **Connected App Tokens**
-(read-only, revocable) and paste it into Seerr's Jellyfin settings. Users can then ask the
-admin to add a title, for example a public-domain classic like *Nosferatu* (1922) or an
-openly licensed series like *Pioneer One* (2010).
+Open **Settings → Connections → Connect a Jellyfin app** to generate a client
+password or a separate read-only token for tools that observe your library.
 
 ## Music analysis
 
@@ -101,8 +98,9 @@ openly licensed series like *Pioneer One* (2010).
 
 AI recommendations (vector embeddings, stored in pgvector) and the AI chat
 assistant are two separate features with **separate keys**: there's no
-fallback between them. Bring an **OpenAI** key (default) or a **Voyage AI**
-key for embeddings, and an **OpenAI** or **Anthropic** key for chat. See
+fallback between them. Bring a **Voyage AI** or **OpenAI** key for embeddings;
+Voyage is preferred when both keys are set. A custom `EMBEDDING_BASE_URL` with
+`EMBEDDING_API_KEY` takes precedence over both. Bring an **OpenAI** or **Anthropic** key for chat. See
 [The AI assistant](/guides/ai-assistant/) for what the chat assistant does,
 its limits, and where its settings live.
 
