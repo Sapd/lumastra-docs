@@ -49,8 +49,9 @@ source of truth and Valkey as the cache and queue:
 - **Database** follows a three-tier pattern: pure SQL in query modules,
   transactional logic in services and service managers. Key tables include
   `media_items` (movies, series, seasons, episodes, music), `media_files` (file
-  paths linked to items), `users`, `watch_history`, `embeddings` (pgvector
-  vectors), and `task_history`. See
+  paths linked to items), `users`, `watch_history`, `media_embeddings` (pgvector
+  vectors), `user_profiles` (catalog and request embedding columns), and
+  `task_history`. See
   [Architecture decisions](/developers/architecture-decisions/) for why the
   three-tier split exists instead of an ORM. Similarity queries always use the
   `<=>` (cosine distance) operator; `<->` (L2) and `<#>` (inner product) are
