@@ -47,7 +47,7 @@ Valkey). `/api/health` checks process liveness only and must not gate replacemen
 
 ## How an in-flight video stream survives
 
-Mount `TRANSCODE_TEMP_DIR` (`/tmp/lumastra-transcode` by default) on storage every web
+Mount `FFMPEG_TRANSCODE_DIR` (`/tmp/lumastra-transcode` by default) on storage every web
 instance can read and write: a shared host path on Docker, or a `ReadWriteMany` volume
 on Kubernetes.
 
