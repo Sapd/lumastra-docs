@@ -114,7 +114,7 @@ via WebAssembly. Only two formats force a burn-in (which forces a video transcod
 | Format | Rendering |
 | ------ | --------- |
 | SRT / SubRip, WebVTT, MOV_TEXT, TTML | Native text track |
-| ASS / SSA | Client-side (JASSUB) |
+| ASS / SSA | Client-side (AkariSub) |
 | PGS, VobSub / DVD | Client-side (libbitsub) |
 | **DVB-sub, XSUB** | **Burned in (server-side): forces a video transcode** |
 
@@ -165,7 +165,7 @@ have already run. It doesn't bypass those.
 | Codec | Container | Bitrate ladder (kbps)           | Default |
 | ----- | --------- | -------------------------------- | ------- |
 | MP3   | MPEG      | 64, 96, 128, 160, 192, 256, 320  | 192     |
-| Opus  | Ogg       | 32, 48, 64, 96, 128, 160, 192    | 128     |
+| Opus  | Ogg       | 32, 48, 64, 96, 128, 160, 192    | 192     |
 | AAC   | ADTS      | 64, 96, 128, 160, 192, 256, 320  | 192     |
 
 :::note[A seek always forces a transcode]
