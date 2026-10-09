@@ -40,10 +40,11 @@ Use [OIDC](/guides/sso-oidc/) instead. Authentik works as an OIDC provider too.
 The proxy authenticates each request against the Authentik outpost and forwards the
 `X-authentik-username` and `X-authentik-groups` headers to Lumastra. Every `location`
 that proxies to Lumastra also forwards `X-Forwarded-For` and `X-Real-IP`, as shown
-below. Without them, and without `TRUSTED_PROXY_IPS` set to your proxy's own address,
-Lumastra sees every visitor as connecting from the proxy itself. It then treats every
-visitor as the operator, and shows the operator's setup/first-run guidance instead of
-the ordinary sign-in page.
+below. Set `TRUSTED_PROXY_IPS` to your proxy's own address so client-IP checks use
+those headers. A loopback proxy that strips forwarding headers can make remote
+visitors see the local operator's setup guidance. A proxy on the compose network
+is not loopback; missing headers there give visitors the proxy's IP and shared
+sign-in limits.
 
 <Tabs>
 <TabItem label="Nginx">
