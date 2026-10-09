@@ -36,6 +36,14 @@ are sourced; it is **not** a playlist URL. The actual playlists/accounts/tuners 
 just turns the source off while leaving the feature flag on.)
 :::
 
+## Adaptive quality
+
+The synchronized quality ladder is off by default. Enable
+`LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings → Live TV** to offer multiple
+qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default).
+When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves
+the original stream; choose `refuse` to fail playback instead.
+
 ## Add a source
 
 Open **`/admin/settings/livetv`** (Sources tab) and choose **Add Source**, then pick a
