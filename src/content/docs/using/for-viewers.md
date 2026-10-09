@@ -29,7 +29,7 @@ Resuming a series follows its saved watch marker, including progress from other 
 If that takes you somewhere unexpected, a notice names the device and offers to jump
 back. Finished series offer the next season or a rewatch.
 
-Restore dismissed titles from **User menu → Hidden items**.
+Restore dismissed titles on **Hidden from Continue Watching** at `/my/hidden`.
 
 ## Recommendations and ratings
 
@@ -72,7 +72,7 @@ title is playable. Requests require your administrator to enable them and config
 
 ## Watch Together
 
-Start a party from the player's **Watch Together** control and share its code or link.
+Start a party from the player's **Watch party** button and share its code or link.
 Join through the **Watch Parties** widget or the shared link.
 
 - Anyone can pause or resume for everyone.
@@ -101,7 +101,7 @@ Audio/subtitle language, subtitle style, playback automation, and music crossfad
 follow your account across browsers. Playback automation is under **Player → Quality →
 Playback Settings**; see [Using the video player](/using/player/).
 
-Widget order and visibility (**User menu → Customize Widgets**), dock visibility, and
+Widget order and visibility (**Settings → Home**), dock visibility, and
 stream info visibility are saved per browser. Your administrator can also change the
 homepage and available widgets for the whole server.
 
@@ -119,8 +119,9 @@ Coarse listening activity is reciprocal: you can see others' activity only while
 your own. Your administrator defines the audience, usually everyone on the server or
 people in the same group.
 
-To hide one book regardless of these settings, use its **… → Keep this book private**
-action. Reviews are visible only within your Lumastra server.
+When audiobook sharing is enabled, hide one book by opening its **…** menu and
+clicking the listening-sharing icon. Its tooltip shows whether your progress is
+visible to others. Reviews are visible only within your Lumastra server.
 
 ## Notifications
 
@@ -130,7 +131,7 @@ aren't sent by email.
 
 ## MyAnimeList
 
-Link your account under **User menu → MyAnimeList** to optionally sync anime ratings.
+Link your account under **Settings → Connections** to optionally sync anime ratings.
 
 ## Related guides
 
