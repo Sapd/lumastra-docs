@@ -168,8 +168,8 @@ as already finished. For Force stop, see
 A restart or deploy stops every run in progress. Scheduled runs simply continue on
 their next cycle. A run you started by hand (from the admin UI, the API or a service
 token) is resumed automatically when its task supports it: **Media Segment Repair**,
-**Reconciliation Backfill**, **Metadata Aggregation Backfill** and **Bulk Metadata
-Sync**:
+**Reconciliation Backfill**, **Metadata Aggregation Backfill**, **Bulk Metadata
+Sync** and **Detach Deleted Library Folder**:
 
 - A few minutes after the restart, the interrupted run shows **failed** with
   "continued in a new run (1/3)", and a new run of the same task starts. It is
@@ -233,7 +233,7 @@ The Pipeline's stuck-items panel flags:
 | High queue depth, few active items | Resource-class concurrency caps; see [resource classes](/architecture/task-system/#resource-classes) and `LUMASTRA_CONCURRENCY_*` in the [environment reference](/reference/environment-variables/) |
 | Backlog doesn't drain, no recent completions | Worker liveness in System → Health; [queue recovery](/guides/task-troubleshooting/#recipe-2-queue-not-draining) |
 | Active run with a stale heartbeat | The reconciler should fail it within a few minutes; persistent cases need [stale-run recovery](/guides/task-troubleshooting/#recipe-3-run-stuck-in-active-with-stale-heartbeat) |
-| Many failures with the same error | Fix the cause, then use the task's **Retry pending** action to requeue backlog; Runs has no bulk retry |
+| Many failures with the same error | Fix the cause, then use **Retry all failed items** in the task's **Failures** tab to requeue backlog; Runs has no bulk retry |
 | A stage doesn't apply to an item | Check the stage's media-type applicability filter |
 
 For the stuck-item predicates and recovery steps, see
