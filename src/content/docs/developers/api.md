@@ -75,7 +75,9 @@ catalog, images, and sizing contract.
 
 ## Errors: `application/problem+json`
 
-Every error from `/api/v1/*` is returned as `application/problem+json`. The
+Resource API errors use `application/problem+json`. HLS startup errors can instead
+return JSON with an `error` string (`transcode_start_timeout`,
+`transcode_start_failed`, or `transcode_start_interrupted`) and a `message`. The
 `code` field is the machine-parseable contract; `error` text is human-readable
 and must not be parsed by clients.
 
@@ -104,6 +106,7 @@ response header.
 | `not_found` | 404 | Resource does not exist, or feature is off |
 | `conflict` | 409 | Resource exists / operation already in-flight |
 | `gone` | 410 | Resource permanently removed |
+| `payload_too_large` | 413 | Request body exceeds the endpoint cap |
 | `validation_failed` | 422 | Request syntactically valid but semantically wrong |
 | `quota_exceeded` | 422 | Request quota exhausted for the bucket |
 | `rate_limited` | 429 | Too many requests |
@@ -111,6 +114,7 @@ response header.
 | `bad_gateway` | 502 | Upstream returned an unexpected error |
 | `dependency_unavailable` | 503 | Required dependency (DB, Valkey, external API) is down |
 | `stream_limit` | 503 | Live-TV stream slot limit reached (capacity full) |
+| `cap_unavailable` | 503 | Requested Live TV bitrate ceiling could not be honored |
 
 **Feature-off is `404 not_found`**, not `403 forbidden`: a disabled feature
 does not exist from the client's perspective.
@@ -120,7 +124,8 @@ an empty array. The `details` field may name the failing component.
 
 Image bytes, HLS manifests/segments, SSE channels, and byte-range responses
 follow a different error path once bytes have started flowing: a **pre-stream**
-error is still `application/problem+json`, but a **mid-stream** error is
+error usually uses `application/problem+json` (HLS startup has the JSON exception
+above), but a **mid-stream** error is
 transport-native (an SSE `error` event frame, an HLS `410`/`503` on the next
 segment fetch, or the connection closing outright). Don't expect a problem+json
 body once a stream is already open.
@@ -203,8 +208,9 @@ JWT payload:
 Format: `pat_` + 48 hex chars.
 
 - Inherit the creating user's groups and library access.
-- Scopes: coarse aliases `read` / `write` / `admin`, or fine-grained scopes such
-  as `tasks:run`, `webhooks:write`, `library:admin`. See the scope tree below.
+- Accepted scopes: `read`, `write`, `admin`, or either exclusive
+  `jellyfin_compat` / `jellyfin_compat_read` scope. Fine-grained scopes are expanded
+  permissions and cannot be requested independently. See the scope tree below.
 - Max 10 active tokens per user.
 - Usage (last-used timestamp, IP, count) is tracked per token.
 - Revocation propagates cluster-wide via Valkey: each replica caches a validated
@@ -244,6 +250,8 @@ immediately). Manage PATs at `GET/POST /api/v1/user/tokens` and `DELETE
 Format: `svc_` + 48 hex chars.
 
 - Admin-created only (`POST /api/v1/service-tokens`). Require `tokens:admin` scope.
+- Accepted scopes: `read`, `write`, and `admin`; fine-grained permissions come
+  from alias expansion.
 - Support optional IP allowlist, path/method restrictions, and expiry.
 - Support user impersonation via the `actAsUser` field set at creation time.
   Impersonation target is database-bound. It cannot be changed via request
@@ -509,14 +517,15 @@ from issuance), and reactively on any `401` from `/api/v1/*`.
 |---|---|
 | `POST /oauth/device` | 10 requests / minute / IP |
 | `POST /oauth/token` (polling) | 5s minimum poll interval |
-| `PUT /play-sessions/{id}` (progress beacon) | Shared 30 requests / 60s bucket with music-session progress |
+| `PUT /music/sessions/{id}` + `POST /music/sessions/{id}/beacon` | Shared 30 requests / 60s per user |
+| Video play-session progress and beacon | No endpoint-level rate limit |
 | Everything else | No explicit client-side limit (dependency limits may still apply) |
 
 ## Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `FEATURE_DEVICE_AUTH` | `true` | The Public API: `/api/v1/*`, the OAuth device flow and JWT token issuance. `false` makes `/api/v1/*` answer 503 and `/oauth/*` 400 |
+| `FEATURE_DEVICE_AUTH` | `true` | The Public API: `/api/v1/*`, the OAuth device flow and JWT token issuance. `false` makes feature-gated `/api/v1/*` endpoints answer 404 `not_found`; OAuth device authorization answers 400 |
 | `FEATURE_USER_PATS` | `false` | Allow users to create PATs via the settings UI |
 | `JWT_SECRET` | *(required when either feature is on)* | Signs JWTs and hashes PAT/service tokens. Min 32 chars. Derived from `LUMASTRA_MASTER_KEY` if unset. Generate: `openssl rand -hex 32` |
 | `JWT_ACCESS_TOKEN_TTL_SECONDS` | `3600` | JWT access token lifetime |
