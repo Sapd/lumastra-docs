@@ -15,6 +15,17 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
+### Unreleased
+
+- The audio and subtitle menu shares one scrolling list and adapts to the player and
+  viewport height. Mobile episode and season pickers scroll more reliably.
+- Music cards show crossfades correctly, and Jellyfin apps stop unused transcode work
+  when playback is cancelled. Stream health diagnostics are more accurate.
+- Licence clocks are initialised and repaired correctly, so grace periods and expiry
+  checks use the current time.
+- Security fixes tighten sign-in, Quick Connect, Watch Together identities, private
+  activity, playlist membership, library access and upstream requests.
+
 ### 0.1.0 (2026-10-15)
 
 The first public release, with movies and series, music, audiobooks through
