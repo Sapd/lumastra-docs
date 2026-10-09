@@ -394,9 +394,9 @@ MusicBrainz recording ID, and when the matched tracks of an album agree on the a
 album and artist get their MusicBrainz IDs too, which helps cover art and popularity.
 
 IDs from your tags always win, existing IDs are never overwritten, and your files are
-never renamed or moved. The task runs at low priority and pauses while someone is
-playing something. Without a key it does nothing. Progress and results (matched, no
-match) show under **Tasks** as *Identify Music by Fingerprint (AcoustID)*.
+never renamed or moved. The task runs at low priority and slows while a video transcode is
+active. Music playback, direct play, and remux sessions do not slow it. Without a
+key it does nothing. Progress and results (matched, no match) show under **Tasks** as *Identify Music by Fingerprint (AcoustID)*.
 
 ### Audio analysis (Essentia)
 
@@ -412,6 +412,13 @@ intro/outro markers**. This powers:
 
 Analysis is optional. Without the tool installed the task does nothing
 (disable it explicitly with `DISABLE_MUSIC_ANALYSIS=true`).
+
+On arm64 or WSL2, the built-in analyzer can crash: configure a running sidecar
+with `SONIC_ANALYZE_URL`, then select **Sidecar service**
+(`MUSIC_ANALYSIS_ENGINE=sidecar`) under **Settings → Task runner → Advanced Tasks**;
+without a configured sidecar it falls back to the built-in engine.
+`MUSIC_ANALYSIS_MAX_DURATION_MINUTES` skips tracks longer than 30 minutes by
+default; set it to `0` to analyze every length.
 
 ### Genres
 
