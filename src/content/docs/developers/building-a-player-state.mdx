@@ -33,10 +33,12 @@ Heartbeat about every 10 seconds:
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{session_id} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "position_ms": 2760000, "status": "ACTIVE", "event_seq": 7, "buffer_health_sec": 12 }'
+  -d '{ "position_ms": 2760000, "status": "ACTIVE", "event_seq": 7, "session_elapsed_ms": 120000, "buffer_health_sec": 12 }'
 ```
 
-- **`position_ms`** is milliseconds, not ticks.
+- **`position_ms`** is the playback position in milliseconds.
+- **`session_elapsed_ms`** is required: cumulative milliseconds actually played
+  since the session started, excluding pauses, seeks and buffering.
 - **`event_seq`** is required: a per-session, monotonically increasing integer
   starting at 1. The server rejects non-increasing values (it deduplicates
   stale or out-of-order reports).
