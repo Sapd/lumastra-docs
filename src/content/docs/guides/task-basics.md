@@ -54,8 +54,15 @@ For a backlog that stops progressing, use
   `LUMASTRA_CONCURRENCY_*` in the
   [environment variable reference](/reference/environment-variables/).
 - **Disable optional work** in the same page's **Advanced Tasks** section. These
-  persistent switches cover selected tasks, including anime episode matching,
+  persistent switches cover selected tasks, including anime cross-reference ID lookups (Fribb and MyAnimeList),
   local trickplay serving, and library integrity checks.
+
+## History and log retention
+
+**Settings → Task runner → Advanced Tasks** also controls how long task history,
+admin audit logs, watch history, failure events, quota records and webhook deliveries
+are kept. Shorter retention reduces database growth and leaves less history for
+troubleshooting; task history first moves from hot storage to an archive.
 
 For sustained load after the initial backlog clears, see
 [Performance tuning](/guides/performance-tuning/).
