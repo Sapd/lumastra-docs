@@ -29,9 +29,10 @@ about 1–1.6 GB during scans, embeddings, or thumbnail generation. PostgreSQL g
 with library size; Valkey typically uses tens of MB.
 
 :::tip[Constrained hosts]
-On a host with less than 8 GB, set
-`LUMASTRA_LOW_RAM_MODE=true`. It caps the Node.js heap and uses fewer Valkey
-connections. See [Environment variables](/reference/environment-variables/).
+The example compose file already sets `LUMASTRA_LOW_RAM_MODE=true`. It caps the
+Node.js heap and uses fewer Valkey connections for hosts with under about 4 GB.
+On a host with plenty of RAM, remove that line from the compose file or set it to
+`false`. See [Environment variables](/reference/environment-variables/).
 :::
 
 ### CPU requirements
@@ -63,9 +64,9 @@ The example compose file starts **three containers**:
 
 | Container  | Role                                                    |
 | ---------- | -------------------------------------------------------- |
-| `postgres` | PostgreSQL 18 + pgvector (catalog, users, vectors)        |
-| `valkey`   | Valkey 9: cache, task queues, locks                        |
-| `lumastra` | The Lumastra app (SvelteKit on Node.js ≥ 22; the shipped image runs Node 25), port 3000. It also runs the background jobs (metadata, images, embeddings) |
+| `lumastra-postgres` | PostgreSQL 18 + pgvector (catalog, users, vectors) |
+| `lumastra-valkey` | Valkey 9: cache, task queues, locks |
+| `lumastra` | The Lumastra app (SvelteKit on Node.js ≥ 22; the shipped image runs Node 24), port 3000. It also runs the background jobs (metadata, images, embeddings) |
 
 For heavier multi-user load you can move the background jobs into a separate
 `worker` container. The example file has a commented-out "SCALE-UP" section for
