@@ -26,7 +26,7 @@ $PLUGINS_EXTERNAL_DIR/
     index.js
 ```
 
-Lumastra loads it at startup. **Reload plugins** under **Settings → Extensions** picks
+Lumastra loads it at startup. **Reload plugins** under **Settings → Plugins & features** picks
 up newly added directories without a restart. Drop-ins have no signature or checksum
 verification, including on later loads.
 
@@ -38,7 +38,7 @@ can place code in this directory can execute it as Lumastra.
 ### Signed remote install
 
 Configure the publisher's [public key](#trusted-signing-keys), then enter the manifest
-URL and detached signature under **Settings → Extensions**. The publisher supplies the
+URL and detached signature under **Settings → Plugins & features**. The publisher supplies the
 signed `manifest.json` and plugin bundle.
 
 Lumastra applies SSRF, size, and timeout guards, verifies the signature over the exact
@@ -47,7 +47,7 @@ files against their recorded digest; modified files refuse to load.
 
 ### From a repository
 
-Add a JSON repository index under **Settings → Plugins** to browse and install plugins.
+Add a JSON repository index under **Settings → Plugins & features** to browse and install plugins.
 Repository installs use the same signature, checksum, compatibility, publisher
 continuity, and anti-rollback checks as manual signed installs.
 
