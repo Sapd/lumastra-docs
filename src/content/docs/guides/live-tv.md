@@ -38,7 +38,7 @@ just turns the source off while leaving the feature flag on.)
 
 ## Adaptive quality
 
-The synchronized quality ladder is off by default. Enable
+The synchronized quality ladder is off by default: enable
 `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings → Live TV** to offer multiple
 qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default).
 When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves

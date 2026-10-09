@@ -45,8 +45,8 @@ deployment settings below are environment-only.
 | `FFMPEG_AUTO_DOWNLOAD` | No                 | `true` (image)             | The image downloads jellyfin-ffmpeg into `/config/bin` on first start. Set `false` for offline installs and point the two paths above at your own binaries. |
 
 `LIBRARY_ALLOWED_ROOTS` accepts comma-separated absolute paths, such as `/data,/media`.
-When set, library folders and the folder browser must stay within those roots.
-When unset, any existing folder except `/` can be a library folder.
+Library folders and the folder browser must stay within those roots when set;
+when unset, any existing folder except `/` can be a library folder.
 
 ## Transcoding hardware
 

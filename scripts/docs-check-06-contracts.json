@@ -1087,7 +1087,7 @@
         {
           "path": "src/content/docs/guides/live-tv.md",
           "op": "contains",
-          "text": "## Adaptive quality The synchronized quality ladder is off by default. Enable `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings \u2192 Live TV** to offer multiple qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default). When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves the original stream; choose `refuse` to fail playback instead. ## Add a source"
+          "text": "## Adaptive quality The synchronized quality ladder is off by default: enable `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings \u2192 Live TV** to offer multiple qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default). When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves the original stream; choose `refuse` to fail playback instead. ## Add a source"
         }
       ]
     },
@@ -1097,7 +1097,7 @@
         {
           "path": "src/content/docs/reference/environment-variables.md",
           "op": "contains",
-          "text": "`LIBRARY_ALLOWED_ROOTS` accepts comma-separated absolute paths, such as `/data,/media`. When set, library folders and the folder browser must stay within those roots. When unset, any existing folder except `/` can be a library folder. ## Transcoding hardware"
+          "text": "`LIBRARY_ALLOWED_ROOTS` accepts comma-separated absolute paths, such as `/data,/media`. Library folders and the folder browser must stay within those roots when set; when unset, any existing folder except `/` can be a library folder. ## Transcoding hardware"
         }
       ]
     },
