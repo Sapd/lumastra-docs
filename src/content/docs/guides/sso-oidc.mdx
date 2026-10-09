@@ -88,6 +88,7 @@ host, connection refused).
 | `AUTH_OIDC_REDIRECT_URI` | *(auto)* | Override only if the auto-derived `…/auth/oidc/callback` is wrong. |
 | `AUTH_OIDC_LINK_BY_VERIFIED_EMAIL` | `true` | Link a first OIDC login to an existing account on a **verified** email match. |
 | `AUTH_OIDC_LINK_BY_USERNAME` | `false` | Link by username. Less safe; use it for native→OIDC migration. |
+| `AUTH_OIDC_SYNC_AVATAR` | `true` | Copy the IdP picture at sign-in for users without an uploaded avatar. The server stores it; browsers do not fetch it from the IdP. |
 | `AUTH_OIDC_USERINFO` | `false` | Also call the UserInfo endpoint when groups/email are missing from the ID token. |
 | `AUTH_OIDC_ALLOW_INSECURE` | `false` | Allow a non-HTTPS issuer. **Local test IdPs only**: it disables TLS verification. |
 | `AUTH_OIDC_BACKCHANNEL_LOGOUT_CASCADE` | `false` | On a user-wide (`sub`) [back-channel logout](#back-channel-logout-single-logout), also revoke the user's device tokens (TV/mobile), not just the browser session. |
