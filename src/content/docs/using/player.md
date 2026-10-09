@@ -29,6 +29,11 @@ it. Fixed resolutions use server transcoding. **Auto**, when enabled by your
 administrator, adjusts bitrate to your connection. Titles with multiple cuts or encodes
 list them under **Versions**.
 
+Open **Audio and subtitle tracks** to browse audio and subtitles in one scrolling list.
+Long subtitle lists include a search field. The menu grows to fit the available player
+height. **Subtitle Appearance** opens the style controls; **Back** returns to the tracks
+at your previous scroll position.
+
 Your last audio language, subtitle language, and subtitle style are saved to your account
 and restored next session. Seek-preview thumbnails and intro/credits skipping depend on
 server-side analysis; missing previews or skip buttons may mean it hasn't run yet.
