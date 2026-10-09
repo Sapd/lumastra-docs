@@ -628,13 +628,19 @@ service that uses `start-proxy.sh`, and point the app at it:
 proxy:
   image: ghcr.io/lumastra/lumastra:latest
   restart: unless-stopped
-  entrypoint: ["sh", "start-proxy.sh"]
+  command: ["sh", "start-proxy.sh"]
   environment:
     STREAM_PROXY_SECRET: ${STREAM_PROXY_SECRET}
     PORT: "3000"
   volumes:
-    - config:/config # so the proxy reuses the downloaded ffmpeg binary
+    - ffmpeg-cache:/config/bin:ro
 ```
+
+Declare `ffmpeg-cache:` in the compose file's top-level `volumes:` and mount
+`ffmpeg-cache:/config/bin` on the app and worker too. Start the app first so it
+populates the binary cache. The proxy gets only a read-only binary cache;
+the rest of `/config` contains `master.key` and must stay private to the app and worker.
+Using `command` preserves the image's tini supervisor, which reaps FFmpeg children.
 
 ```dotenv
 # .env
