@@ -60,6 +60,8 @@ to request a derivative:
 | `thumb` | 250px | `public, max-age=…, stale-while-revalidate=…, immutable` |
 | `medium` | 350px | same, `immutable` |
 | `card` | 480px | same, `immutable` |
+| `hd` | 1280px | same, `immutable` |
+| `wide` | 1920px | same, `immutable` |
 | `full` | original (no resize) | same, `immutable` |
 
 - **`?width=N`** snaps onto the smallest preset that is at least as wide and
@@ -86,7 +88,7 @@ served at its generated mosaic resolution.
 | `GET` | `/search` | user | Cross-type search (`?q=&type=movie\|series\|person`) |
 | `GET` | `/trending` | user | Trending titles (`?window=day\|week\|month&type=movie\|series\|all`) |
 | `GET` | `/recommendations` | user | Personalised recs multiplexer (`?type=for-you\|ai\|mood\|fulfilled-requests`) |
-| `GET` | `/recommendations/dismiss` | user | Dismiss a recommended item |
+| `POST` | `/recommendations/dismiss` | user | Dismiss a recommended item |
 | `GET` | `/continue-watching` | user | In-progress titles |
 | `GET` | `/feed` | user | SDUI home feed (sections wrapping Tier-2 rec endpoints); section titles localized per `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
 | `GET` | `/upcoming` | user | Upcoming releases (`?view=alerts\|episodes\|calendar`) |
@@ -117,10 +119,10 @@ releases.
 | `GET` | `/playback/{id}/subtitles/{id}` | user | Subtitle file by track id |
 | `GET` | `/playback/{id}/subtitles/{n}` | user | Subtitle file by index |
 | `POST` | `/playback/stream-tokens` | user | Mint a `stream_` playback token |
-| `DELETE` | `/playback/stream-tokens` | user | Revoke a `stream_` token |
+| `DELETE` | `/playback/stream-tokens/{id}` | user | Revoke a `stream_` token |
 | `POST` | `/playback/stream-tokens/{id}/refresh` | user | Rotate a `stream_` token before it expires |
-| `GET/POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
-| `GET/POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
+| `POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
+| `POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
 
 ### Sessions and watch state
 
@@ -129,15 +131,15 @@ releases.
 | `GET` | `/sessions` | user / admin | Active sessions (`?scope=mine\|all&itemId=`; `scope=all` requires admin) |
 | `POST` | `/play-sessions` | user | Start a play session: `201` + `Location`, body `{ session_id, stream_token }` |
 | `PUT` | `/play-sessions/{id}` | user (owner) | Report progress (heartbeat); `204` once the item reaches `COMPLETED` |
-| `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; rate-limited (shared bucket with music progress) |
+| `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; no endpoint-level rate limit |
 | `GET` | `/play-sessions/{id}/events` | user (owner) | SSE events for a session |
 | `POST` | `/sessions/{id}/cancel` | admin | Terminate a session (renamed from `kill`) |
 | `GET` | `/watch-state/{id}` | user | `{ watched, positionMs, resumeAnchor, favorite, rating }` |
 | `PUT` | `/watch-state/{id}` | user | Set watched / favorite / rating (partial) |
 
-`positionMs` is always milliseconds on `/api/v1`. The 100ns "ticks" convention
-(`seconds × 10,000,000 = ticks`) exists only on the `/j` Jellyfin-compatibility
-surface. It never appears in a native `/api/v1` response.
+`positionMs` uses milliseconds. Playback chapters expose `runTimeTicks` and
+`startPositionTicks` in 100 ns ticks (10,000,000 = 1 s); their media segments
+use seconds. Follow the schema for each time field.
 
 ### Library management
 
@@ -165,7 +167,7 @@ detailed scan and ingest documentation.
 | `GET` | `/tasks/{id}` | `tasks:read` | One task definition |
 | `POST` | `/tasks/{id}/run` | `tasks:run` | Enqueue a run |
 | `PUT` | `/tasks/{id}/state` | `tasks:admin` | Pause/resume schedule, manage circuit breaker |
-| `GET/POST` | `/tasks/{id}/backlog` | `tasks:read` / `tasks:admin` | Backlog item listing / requeue |
+| `GET` | `/tasks/{id}/backlog` | `tasks:read` | Backlog item listing |
 | `GET/PUT` | `/tasks/{id}/settings` | `tasks:admin` | Per-task settings |
 | `GET/PUT/DELETE` | `/tasks/{id}/triggers` | `tasks:admin` | Interval/daily/weekly/startup triggers (`PUT` body `{ triggers: [...] }`, 1–8, replaces all; `DELETE` resets to the task's default schedule) |
 | `GET` | `/tasks/{id}/failures` | `tasks:read` | Per-item failure log |
@@ -176,10 +178,9 @@ detailed scan and ingest documentation.
 | `GET` | `/runs/stream` | `runs:read` | SSE live-run stream |
 | `POST` | `/runs/{id}/cancel` | `tasks:run` | Cancel one run: graceful, `{ "force": true }` hard-kills. `404` unknown run, `409` already finished, `alreadyCancelling: true` when a graceful cancel was already in progress |
 | `POST` | `/runs/cancel?byTask={id}` | `tasks:run` | Cancel all runs for a task: graceful unless `{ "force": true }`. Returns `cancelled`, `orphaned` (already finished or gone) and `escalated` (hard-kills scheduled) |
-| `GET` | `/queues` | `tasks:admin` | Queue class status (`queue ∈ cpu\|io\|embedding\|maintenance\|ingest\|bulk\|analysis\|discovery`) |
 | `POST` | `/queues/{queue}/pause` | `tasks:admin` | Pause a queue class |
 | `POST` | `/queues/{queue}/resume` | `tasks:admin` | Resume a queue class |
-| `GET/PUT` | `/scheduler` | `tasks:admin` | Scheduler configuration |
+| `GET` | `/scheduler` | `tasks:read` | Scheduler state, per-class queue depths and pause flags |
 
 Task control verbs follow a single grammar: `POST /{collection}/{id}/{verb}`,
 where `verb ∈ run | cancel | retry | pause | resume | enable | disable`. Force /
@@ -195,8 +196,11 @@ expand to `tasks:read`.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET/PUT` | `/providers` | `providers:admin` | Metadata provider configuration |
-| `GET/PUT` | `/integrations` | `providers:admin` | External integration keys |
 | `GET/POST` | `/radio/stations` | `providers:admin` | Radio station CRUD |
+
+Integration endpoints live under `/integrations/homepage`, `/integrations/upcoming`,
+`/integrations/watch-history` and `/integrations/keys/{id}`. See their individual
+contracts in the [API reference](/reference/).
 
 ### Diagnostics
 
@@ -285,7 +289,7 @@ separate presence and separate cast queues automatically.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET/PUT` | `/user/profile` | user | Own profile + preferences |
+| `GET` | `/user/profile` | user | Own profile + preferences |
 | `GET/PUT` | `/user/playback-preferences` | user | Client playback settings; `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
 | `GET/POST/DELETE` | `/user/tokens` | user | Manage own PATs |
 | `GET` | `/user/links` | user | Linked third-party accounts |
@@ -340,7 +344,6 @@ Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
 | `GET` | `/livetv/channels/{id}` | user | One channel |
 | `GET` | `/livetv/channels/{id}/programs` | user | EPG programs (`?view=now-next\|day`) |
 | `GET` | `/livetv/channels/{id}/stream` | user | Stream info (JSON) |
-| `POST` | `/livetv/channels/{id}/stream` | user | Reserve a stream slot |
 | `GET` | `/livetv/channels/{id}/stream/master.m3u8` | user | HLS master (accepts `api_key`) |
 | `GET` | `/livetv/channels/{id}/stream/{segment}` | user | HLS segment |
 | `POST` | `/livetv/channels/{id}/keepalive` | user | Proxy lease keepalive (204) |
@@ -407,7 +410,7 @@ concurrent-transcode cap. Once it's hit, the endpoint returns `503` with a
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/config` | user | Per-user config (features, permission bits) |
-| `GET` | `/auth/logout` | device JWT | Revoke the current device session and refresh token |
+| `POST` | `/auth/logout` | device JWT | Revoke the current device session and refresh token |
 | `GET/POST` | `/plugins/external` | `tasks:admin` | Installable third-party plugin management |
 | `POST` | `/plugins/external/{id}/enable` | `tasks:admin` | Enable an installed plugin |
 | `POST` | `/plugins/external/{id}/disable` | `tasks:admin` | Disable an installed plugin |
@@ -449,28 +452,26 @@ event: connected
 data: {"serverTime":1766258109000}
 ```
 
-Subsequent frames carry an `id:` field for `Last-Event-ID` replay. On
-reconnect, pass the last received event ID and the server will replay any missed
-frames from the Valkey replay buffer.
+Notification frames carry an `id:` field for `Last-Event-ID` replay. On
+reconnect, pass the last received notification ID to replay missed notifications
+from the Valkey buffer. Live signals such as `admin` carry no replay ID.
 
-**Closed event type taxonomy advertised at `/server/capabilities`:**
+**SSE frame names** are advertised at `/server/capabilities` in `events.kinds[].name`:
 
 | Event type | Trigger |
 |---|---|
-| `social.comment` | New comment or reaction |
-| `social.reaction` | Reaction on a social item |
-| `social.invite` | Watch-together or playlist invite |
-| `request.status_changed` | Media request status update |
+| `connected` | Bootstrap frame with server time |
+| `admin` | Operator message or maintenance state; discriminate on `data.type` |
 | `device.action_pending` | Cast action queued for this device |
-| `maintenance.notice` | Admin maintenance window announced |
-| `maintenance.cleared` | Maintenance window cleared |
-| `system.message` | Admin broadcast message |
-| `library.new_episode` | New episode added for a followed series |
-| `watchstate.changed` | Watch state updated (transient, `persist:false`) |
-| `session.changed` | Play session changed (transient, `persist:false`) |
+| `session_changed` | Session/watch-state signal |
+| `watch_state_set_changed` | Watch-state-set signal |
+| `library.new_episode` | New episode for a followed series |
+| `request.available` | Requested title is available |
+| `admin.broadcast` | Durable operator notification |
 
-Persistent events (`persist:true`) write a row to the durable notification inbox
-(`/notifications`). Transient events are live-only.
+The `admin` payload types are `admin_message`, `maintenance_notice` and
+`maintenance_cleared`. These signals are live-only. The last three notification
+types also write to the durable inbox (`/notifications`).
 
 The scoped SSE channels (`watch-together/{code}/events`, `runs/stream`,
 `play-sessions/{id}/events`) remain separate; they have a resource lifecycle the
