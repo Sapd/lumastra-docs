@@ -78,8 +78,8 @@ curl -X POST https://lumastra.example.com/api/v1/music/sessions \
 { "sessionId": "3fa85f64-5717-4562-b3fc-2c963f66afa6" }
 ```
 
-`trackId` and `deviceId` are the only two accepted fields: no `requested`
-format, no capabilities, no device name. The server checks library and
+`trackId` and `deviceId` are required. Optional `clientFeatures` advertises
+admin-action support, such as `admin_message` and `maintenance_notice`. The server checks library and
 age-rating access on `trackId` the same way any playback route does, and
 returns `404` if the track isn't accessible. There's no separate feature flag
 gating this endpoint, unlike some other music subsystems (clustering or
@@ -125,9 +125,10 @@ curl -X PUT https://lumastra.example.com/api/v1/music/sessions/{sessionId} \
 | `status` | `ACTIVE` \| `PAUSED` \| `COMPLETED` | yes | |
 | `nextTrackId` | UUID | no | See [queue prefetch](#queue-prefetch-nexttrackid) below |
 
-There is **no `playing` boolean** and no other field. An earlier revision of
-this contract advertised one, but the handler never read it. Send exactly
-the three fields above.
+An optional `crossfade` object carries `otherTrackId`, `role` (`incoming` or
+`outgoing`), `remainingMs` and `durationMs` for Active Streams. Send `null` to
+clear it; omitting it leaves it unchanged. Use `status` to report whether music
+is playing.
 
 Send heartbeats every **~10 seconds** while `ACTIVE`. On pause, send one
 `status: "PAUSED"` heartbeat rather than stopping the heartbeat loop
