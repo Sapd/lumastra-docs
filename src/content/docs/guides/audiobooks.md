@@ -117,9 +117,9 @@ change it.
 Within that audience:
 
 - Progress markers appear on other listeners' avatars along the book rail.
-- Finished books show a marker for **60 days**, then stop.
-- **Keep this book private** in a book's detail modal hides that one title
-  without changing anything else you share.
+- Finished books show a marker for **7 calendar days**, then stop.
+- The listening-sharing icon in a book's **…** menu hides that title from your
+  audience while global audiobook sharing is enabled.
 - A single switch in **Settings → Privacy** turns off audiobook sharing entirely.
 
 The activity rail is **reciprocal**: you see other people's listening only while
