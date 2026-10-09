@@ -22,7 +22,7 @@ Find **Sharing & Privacy** under **Settings → Access**.
 | Activity Audience Groups    | Empty               | The specific groups, when the mode is "Selected groups".           |
 
 Two sharing controls live elsewhere: **Public Sessions** and **Public Device Info** are
-under **Playback → Playback & Media Mode**, because they depend on the Now Streaming
+under **Playback → Playback & Media Mode**, because they depend on the Streaming Sessions
 widget toggle. See [Live sessions](#live-sessions) below.
 
 ### Checking who it actually reaches
@@ -143,7 +143,7 @@ separately.
 | `SOCIAL_REVIEW_GROUPS`                | empty   | Who may write reviews. **Empty = everyone.**                          |
 | `SOCIAL_DEFAULT_AUDIENCE`             | `auto`  | `auto` · `household` · `groups`.                                      |
 | `SOCIAL_TRUST_GROUPS`                 | empty   | Groups for `groups` mode: governs audiobook activity **and** the Community tab. **Empty = nobody**, not everyone. |
-| `FEATURE_SESSIONS`                    | `true`  | The Now Streaming widget.                                             |
+| `FEATURE_SESSIONS`                    | `true`  | The Streaming Sessions widget.                                             |
 | `FEATURE_SESSIONS_PUBLIC`             | `true`  | Non-admins can see others' sessions.                                  |
 | `FEATURE_SESSIONS_DEVICE_INFO_PUBLIC` | `false` | Also expose client/browser names.                                     |
 
