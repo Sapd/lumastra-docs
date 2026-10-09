@@ -21,8 +21,8 @@ metadata**. Each field uses the first non-empty value; lower priority numbers wi
 |---|---|---|
 | 10 | **TMDB** | Titles, descriptions, artwork, cast, genres, certifications, and external IDs |
 | 20 | **MDBList** | Additional ratings, streaming availability, and anime genres |
-| 30 | **Jellyfin** | Library metadata when optional Jellyfin sync is configured |
-| Per library path | **AniDB** | Alternative anime metadata |
+| 60 | **AniDB** | Alternative anime metadata, selectable per library path |
+| 70 | **Jellyfin** | Library metadata when optional Jellyfin sync is configured |
 
 Per-field overrides take precedence over anime-specific overrides, then provider
 defaults. Anime's `imdb_rating` prefers MDBList over TMDB by default. MAL and AniList IDs
@@ -39,9 +39,9 @@ supplied each field.
 
 | Source | Refresh behaviour |
 |---|---|
-| TMDB | Metadata becomes stale after 7 days; refreshes are batched and rate-limited. |
+| TMDB | Daily sync sweep; provider cache lasts 24 hours. Refreshes are batched and rate-limited. |
 | MDBList | Batched ratings and keyword refresh, up to 200 TMDB IDs per request. |
-| Jellyfin | Every `SYNC_FULL_LIBRARY_HOURS` (24 h by default), when sync is enabled. |
+| Jellyfin | Provider metadata refreshes with sync work. Optional watch-state push/pull tasks run every 5 minutes. |
 | Seasons and episodes | Scan-driven; skips series synced within 6 hours unless new episodes appear. |
 
 ### Locked items are skipped by design
@@ -59,8 +59,9 @@ fallback. Live TV can use custom logo URLs.
 WebP/AVIF output, cache retention and size, local image patterns, and video-frame
 extraction when episode artwork is missing.
 
-Environment defaults are WebP enabled, thumbnail quality `75`, full-image quality `85`,
-and cache retention `30` days (`IMAGE_WEBP_ENABLED`, `IMAGE_THUMB_QUALITY`,
+Environment defaults are WebP and AVIF enabled (`IMAGE_AVIF_ENABLED=true`), thumbnail
+quality `75`, full-image quality `85`, and cache retention `30` days
+(`IMAGE_WEBP_ENABLED`, `IMAGE_THUMB_QUALITY`,
 `IMAGE_FULL_QUALITY`, `IMAGE_CACHE_RETENTION_DAYS`).
 
 ## AI embeddings
