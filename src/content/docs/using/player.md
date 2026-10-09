@@ -35,9 +35,10 @@ server-side analysis; missing previews or skip buttons may mean it hasn't run ye
 
 ## Playback preferences
 
-**Quality → Playback Settings** contains autoplay (with a 3–60 s countdown), automatic
-intro/credits skipping, and the optional **Ask if you're still watching** prompt. The
-prompt appears after two episodes autoplay without interaction and is off by default.
+**Quality → Playback Settings** contains autoplay (with a 3–60 s countdown) and
+automatic intro/credits skipping. Enable **Ask if you're still watching** under
+**Settings → Playback**. The prompt appears after two episodes autoplay without
+interaction and is off by default.
 
 In a [Watch Together party](/using/for-viewers/#watch-together), only the host can seek,
 skip segments, change speed, or advance the party. Anyone can pause or resume.
