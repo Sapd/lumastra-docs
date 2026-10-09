@@ -42,8 +42,9 @@ The same Docker image runs two roles, selected by `WORKER_MODE`:
 | Worker | `enabled` | BullMQ workers + orchestrator + scheduler |
 
 Both roles boot the **orchestrator** and **registry**; only the worker boots the
-BullMQ `Worker` instances that actually execute tasks. For small deployments the
-default `auto` mode enables both roles in one container.
+BullMQ `Worker` instances that actually execute tasks. The default `enabled` mode
+runs both roles in one container.
+`auto` enables workers in development and disables them in production.
 
 :::note[Separate worker recommended for production]
 For any serious library size, run a dedicated worker container
@@ -84,7 +85,7 @@ await orchestrator.startRun(
 
 ### Runner
 
-`runner.ts` creates one BullMQ `Worker` per resource class. When a job is picked up,
+`runner.ts` creates one BullMQ `Worker` per task by default. When a job is picked up,
 the runner:
 
 1. Checks the `processing_version` guard to refuse stale enqueues from rolling
@@ -96,8 +97,8 @@ the runner:
 
 ## Resource classes
 
-Every task declares a `resourceClass`. The runner spawns one BullMQ worker per
-class, so a slow class can never block a fast one.
+Every task declares a `resourceClass`. Its worker shares the class concurrency
+budget with other tasks in that pool.
 
 | Class | Default concurrency | Queue depth cap | Typical job duration | Examples |
 |-------|---------------------|-----------------|----------------------|---------|
@@ -116,22 +117,24 @@ shared class registry.
 
 Under per-task queues (`FEATURE_PER_TASK_QUEUES`, on by default) `ingest` and `bulk`
 fold into the `io` pool and `analysis` into `cpu`: the physical budgets are the summed
-caps (`IO + INGEST + BULK`, `CPU + ANALYSIS`), and each folded task keeps a per-task cap
-equal to its declared class's setting, so a `bulk` task runs at most
-`LUMASTRA_CONCURRENCY_BULK` jobs at once. See
+caps (`IO + INGEST + BULK`, `CPU + ANALYSIS`). A task can set its own
+`quotas.maxConcurrent`; otherwise its worker concurrency is the class budget minus
+one, with a minimum of one. The shared semaphore still caps the total. See
 [Performance tuning](/guides/performance-tuning/#background-job-parallelism).
 
 Choose classes by workload duration and resource use. Long-running work sharing
 a pool with short jobs can delay them; task priorities control pickup order.
 
 Each task can also set a `taskPriority` (`1 | 2 | 3 | 5 | 7`, lower is more urgent) to
-jump or sink within its class's queue, resolved at `startRun` as `opts.priority ??
+jump or sink within its task's queue, resolved at `startRun` as `opts.priority ??
 task.taskPriority ?? priorityFromTrigger(trigger.kind)`.
 
 ### Queue topology
 
-Each resource class is a separate BullMQ queue, keyed `bull:task:<class>:*`
-(BullMQ rejects `:` inside queue names, so the class name is kept bare). The job ID
+By default, each task has a separate BullMQ queue, keyed
+`bull:task:t:<taskId>:*`. With `FEATURE_PER_TASK_QUEUES=false`, the legacy layout
+uses one queue and worker per class (`bull:task:<class>:*`). BullMQ queue names
+are bare task IDs or class names; the prefix supplies the colons. The job ID
 format is `<taskId>~~<identity>#<runId>`, for example
 `trickplay-generation~~item-abc#run_01XYZ`. This is also what BullMQ uses to
 reject a duplicate in-flight enqueue.
@@ -218,8 +221,8 @@ Supporting tables: `task_quota_usage` (daily run counters), `task_circuit_state`
 |-------------|------|-----|---------|
 | `task:run:active:<runId>` | hash | 15 min (refreshed on heartbeat) | Live run state and stage progress |
 | `task:run:terminal:<runId>` | hash | 1 hour | Snapshot for the cancel/retry UI window |
-| `task:identity:<formula>` | string (SETNX) | 24 hours | Cross-time dedup key |
-| `lock:orch:<class>` | string (SET NX EX 5) | 5 s, renewed every 2 s | Per-class orchestrator leader lock |
+| `task:identity:<taskId>:<formula>` | string (SETNX) | 24 hours | Cross-time dedup key |
+| `lock:orch:<class>` | string (SET NX EX 15) | 15 s, renewed every 5 s | Per-class orchestrator leader lock |
 | `lock:scheduler:<taskId>:<bucket>` | string (SET NX EX 30) | 30 s | Scheduler fire claim (one replica wins) |
 | `task:log:<runId>` | list | 24 hours | Live log buffer per run (capped at 1 000 entries) |
 | `task:cancel:<runId>` | pub/sub | n/a | Cancellation signal propagated to the worker |
@@ -234,7 +237,7 @@ cancel or retry runs instead.
 ## Multi-replica coordination
 
 Each replica competes for a **per-class leader lock** (`lock:orch:<class>`) using
-`SET NX EX 5` with a 2-second renewal loop. Only the leader subscribes to
+`SET NX EX 15` with a 5-second renewal loop. Only the leader subscribes to
 `QueueEvents` and drives state transitions for that class. If the leader loses the
 lock, it unsubscribes and re-enters the race with jittered backoff.
 
@@ -255,8 +258,9 @@ key, used three ways:
   duplicate enqueue atomically.
 - **Cross-time**, a `SETNX` on `task:identity:<taskId>:<formula>` (TTL 24 h)
   prevents re-enqueueing the same work after a queue reset or restart.
-- **In-flight**, a partial unique index on `task_history.idempotency_key` gates
-  concurrent `pending`/`active`/`cancelling` runs within 24 hours.
+- **In-flight**, a partial unique index on `(task_id, trigger->>'idempotencyKey')`
+  gates concurrent `pending`/`active`/`cancelling` runs without a time limit. A
+  stuck in-flight run blocks its key until recovery makes it terminal.
 
 Terminal runs aren't a dedup match: the same identity can start fresh after the
 previous run completes.
@@ -479,12 +483,14 @@ view's progress bar and ETA.
 CPU seconds, call counts), written to `task_history.cost_breakdown` and rolled up
 daily to `task_quota_usage`.
 
-**Metrics**: six Prometheus metrics at `/metrics` (bearer-token gated):
-`lumastra_task_runs_total`, `_run_duration_seconds`, `_queue_depth`,
-`_circuit_state`, `_active_runs`, `_cost_units_total`.
+**Metrics**: the main task metrics at `/metrics` (bearer-token gated) include
+`lumastra_task_runs_total`, `lumastra_task_duration_seconds`,
+`lumastra_task_queue_depth`, `lumastra_task_active_runs`, and
+`lumastra_task_cost_units_total`. The registry also exports delivery, backlog, and
+recovery counters.
 
 **CloudEvents webhooks**: the orchestrator emits CloudEvents 1.0 envelopes
-(`dev.lumastra.task.run.*`) for run lifecycle transitions, HMAC-SHA256 signed
+(`org.lumastra.task.run.*`) for run lifecycle transitions, HMAC-SHA256 signed
 (`X-Lumastra-Signature: t=<unix-seconds>,v1=<hex>`), delivered via an outbox table
 with exponential retry and a dead-letter queue visible in the admin UI.
 
