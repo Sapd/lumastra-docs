@@ -21,17 +21,20 @@ than using your browser login password:
 <Steps>
 
 1. Sign in to Lumastra in your browser.
-2. Open **Jellyfin Connect** from the footer menu or **Users & Sessions → API tokens**.
+2. Open **Settings → Connections** and select the Jellyfin card to open
+   **Connect a Jellyfin app**.
 3. Select **Generate password** and save it; it is shown only once.
 4. Enter your **Lumastra username** and that password in the Jellyfin app.
 
 </Steps>
 
 Reset the password from the same page. Clients with **Quick Connect** can instead pair
-by code: approve the client's code at `/device` in your browser.
+by code: approve the client's code in **Connect a Jellyfin app** under
+**Settings → Connections**, or through a Quick Connect footer link if your admin added one.
 
-Library browsing, search, playback, progress sync, ratings, favorites, Watch Together,
-and configured Live TV are supported. Server administration through clients isn't.
+Library browsing, search, playback, progress sync, ratings, favorites, and configured
+Live TV are supported. Watch Together and server administration are unavailable
+through Jellyfin-compatible apps.
 
 ### Concurrent streams
 
@@ -56,7 +59,8 @@ Your administrator must enable OpenSubsonic compatibility first.
 
 <Steps>
 
-1. Sign in to Lumastra and open **Subsonic Connect** from the footer menu.
+1. Sign in to Lumastra, open **Settings → Connections**, and select the Subsonic
+   music apps card.
 2. Select **Generate token** and save it; it is shown only once.
 3. Enter these values in your music app:
 
