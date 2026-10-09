@@ -1,0 +1,1155 @@
+{
+  "base": "62c20a4",
+  "checks": [
+    {
+      "id": "D1",
+      "assertions": [
+        {
+          "path": "src/content/docs/start/quick-start.md",
+          "op": "contains",
+          "text": "| `lumastra-postgres`"
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "assertions": [
+        {
+          "path": "src/content/docs/start/quick-start.md",
+          "op": "contains",
+          "text": "The example compose file already sets `LUMASTRA_LOW_RAM_MODE=true`."
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "assertions": [
+        {
+          "path": "src/content/docs/start/quick-start.md",
+          "op": "contains",
+          "text": "the shipped image runs Node 24"
+        }
+      ]
+    },
+    {
+      "id": "D4",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/deploy-docker.mdx",
+          "op": "contains",
+          "text": "command: [\"sh\", \"start-proxy.sh\"]"
+        }
+      ]
+    },
+    {
+      "id": "D5",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/deploy-docker.mdx",
+          "op": "contains",
+          "text": "- ffmpeg-cache:/config/bin:ro"
+        }
+      ]
+    },
+    {
+      "id": "D6",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/reverse-proxy.mdx",
+          "op": "contains",
+          "text": "most per-IP rate limits trust the first `X-Forwarded-For` entry from any peer."
+        }
+      ]
+    },
+    {
+      "id": "D7",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/sso-authentik.mdx",
+          "op": "contains",
+          "text": "A loopback proxy that strips forwarding headers can make remote visitors see the local operator"
+        }
+      ]
+    },
+    {
+      "id": "D8",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "The default `enabled` mode runs both roles in one container. `auto` enables workers in development and disables them in production."
+        }
+      ]
+    },
+    {
+      "id": "D9",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/configuration.md",
+          "op": "contains",
+          "text": "Most default **on**, but Live TV, Subsonic compatibility"
+        }
+      ]
+    },
+    {
+      "id": "D10",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/integrations.md",
+          "op": "contains",
+          "text": "| **Subsonic** | Use any Subsonic music client | Enable OpenSubsonic API Compatibility under Settings \u2192 Music, or set `FEATURE_SUBSONIC_COMPAT=true` (off by default) |"
+        }
+      ]
+    },
+    {
+      "id": "D11",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/reverse-proxy.mdx",
+          "op": "contains",
+          "text": "byte ranges. Enable WebSocket upgrades for Jellyfin-compatible clients at `/j/socket`."
+        },
+        {
+          "path": "src/content/docs/guides/reverse-proxy.mdx",
+          "op": "contains",
+          "text": "Enable for Jellyfin-compatible clients (`/j/socket`)."
+        }
+      ]
+    },
+    {
+      "id": "D12",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/zero-downtime-updates.mdx",
+          "op": "contains",
+          "text": "FFMPEG_TRANSCODE_DIR"
+        }
+      ]
+    },
+    {
+      "id": "D13",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/media-enrichment.md",
+          "op": "contains",
+          "text": "| Jellyfin | Provider metadata refreshes with sync work. Optional watch-state push/pull tasks run every 5 minutes. |"
+        }
+      ]
+    },
+    {
+      "id": "D14",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "| `GPU_ACCELERATION` | `none`, `nvenc`, `qsv`, `vaapi`, `amf`, `videotoolbox` | `none` | Hardware encoder |"
+        }
+      ]
+    },
+    {
+      "id": "D15",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "uses `FFMPEG_PATH`, which defaults to `ffmpeg` on PATH; the Docker image provides its own binary. If the binary is missing or the path is explicitly emptied, only direct file serving is available."
+        },
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "| `FFMPEG_PATH` | path | `ffmpeg` | FFmpeg binary resolved from PATH; Docker sets `/config/bin/ffmpeg` |"
+        },
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "| `FFPROBE_PATH` | path | `ffprobe` | FFprobe binary resolved from PATH; Docker sets `/config/bin/ffprobe` |"
+        }
+      ]
+    },
+    {
+      "id": "D16",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "`true` stops scheduled, manual and API-triggered library scans and file reconciliation."
+        }
+      ]
+    },
+    {
+      "id": "D17",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "| `ASSISTANT_NAME` | `Assistant`"
+        }
+      ]
+    },
+    {
+      "id": "D18",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/authentication.mdx",
+          "op": "contains",
+          "text": "Short-lived; accepts any IP by default for casting. Set `STREAM_TOKEN_WILDCARD_IP=false` to bind new tokens to the requester\u2019s IP. Accepted as a query parameter on HLS endpoints."
+        }
+      ]
+    },
+    {
+      "id": "D19",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "The token is item-scoped and accepts any IP by default so casting and handoff work. An operator can bind new tokens to the requester\u2019s IP with `STREAM_TOKEN_WILDCARD_IP=false`. The server embeds it in every segment URL in the HLS master playlist, so AVPlayer fetches segments without setting headers."
+        }
+      ]
+    },
+    {
+      "id": "D20",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/authentication.mdx",
+          "op": "contains",
+          "text": "- `read`: `media:read`, `sessions:read`, and `requests:read`. Other read scopes are not granted by `read`."
+        }
+      ]
+    },
+    {
+      "id": "D21",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/authentication.mdx",
+          "op": "contains",
+          "text": "PATs and service tokens accept the coarse aliases `read`, `write`, and `admin`. PATs also accept either exclusive Jellyfin-compatibility scope. Fine-grained scopes such as `media:read` describe the expanded permissions; they cannot be minted independently. Coarse aliases expand as follows:"
+        },
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "- Accepted scopes: `read`, `write`, `admin`, or either exclusive `jellyfin_compat` / `jellyfin_compat_read` scope. Fine-grained scopes are expanded permissions and cannot be requested independently. See the scope tree below."
+        },
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "- Accepted scopes: `read`, `write`, and `admin`; fine-grained permissions come from alias expansion. - Support optional IP allowlist, path/method restrictions, and expiry."
+        }
+      ]
+    },
+    {
+      "id": "D22",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/backup-recovery.md",
+          "op": "contains",
+          "text": "`POST /oauth/token` with `grant_type=refresh_token`"
+        }
+      ]
+    },
+    {
+      "id": "D23",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/deploy-kubernetes.mdx",
+          "op": "contains",
+          "text": "The chart is beta and has one production install"
+        }
+      ]
+    },
+    {
+      "id": "D24",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "**Admin \u2192 Settings \u2192 Access \u2192 Push Notifications**"
+        }
+      ]
+    },
+    {
+      "id": "D25",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "**Admin \u2192 Settings \u2192 Playback \u2192 Encoder & Hardware Tuning**"
+        }
+      ]
+    },
+    {
+      "id": "D26",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/plugins.md",
+          "op": "contains",
+          "text": "Settings \u2192 Plugins & features"
+        },
+        {
+          "path": "src/content/docs/guides/plugins.md",
+          "op": "contains",
+          "text": "**Settings \u2192 Plugins & features**"
+        }
+      ]
+    },
+    {
+      "id": "D27",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/integrations.md",
+          "op": "contains",
+          "text": "Metadata \u2192 AniDB provider card"
+        }
+      ]
+    },
+    {
+      "id": "D28",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/integrations.md",
+          "op": "contains",
+          "text": "### Connecting Jellyfin tools Open **Settings \u2192 Connections \u2192 Connect a Jellyfin app** to generate a client password or a separate read-only token for tools that observe your library."
+        }
+      ]
+    },
+    {
+      "id": "D29",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/third-party-players.mdx",
+          "op": "contains",
+          "text": "Open **Settings \u2192 Connections** and select the Jellyfin card to open **Connect a Jellyfin app**."
+        }
+      ]
+    },
+    {
+      "id": "D30",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/third-party-players.mdx",
+          "op": "contains",
+          "text": "Sign in to Lumastra, open **Settings \u2192 Connections**, and select the Subsonic music apps card."
+        }
+      ]
+    },
+    {
+      "id": "D31",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/third-party-players.mdx",
+          "op": "contains",
+          "text": "by code: approve the client's code in **Connect a Jellyfin app** under **Settings \u2192 Connections**, or through a Quick Connect footer link if your admin added one."
+        }
+      ]
+    },
+    {
+      "id": "D32",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/for-viewers.md",
+          "op": "contains",
+          "text": "Restore dismissed titles on **Hidden from Continue Watching** at `/my/hidden`."
+        }
+      ]
+    },
+    {
+      "id": "D33",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/for-viewers.md",
+          "op": "contains",
+          "text": "**Settings \u2192 Home**"
+        }
+      ]
+    },
+    {
+      "id": "D34",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/for-viewers.md",
+          "op": "contains",
+          "text": "**Settings \u2192 Connections**"
+        }
+      ]
+    },
+    {
+      "id": "D35",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/third-party-players.mdx",
+          "op": "contains",
+          "text": "Library browsing, search, playback, progress sync, ratings, favorites, and configured Live TV are supported. Watch Together and server administration are unavailable through Jellyfin-compatible apps."
+        }
+      ]
+    },
+    {
+      "id": "D36",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/for-viewers.md",
+          "op": "contains",
+          "text": "Start a party from the player's **Watch party** button"
+        }
+      ]
+    },
+    {
+      "id": "D37",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/player.md",
+          "op": "contains",
+          "text": "**Quality \u2192 Playback Settings** contains autoplay (with a 3\u201360 s countdown) and automatic intro/credits skipping. Enable **Ask if you're still watching** under **Settings \u2192 Playback**. The prompt appears after two episodes autoplay without interaction and is off by default."
+        }
+      ]
+    },
+    {
+      "id": "D38",
+      "assertions": [
+        {
+          "path": "src/content/docs/using/for-viewers.md",
+          "op": "contains",
+          "text": "When audiobook sharing is enabled, hide one book by opening its **\u2026** menu and clicking the listening-sharing icon. Its tooltip shows whether your progress is visible to others. Reviews are visible only within your Lumastra server."
+        },
+        {
+          "path": "src/content/docs/guides/audiobooks.md",
+          "op": "contains",
+          "text": "- The listening-sharing icon in a book's **\u2026** menu hides that title from your audience while global audiobook sharing is enabled."
+        }
+      ]
+    },
+    {
+      "id": "D39",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/administration.md",
+          "op": "contains",
+          "text": "playlist publicly, empty by default). Each is independent of library-level permissions above and of `ADMIN_GROUPS`. `NAVIGATION_AVAILABLE_GROUPS` (empty by default) is under **Settings \u2192 Homepage & navigation**, in the navigation section."
+        }
+      ]
+    },
+    {
+      "id": "D40",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/administration-operations.mdx",
+          "op": "contains",
+          "text": "`attempt \u2265 3`, `running > 15m`, or `pending > 30m` in a stage that has stopped draining and is not waiting for a scheduled run."
+        }
+      ]
+    },
+    {
+      "id": "D41",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-monitoring.md",
+          "op": "contains",
+          "text": "use **Retry all failed items** in the task's **Failures** tab to requeue backlog"
+        }
+      ]
+    },
+    {
+      "id": "D42",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "Fix the underlying issue, then use **Retry all failed items** in the task\u2019s **Failures** tab. For one item, use `POST /api/v1/tasks/{taskId}/failures/{itemId}/retry`."
+        }
+      ]
+    },
+    {
+      "id": "D43",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "**2. Leader is held.** With the default 15 s TTL and 5 s renewal interval, a healthy leader\u2019s PTTL repeatedly rises from about 10000 to 15000 ms. A value that falls to zero without recovering means leadership is being lost:"
+        }
+      ]
+    },
+    {
+      "id": "D44",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "If `hb_age > 5 min`, the reconciler should catch it next tick. Startup recovery records **Boot recovery on &lt;instance&gt; inspected N, reclaimed M orphan(s)** in the boot-recovery audit log. Check worker logs for recovery and reconciler activity:"
+        },
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "grep -iE 'Boot recovery|Reconciler'"
+        }
+      ]
+    },
+    {
+      "id": "D45",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "**orphan**. The reconciler sweeps every 30 s and reclaims pending rows once they are about 3 minutes old. Startup boot recovery uses a 2-minute threshold:"
+        }
+      ]
+    },
+    {
+      "id": "D46",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-monitoring.md",
+          "op": "contains",
+          "text": "**Reconciliation Backfill**, **Metadata Aggregation Backfill**, **Bulk Metadata Sync** and **Detach Deleted Library Folder**:"
+        }
+      ]
+    },
+    {
+      "id": "D47",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-basics.md",
+          "op": "contains",
+          "text": "anime cross-reference ID lookups (Fribb and MyAnimeList),"
+        }
+      ]
+    },
+    {
+      "id": "D48",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/authentication.mdx",
+          "op": "contains",
+          "text": "default). The toggle appears only while the Public API (`FEATURE_DEVICE_AUTH`) is on; with it off, set `FEATURE_USER_PATS` through the environment. Token creation needs a signing secret (explicit `JWT_SECRET` or one derived from the master key)."
+        }
+      ]
+    },
+    {
+      "id": "D49",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "/api/v1/playback/previews"
+        }
+      ]
+    },
+    {
+      "id": "D50",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-state.mdx",
+          "op": "contains",
+          "text": "\"event_seq\": 7, \"session_elapsed_ms\": 120000, \"buffer_health_sec\": 12"
+        },
+        {
+          "path": "src/content/docs/developers/building-a-player-state.mdx",
+          "op": "contains",
+          "text": "- **`position_ms`** is the playback position in milliseconds. - **`session_elapsed_ms`** is required: cumulative milliseconds actually played since the session started, excluding pauses, seeks and buffering."
+        }
+      ]
+    },
+    {
+      "id": "D51",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "hlsAudioTrack"
+        }
+      ]
+    },
+    {
+      "id": "D52",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "`GET /api/v1/playback/{id}/chapters` returns `chapters[]` with `startPositionTicks` (10,000,000 ticks = 1 s). Its `mediaSegments[]` use `startTime`/`endTime` in **seconds** and types `Intro`, `Outro`, `Recap`, `Preview` or `Commercial`. Wire the segments to skip controls."
+        }
+      ]
+    },
+    {
+      "id": "D53",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "`GET /api/v1/livetv/channels/{id}` returns the channel object itself, useful for deep-link flows. It includes the list-item fields, a resolved logo URL and the enriched current program. Read the fields directly on the response object."
+        }
+      ]
+    },
+    {
+      "id": "D54",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player.md",
+          "op": "contains",
+          "text": "Playback progress uses **milliseconds**. On `/api/v1/playback/{id}/chapters`, `runTimeTicks` and `chapters[].startPositionTicks` use **ticks** (10,000,000 = 1 s), while `mediaSegments[].startTime/endTime` use **seconds**. Follow each field\u2019s schema."
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "`positionMs` uses milliseconds. Playback chapters expose `runTimeTicks` and `startPositionTicks` in 100 ns ticks (10,000,000 = 1 s); their media segments use seconds. Follow the schema for each time field."
+        }
+      ]
+    },
+    {
+      "id": "D55",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `channelNumber` | integer (optional) | Dense 1-based global lineup position |"
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `qualityTier` | `uhd` \\| `fhd` \\| `hd` \\| `sd` (optional) | Stream quality |"
+        }
+      ]
+    },
+    {
+      "id": "D56",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "An admin kick returns `403` with an `application/problem+json` body: `{ \"code\": \"forbidden\", \"error\": \"Kicked by admin. Try again in 87s.\", \"status\": 403, \"retryAfter\": 87 }`. Read the cooldown from `retryAfter` or the `Retry-After` header. Surface the message and wait until the cooldown elapses before retrying."
+        }
+      ]
+    },
+    {
+      "id": "D57",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player-streaming.mdx",
+          "op": "contains",
+          "text": "// 503 \u2014 transcoder did not produce the manifest in time { \"error\": \"transcode_start_timeout\", \"message\": \"HLS transcode startup timed out\" } // Other startup codes: transcode_start_failed, transcode_start_interrupted. // Retry the same request after a delay."
+        },
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "error usually uses `application/problem+json` (HLS startup has the JSON exception above), but a **mid-stream** error is"
+        },
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "`transcode_start_interrupted`"
+        }
+      ]
+    },
+    {
+      "id": "D58",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/audiobook-playback.mdx",
+          "op": "contains",
+          "text": "/heartbeat { \"mediaId\": \"<book-uuid>\", \"status\": \"PAUSED\" }"
+        }
+      ]
+    },
+    {
+      "id": "D59",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/music-playback.md",
+          "op": "contains",
+          "text": "`trackId` and `deviceId` are required. Optional `clientFeatures` advertises admin-action support, such as `admin_message` and `maintenance_notice`. The server checks library and"
+        },
+        {
+          "path": "src/content/docs/developers/music-playback.md",
+          "op": "contains",
+          "text": "An optional `crossfade` object carries `otherTrackId`, `role` (`incoming` or `outgoing`), `remainingMs` and `durationMs` for Active Streams. Send `null` to clear it; omitting it leaves it unchanged. Use `status` to report whether music is playing."
+        }
+      ]
+    },
+    {
+      "id": "D60",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/building-a-player.md",
+          "op": "contains",
+          "text": "`movie \\| series \\| season \\| episode \\| track \\| album \\| artist \\| audiobook`. Ignore or filter types your client does not render. Legacy"
+        }
+      ]
+    },
+    {
+      "id": "D62",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "**SSE frame names** are advertised at `/server/capabilities` in `events.kinds[].name`: | Event type | Trigger | |---|---| | `connected` | Bootstrap frame with server time | | `admin` | Operator message or maintenance state; discriminate on `data.type` | | `device.action_pending` | Cast action queued for this device | | `session_changed` | Session/watch-state signal | | `watch_state_set_changed` | Watch-state-set signal | | `library.new_episode` | New episode for a followed series | | `request.available` | Requested title is available | | `admin.broadcast` | Durable operator notification | The `admin` payload types are `admin_message`, `maintenance_notice` and `maintenance_cleared`. These signals are live-only. The last three notification types also write to the durable inbox (`/notifications`)."
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "Notification frames carry an `id:` field for `Last-Event-ID` replay. On reconnect, pass the last received notification ID to replay missed notifications from the Valkey buffer. Live signals such as `admin` carry no replay ID."
+        }
+      ]
+    },
+    {
+      "id": "D63",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `GET` | `/tasks/{id}/backlog` | `tasks:read` | Backlog item listing |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "excludes",
+          "text": "| `GET` | `/queues` | `tasks:admin` | Queue class status (`queue \u2208 cpu\\|io\\|embedding\\|maintenance\\|ingest\\|bulk\\|analysis\\|discovery`) |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `GET` | `/scheduler` | `tasks:read` | Scheduler state, per-class queue depths and pause flags |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "excludes",
+          "text": "| `GET/PUT` | `/integrations` | `providers:admin` | External integration keys |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "excludes",
+          "text": "| `POST` | `/livetv/channels/{id}/stream` | user | Reserve a stream slot |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "Integration endpoints live under `/integrations/homepage`, `/integrations/upcoming`, `/integrations/watch-history` and `/integrations/keys/{id}`. See their individual contracts in the [API reference](/reference/). ### Diagnostics"
+        }
+      ]
+    },
+    {
+      "id": "D64",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `POST` | `/recommendations/dismiss`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `POST` | `/auth/logout`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `GET` | `/user/profile`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `POST` | `/playback/telemetry`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `POST` | `/playback/previews`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `DELETE` | `/playback/stream-tokens/{id}`"
+        }
+      ]
+    },
+    {
+      "id": "D65",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "| `PUT /music/sessions/{id}` + `POST /music/sessions/{id}/beacon` | Shared 30 requests / 60s per user | | Video play-session progress and beacon | No endpoint-level rate limit |"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "`sendBeacon` alias of PUT; no endpoint-level rate limit"
+        }
+      ]
+    },
+    {
+      "id": "D66",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "`false` makes feature-gated `/api/v1/*` endpoints answer 404 `not_found`; OAuth device authorization answers 400"
+        }
+      ]
+    },
+    {
+      "id": "D67",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "| `gone` | 410 | Resource permanently removed | | `payload_too_large` | 413 | Request body exceeds the endpoint cap |"
+        },
+        {
+          "path": "src/content/docs/developers/api.md",
+          "op": "contains",
+          "text": "| `stream_limit` | 503 | Live-TV stream slot limit reached (capacity full) | | `cap_unavailable` | 503 | Requested Live TV bitrate ceiling could not be honored |"
+        }
+      ]
+    },
+    {
+      "id": "D68",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "contains",
+          "text": "| `card` | 480px | same, `immutable` | | `hd` | 1280px | same, `immutable` | | `wide` | 1920px | same, `immutable` |"
+        }
+      ]
+    },
+    {
+      "id": "D69",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/plugins.mdx",
+          "op": "contains",
+          "text": "Node 24, which strips types on import."
+        },
+        {
+          "path": "src/content/docs/developers/local-development.md",
+          "op": "contains",
+          "text": "Use `.nvmrc` (pin: 24)"
+        }
+      ]
+    },
+    {
+      "id": "D70",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/local-development.md",
+          "op": "contains",
+          "text": "Vitest 5"
+        }
+      ]
+    },
+    {
+      "id": "D71",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/local-development.md",
+          "op": "contains",
+          "text": "Unit tests use Vitest in the Node environment. Component tests use happy-dom through `vitest.config.components.ts`; `npm test` runs both suites. Tests are co-located with their source files."
+        }
+      ]
+    },
+    {
+      "id": "D72",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/local-development.md",
+          "op": "contains",
+          "text": "ExternalIdMap"
+        }
+      ]
+    },
+    {
+      "id": "D73",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "SET NX EX 15"
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "15 s, renewed every 5 s"
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "5-second renewal loop"
+        }
+      ]
+    },
+    {
+      "id": "D74",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "org.lumastra.task.run.*"
+        }
+      ]
+    },
+    {
+      "id": "D75",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "**Metrics**: the main task metrics at `/metrics` (bearer-token gated) include `lumastra_task_runs_total`, `lumastra_task_duration_seconds`, `lumastra_task_queue_depth`, `lumastra_task_active_runs`, and `lumastra_task_cost_units_total`. The registry also exports delivery, backlog, and recovery counters."
+        }
+      ]
+    },
+    {
+      "id": "D76",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "`runner.ts` creates one BullMQ `Worker` per task by default. When a job is picked up,"
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "Every task declares a `resourceClass`. Its worker shares the class concurrency budget with other tasks in that pool."
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "caps (`IO + INGEST + BULK`, `CPU + ANALYSIS`). A task can set its own `quotas.maxConcurrent`; otherwise its worker concurrency is the class budget minus one, with a minimum of one. The shared semaphore still caps the total. See"
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "jump or sink within its task's queue"
+        },
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "By default, each task has a separate BullMQ queue, keyed `bull:task:t:<taskId>:*`. With `FEATURE_PER_TASK_QUEUES=false`, the legacy layout uses one queue and worker per class (`bull:task:<class>:*`). BullMQ queue names are bare task IDs or class names; the prefix supplies the colons. The job ID"
+        },
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "**1. Worker started for the task.** With the default per-task queues, expect a startup line for the affected task. The legacy class layout logs one line per class instead:"
+        },
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "grep -E 'Worker started for (task|class)'"
+        },
+        {
+          "path": "src/content/docs/guides/task-troubleshooting.md",
+          "op": "contains",
+          "text": "| Worker missing | The worker process isn't booting a queue for that task (or class in legacy mode)."
+        }
+      ]
+    },
+    {
+      "id": "D77",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "a partial unique index on `(task_id, trigger->>'idempotencyKey')` gates concurrent `pending`/`active`/`cancelling` runs without a time limit. A stuck in-flight run blocks its key until recovery makes it terminal."
+        }
+      ]
+    },
+    {
+      "id": "D78",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/task-system.mdx",
+          "op": "contains",
+          "text": "| `task:identity:<taskId>:<formula>` | string (SETNX) | 24 hours | Cross-time dedup key |"
+        }
+      ]
+    },
+    {
+      "id": "D79",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/overview.mdx",
+          "op": "contains",
+          "text": "`media_embeddings` (pgvector vectors), `user_profiles` (catalog and request embedding columns)"
+        }
+      ]
+    },
+    {
+      "id": "D80",
+      "assertions": [
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "`bt2390`, `hable`, `mobius`, `reinhard`, `linear`"
+        },
+        {
+          "path": "src/content/docs/architecture/playback-decisions.mdx",
+          "op": "contains",
+          "text": "also `hable`, `mobius`, `reinhard`, `linear`"
+        }
+      ]
+    },
+    {
+      "id": "D81",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/media-enrichment.md",
+          "op": "contains",
+          "text": "| 60 | **AniDB** | Alternative anime metadata, selectable per library path | | 70 | **Jellyfin** | Library metadata when optional Jellyfin sync is configured |"
+        }
+      ]
+    },
+    {
+      "id": "D82",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/media-enrichment.md",
+          "op": "contains",
+          "text": "Daily sync sweep; provider cache lasts 24 hours. Refreshes are batched and rate-limited."
+        }
+      ]
+    },
+    {
+      "id": "D83",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/ai-assistant.md",
+          "op": "contains",
+          "text": "Daily token budgets and informational message counts have separate user and admin settings. The per-user rate limit and concurrency cap use the same settings for everyone:"
+        }
+      ]
+    },
+    {
+      "id": "D84",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/organizing-music.md",
+          "op": "contains",
+          "text": "The task runs at low priority and slows while a video transcode is active. Music playback, direct play, and remux sessions do not slow it."
+        }
+      ]
+    },
+    {
+      "id": "D85",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/audiobooks.md",
+          "op": "contains",
+          "text": "**7 calendar days**"
+        }
+      ]
+    },
+    {
+      "id": "D86",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/integrations.md",
+          "op": "contains",
+          "text": "A custom `EMBEDDING_BASE_URL` with `EMBEDDING_API_KEY` takes precedence over both."
+        }
+      ]
+    },
+    {
+      "id": "D87",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/codec-support.md",
+          "op": "contains",
+          "text": "| Opus | Ogg | 32, 48, 64, 96, 128, 160, 192 | 192 |"
+        }
+      ]
+    },
+    {
+      "id": "D88",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/codec-support.md",
+          "op": "contains",
+          "text": "Client-side (AkariSub)"
+        }
+      ]
+    },
+    {
+      "id": "D89",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/feature-flags.md",
+          "op": "contains",
+          "text": "The Streaming Sessions widget."
+        },
+        {
+          "path": "src/content/docs/guides/sharing-privacy.md",
+          "op": "contains",
+          "text": "Streaming Sessions"
+        }
+      ]
+    },
+    {
+      "id": "D90",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/media-enrichment.md",
+          "op": "contains",
+          "text": "Environment defaults are WebP and AVIF enabled (`IMAGE_AVIF_ENABLED=true`), thumbnail quality `75`, full-image quality `85`, and cache retention `30` days (`IMAGE_WEBP_ENABLED`, `IMAGE_THUMB_QUALITY`,"
+        },
+        {
+          "path": "src/content/docs/guides/live-tv.md",
+          "op": "contains",
+          "text": "## Adaptive quality The synchronized quality ladder is off by default. Enable `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings \u2192 Live TV** to offer multiple qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default). When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves the original stream; choose `refuse` to fail playback instead. ## Add a source"
+        }
+      ]
+    },
+    {
+      "id": "D98",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "`LIBRARY_ALLOWED_ROOTS` accepts comma-separated absolute paths, such as `/data,/media`. When set, library folders and the folder browser must stay within those roots. When unset, any existing folder except `/` can be a library folder. ## Transcoding hardware"
+        }
+      ]
+    },
+    {
+      "id": "D99",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "this page covers common deployment and tuning settings."
+        }
+      ]
+    },
+    {
+      "id": "D100",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/sso-oidc.mdx",
+          "op": "contains",
+          "text": "| `AUTH_OIDC_SYNC_AVATAR` | `true` | Copy the IdP picture at sign-in for users without an uploaded avatar. The server stores it; browsers do not fetch it from the IdP. | | `AUTH_OIDC_USERINFO`"
+        }
+      ]
+    },
+    {
+      "id": "D101",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/organizing-music.md",
+          "op": "contains",
+          "text": "On arm64 or WSL2, the built-in analyzer can crash: configure a running sidecar with `SONIC_ANALYZE_URL`, then select **Sidecar service** (`MUSIC_ANALYSIS_ENGINE=sidecar`) under **Settings \u2192 Task runner \u2192 Advanced Tasks**; without a configured sidecar it falls back to the built-in engine. `MUSIC_ANALYSIS_MAX_DURATION_MINUTES` skips tracks longer than 30 minutes by default; set it to `0` to analyze every length. ### Genres"
+        }
+      ]
+    },
+    {
+      "id": "D102",
+      "assertions": [
+        {
+          "path": "src/content/docs/guides/task-basics.md",
+          "op": "contains",
+          "text": "## History and log retention **Settings \u2192 Task runner \u2192 Advanced Tasks** also controls how long task history, admin audit logs, watch history, failure events, quota records and webhook deliveries are kept. Shorter retention reduces database growth and leaves less history for troubleshooting; task history first moves from hot storage to an archive. For sustained load after the initial backlog clears, see"
+        }
+      ]
+    },
+    {
+      "id": "CAP",
+      "assertions": [
+        {
+          "path": "src/content/docs/reference/environment-variables.md",
+          "op": "contains",
+          "text": "keep `FFMPEG_MAX_JOBS_PER_USER` well below `LUMASTRA_MAX_CONCURRENT_TRANSCODES`"
+        }
+      ]
+    }
+  ]
+}
