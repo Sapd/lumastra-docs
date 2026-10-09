@@ -74,7 +74,7 @@ Every proxy below is set up for this list. If you use another one, check each li
       [Sign-in headers](#sign-in-headers) below for why this matters.
 - [ ] Don't buffer streaming responses. Live updates (notifications, watch-state sync,
       Watch Together) use Server-Sent Events, and video is served as HLS segments and
-      byte ranges. Lumastra needs no WebSocket support.
+      byte ranges. Enable WebSocket upgrades for Jellyfin-compatible clients at `/j/socket`.
 - [ ] Allow long timeouts in both directions. A stream or an event connection can stay
       open for hours, a transcode can take a while to produce its first segment, and a
       paused player can stop reading for minutes. Lumastra sends a keepalive comment
@@ -122,11 +122,10 @@ things:
 - It makes Lumastra believe `X-Forwarded-For` from those proxies, so it knows each
   client's real IP address.
 
-With built-in or OIDC login you can leave it empty, and everything works. Per-IP rate
-limits and failed-login counters then give everyone behind the proxy one shared budget,
-and a personal access token restricted with `allowed_ips` is compared against the
-proxy's address and refused. Setting `TRUSTED_PROXY_IPS` fixes both, but only set it
-when two things are true:
+With an empty list, most per-IP rate limits trust the first `X-Forwarded-For` entry
+from any peer. A client can change that header to bypass those limits. Sign-in limits,
+personal-access-token IP allowlists and IP-bound stream tokens use the direct peer
+instead, so they see the proxy's address. Set `TRUSTED_PROXY_IPS` when two things are true:
 
 - Your proxy removes the sign-in headers, as every setup on this page does.
 - The address you list belongs to your proxy alone, if you turn forward auth on.
@@ -547,7 +546,7 @@ On the **Details** tab:
 | Forward Port | `3000` |
 | Cache Assets | Off |
 | Block Common Exploits | Off, unless you have tested it with your apps |
-| Websockets Support | Optional. Lumastra doesn't use WebSockets. |
+| Websockets Support | Enable for Jellyfin-compatible clients (`/j/socket`). |
 
 On the **SSL** tab, request a new certificate for the domain and turn on **Force SSL**
 and **HTTP/2 Support**.
@@ -649,8 +648,9 @@ nginx closes a connection when the player hasn't read from it for 60 seconds
 **Uploads fail with 413.** The proxy's body limit is smaller than the upload. Raise
 `client_max_body_size` in nginx (or its equivalent), to at least `BODY_SIZE_LIMIT`.
 
-**Everyone shares one rate limit, or a token with `allowed_ips` is refused.** Lumastra
-sees only the proxy's address. Set `TRUSTED_PROXY_IPS` as described above.
+**Everyone shares the sign-in limit, or a token with `allowed_ips` is refused.** These
+checks see the proxy's address when proxy trust is unset. Most other per-IP limits
+then trust a spoofable forwarded header. Set `TRUSTED_PROXY_IPS` as described above.
 
 **The Apple app can't connect.** Open your address in Safari on the same device. If it
 shows a certificate warning, the app fails too. Use a certificate from a public
