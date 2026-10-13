@@ -25,6 +25,8 @@ The full changelog is in the repository:
   checks use the current time.
 - Security fixes tighten sign-in, Quick Connect, Watch Together identities, private
   activity, playlist membership, library access and upstream requests.
+- Episode files named "Show_Series_2_-_03" (as iPlayer downloads are) or "Show.OVA.01"
+  are filed under the right season and episode.
 
 ### 0.1.0 (2026-10-15)
 
