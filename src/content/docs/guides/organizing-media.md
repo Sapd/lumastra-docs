@@ -192,6 +192,19 @@ detects and repairs this automatically after metadata sync. See [Auto-fixing
 split-cour anime season structure](/guides/administration/#media-library-console).
 :::
 
+:::note[Absolute numbers in Sonarr anime names]
+Sonarr's anime naming puts the absolute episode number after `SxxExx`, as in
+`Momotaro - S09E21 - 188 - The Peach Boy.mkv`. When TMDB numbers the show
+differently from your season folders, Lumastra uses that absolute number to find
+the right TMDB episode and moves the file's episode there after metadata sync.
+
+Without an absolute number, a match that rests only on episode numbers lining up
+is not applied on its own. It appears as a proposal under **Admin → Library →
+Quarantine**, unless an admin turns on **Auto-apply episode matches based on
+numbers alone** (`RECONCILE_AUTO_APPLY_NUMBER_MATCHES`, off by default). The same
+page lists recent automatic moves with an **Undo** button.
+:::
+
 ## Multiple episodes in one file
 
 This is where Lumastra shines. A single file containing several episodes is split
