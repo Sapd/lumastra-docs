@@ -25,7 +25,17 @@ signed-in browser.
 
 ## First run: the setup wizard
 
-An empty database opens `/setup` to create the first admin:
+An empty database opens `/setup`. Its first screen, **Check your install**, shows what
+the server found before any account exists: the database, Valkey, the optional sidecars
+(sonic embedder, Live TV stream proxy), hardware transcoding and FFmpeg, whether the
+config volume keeps your settings, your reverse proxy and HTTPS, and the running nodes.
+Items marked with a warning are worth fixing first: a config folder that is not a
+mounted volume loses settings on restart, and a proxy missing from `TRUSTED_PROXY_IPS`
+breaks forward auth on the next screen. Nothing on that screen blocks setup;
+**Recheck** reads everything again after you fix something, and **Copy as text** gives
+you a summary to paste into a support request.
+
+The wizard then creates the first admin:
 
 - **Built-in:** choose a username and password; this enables `AUTH_NATIVE_LOGIN_ENABLED`.
 - **Forward auth:** the forwarded user must belong to an `ADMIN_GROUPS` group.

@@ -293,9 +293,12 @@ tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
 
 1. On first boot the app runs all database migrations automatically (watch
    `docker compose logs -f`).
-2. Open the app. With an empty database it redirects you to the **`/setup` wizard**
-   to create the first admin: built-in login, or forward auth or OIDC if you run an
-   identity provider. See [Authentication](/guides/authentication/).
+2. Open the app. With an empty database it redirects you to the **`/setup` wizard**.
+   Its first screen, **Check your install**, shows whether the config volume keeps
+   your settings, which sidecars answer, and how requests reach the app; fix any
+   warning there first. The wizard then creates the first admin: built-in login, or
+   forward auth or OIDC if you run an identity provider. See
+   [Authentication](/guides/authentication/).
 3. Verify:
 
    ```bash
@@ -682,7 +685,8 @@ so a plain `docker compose up -d` never starts it. To turn it on:
 3. **Point the app at it.** Uncomment `SONIC_EMBEDDER_URL` on the `lumastra` service
    (and on the worker, if you run a split worker). Leave it commented out while the
    sidecar isn't running: the setup wizard treats a set URL as "sidecar available" and
-   turns the sonic features on.
+   turns the sonic features on. The wizard's **Check your install** screen shows
+   whether the sidecar answers.
 4. Start it with `docker compose --profile sonic up -d`. Stop everything with
    `docker compose --profile sonic down`; without the profile, `down` leaves the sidecar
    running and can't remove the network.

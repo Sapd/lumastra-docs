@@ -213,7 +213,10 @@ logs. See [Startup validation](/guides/configuration/#startup-validation) for re
 
 ## 5. Create your admin
 
-Open `/setup` to create the first admin:
+Open `/setup`. The first screen, **Check your install**, shows what the server found
+(database, Valkey, sidecars, hardware transcoding, config volume, reverse proxy and
+HTTPS). Fix anything marked with a warning, or continue and come back to it later.
+Then create the first admin:
 
 - **Built-in login:** choose a username and password.
 - **Forward auth:** your forwarded identity must belong to an `ADMIN_GROUPS` group.
