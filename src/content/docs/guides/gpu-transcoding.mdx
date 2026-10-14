@@ -111,6 +111,29 @@ decoder (NVDEC) was the bottleneck, not the session cap. You can override the es
 | --- | --- | --- |
 | `NVENC_MAX_SESSIONS` | auto-detected from the driver version and GPU model (8 on current or undetected drivers, 0 = uncapped for data-center cards) | Overrides the auto-detected session estimate when set. |
 
+### Other apps share the encoder
+
+The GPU's video encoder isn't Lumastra's alone. On a desktop or gaming PC, other apps encode
+video on the same chip: game streaming (Sunshine, Apollo, GeForce Experience / NVIDIA app
+streaming, Steam Remote Play), OBS and other screen recorders, Discord screen sharing, and
+NVIDIA Instant Replay or ShadowPlay. They count against the same session cap and share the
+encoder's throughput. With a game stream running on an RTX 3090, a Lumastra 4K HDR
+transcode fell to about 1 frame per second, and the first segment took a minute.
+
+Lumastra handles this as follows:
+
+- **Encoder busy:** when a transcode runs below real time for about 10 seconds, the player
+  shows *"The server's video encoder is busy (another app may be using it). Playback may
+  pause to buffer."* The same flag (**Encoder busy**, or **CPU too slow** for a software
+  encode) appears next to the session in **Users & Sessions → Active sessions**. Both clear
+  when the encode keeps up again.
+- **No free encode session:** when NVENC can't open a session at all, that transcode
+  continues with software encoding at the same resolution instead of failing, and the player
+  says so. The next playback tries the GPU again.
+
+Software encoding of 4K is slow on most CPUs. If you stream games from the same machine,
+pause the game stream or Instant Replay while you watch, or give Lumastra its own GPU.
+
 ## Docker setup
 
 ### NVIDIA (`nvenc`)
@@ -281,6 +304,9 @@ After restarting:
 | `videotoolbox` / `amf` set in Docker but ignored | Not supported inside Linux containers. Use a Linux backend or run bare metal. |
 | HDR plays but uses a lot of CPU on AMD VA-API | Expected when the client gets SDR. AMD has no hardware HDR VPP, so decoding and tone-mapping run in software and only the encode uses the GPU. Confirm *HDR tone-mapping: Software* in Users & Sessions → Active sessions. |
 | Old Xvid / DivX, VC-1, or 10-bit H.264 won't start, or did once then recovered | Handled by the software-decode fallback. If it was mis-learned after a GPU/driver change, clear the decode cache in Users & Sessions → Active sessions. |
+| Player says the server's video encoder is busy; Active sessions shows **Encoder busy** | Another app is using the GPU encoder (Sunshine/Apollo, OBS, Discord, Instant Replay). Stop it, or see [Other apps share the encoder](#other-apps-share-the-encoder). |
+| Player says the video is encoded in software; logs say "GPU encoder could not open a session" | NVENC had no free session (`OpenEncodeSessionEx failed`). Another app holds the encoder, or the driver's session cap is reached. Lumastra continued that transcode on the CPU. |
+| Active sessions shows **CPU too slow** | A software transcode can't keep up. Enable GPU transcoding, or keep the **Downscale 4K to 1080p on CPU** setting on (it is by default). |
 | Fewer than expected concurrent NVENC transcodes on a consumer NVIDIA GPU | Driver-enforced session cap. Check the estimate against your actual card and override with `NVENC_MAX_SESSIONS` if it's wrong. |
 
 ## Next
