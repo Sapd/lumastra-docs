@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | After first-run setup asked about it (when the first library is added, or one hour after the first admin was created), then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | To stop all of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). To stop only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
+| `lumastra.org` | After you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created), then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | To stop all of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). To stop only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -94,9 +94,9 @@ stops every call to the licensing server: no enrollment, no renewal, no weekly
 check-in and no push relay token. It applies without a restart. An install
 without a key then runs on the free tier from the start; a key that is already
 stored works until it expires and is not renewed. A new install makes its first call
-only after the setup wizard asked whether to contact `lumastra.org` (when the first
-library is added, or one hour after the first admin was created), so switching it off
-there means nothing is ever sent. What the free tier lacks, and
+only after you answered whether to contact `lumastra.org` (in the setup wizard, in Admin →
+Settings or with the variable; an install set up without the wizard waits a day after its
+first admin was created), so switching it off there means nothing is ever sent. What the free tier lacks, and
 how to add a key by hand, is in
 [Licensing](/guides/licensing/#run-without-contacting-lumastraorg).
 

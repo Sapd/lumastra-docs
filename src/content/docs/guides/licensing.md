@@ -213,8 +213,9 @@ check-in, no push relay token.
 - You can still paste a key you got by hand at
   [lumastra.org/license](https://lumastra.org/license/); it is checked offline.
 
-A new install fetches its first key only once setup has asked about it: when the first
-library is added, or one hour after the first admin was created if no library is added.
+A new install fetches its first key only after you answered whether to contact
+`lumastra.org`: in the setup wizard, in Admin → Settings, or with the environment variable.
+An install set up without the wizard waits a day after its first admin was created.
 Turning the switch off in the setup wizard therefore means nothing is ever sent. Setting
 `LICENSE_SERVER_CONTACT_ENABLED=false` in the environment does the same and also locks the
 switch.
