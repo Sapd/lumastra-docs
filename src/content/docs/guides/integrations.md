@@ -118,6 +118,12 @@ later as secrets in the admin **Settings** UI / environment variables,
 whichever you prefer.
 :::
 
+Keys and connections added after install take effect without a restart. Saving a
+Jellyfin connection, a Last.fm key or an MDBList key starts the matching tasks right
+away, and changing the GPU acceleration setting makes Lumastra check the hardware again.
+A TMDB key added under **Admin → Settings → Metadata** also scans libraries that were
+waiting for a match again, and the items are identified in place.
+
 ## Next
 
 - [The AI assistant](/guides/ai-assistant/): what the chat assistant does and

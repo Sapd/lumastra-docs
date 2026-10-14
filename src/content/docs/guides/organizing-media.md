@@ -38,6 +38,13 @@ create a separate group (or at least a separate path) for Movies, TV, Music, and
 so on. Pointing a Movie path and a TV path at the same group mixes types.
 :::
 
+In the first-run wizard, folders named like a library are suggested with their type
+preselected. For example `Movies`, `Filme`, `Films`, `Películas` and `Filmy` are movie
+folders, and `TV Shows`, `Serien`, `Séries` and `Seriale` are TV folders. English,
+German, French, Spanish, Portuguese, Italian, Dutch, Polish and Czech names are
+recognised. `Kids` and `Documentaries` folders are suggested without a type, and
+audiobook folders are never suggested.
+
 Lumastra scans both on a schedule (about hourly) and live via a filesystem
 watcher. Scans are incremental: unchanged files are skipped.
 
@@ -285,7 +292,9 @@ Nothing is dropped. A file that can't be matched:
 
 1. Embed a `{tmdb-NNN}` or `tt#######` id (filename or folder) to skip fuzzy
    matching.
-2. For TV, name the **show folder** well: it's the series search query.
+2. For TV, name the **show folder** well: it's the series search query. Id tags such as
+   `[tmdbid-1234]` or `{tvdb-5678}` in the folder name are removed from the title, and
+   a `(Year)` in parentheses is read from 1880 on.
 3. Use `(Year)` for movies.
 4. Point each path at the correct **media type**.
 

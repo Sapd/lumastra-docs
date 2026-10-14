@@ -296,9 +296,10 @@ tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
 2. Open the app. With an empty database it redirects you to the **`/setup` wizard**.
    Its first screen, **Check your install**, shows whether the config volume keeps
    your settings, which sidecars answer, and how requests reach the app; fix any
-   warning there first. The wizard then creates the first admin: built-in login, or
-   forward auth or OIDC if you run an identity provider. See
-   [Authentication](/guides/authentication/).
+   warning there first. The wizard then creates the first admin. Single sign-on (OIDC,
+   or forward auth) is recommended and pre-selected; built-in login is one click away.
+   See [Authentication](/guides/authentication/). On the library step it lists the media
+   folders it found and adds the ticked ones when you continue.
 3. Verify:
 
    ```bash
@@ -849,6 +850,19 @@ retention; Docker rotates logs independently on each host.
 
 For a hard Valkey memory cap, use the separate cache/task layout under
 [Production Valkey layout](#production-valkey-layout).
+
+:::note[The first start needs outbound internet]
+Each transcoding container downloads FFmpeg from GitHub on its first start, and the app
+contacts `lumastra.org` for the licence. On a firewalled host, allow both or follow the
+offline setup below. See [What Lumastra sends where](/reference/data-flows/).
+:::
+
+:::caution[Keep the service names unique on shared Docker networks]
+Do not attach the Lumastra containers to a shared Docker network where another stack
+already uses the service names `lumastra-postgres` or `lumastra-valkey`. Docker's DNS
+would resolve the name to the other stack's database or cache. Keep Lumastra on its own
+network, or rename the services in both stacks.
+:::
 
 The image does not bundle ffmpeg: on first start each transcoding container downloads
 the pinned `jellyfin-ffmpeg` release from GitHub into the `ffmpeg-cache` volume (checked

@@ -35,14 +35,20 @@ breaks forward auth on the next screen. Nothing on that screen blocks setup;
 **Recheck** reads everything again after you fix something, and **Copy as text** gives
 you a summary to paste into a support request.
 
-The wizard then creates the first admin:
+The wizard then creates the first admin. Single sign-on is recommended and is
+pre-selected: OIDC, or forward auth when the wizard sees an identity from a trusted
+reverse proxy. Built-in login is one click away if you have no identity provider.
 
-- **Built-in:** choose a username and password; this enables `AUTH_NATIVE_LOGIN_ENABLED`.
-- **Forward auth:** the forwarded user must belong to an `ADMIN_GROUPS` group.
 - **OIDC:** configure the provider first; the first sign-in must belong to an
   `ADMIN_GROUPS` group, otherwise no admin is created.
+- **Forward auth:** the forwarded user must belong to an `ADMIN_GROUPS` group.
+- **Built-in:** choose a username and password; this enables `AUTH_NATIVE_LOGIN_ENABLED`.
 
-You can then add a TMDB key and configure **Library → Sources & scanning**.
+The next step is titled **Your account is ready. Now the basics**. Everything on it is
+optional and can be changed later in the admin settings, and it only shows what is
+wrong, such as a background worker that does not answer or a configured service that is
+down. Then you add your media folders and, if you like, connect Audiobookshelf. See
+[Quick Start](/start/quick-start/#6-add-your-libraries).
 
 Setup stays locked after the first admin is created, even if the install later loses
 all admins. Restore the user's admin group at the IdP (effective on their next

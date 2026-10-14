@@ -119,7 +119,7 @@ command, including `down` and `logs`.
 The example compose file mounts no media folder, so the app can't see your files
 yet. Add one read-only line under `volumes:` of the `lumastra` service, for example
 `- /path/to/media:/data/media:ro` (on Windows: `- C:/Users/you/Videos:/data/media:ro`).
-In the setup wizard you then add `/data/media/...` as a library. See
+In the setup wizard the folder then shows up under **Found these folders**. See
 [Deploy with Docker → Volumes](/guides/deploy-docker/#volumes).
 
 Audiobooks don't need a mount: they come from an Audiobookshelf server. On the
@@ -222,15 +222,57 @@ Open `/setup`. The first screen, **Check your install**, shows what the server f
 HTTPS). Fix anything marked with a warning, or continue and come back to it later.
 Then create the first admin:
 
-- **Built-in login:** choose a username and password.
-- **Forward auth:** your forwarded identity must belong to an `ADMIN_GROUPS` group.
-- **OIDC:** configure `AUTH_OIDC_*` first; sign in with an `ADMIN_GROUPS` account.
+- **OIDC:** single sign-on is recommended and pre-selected. Configure the provider in the
+  wizard or with `AUTH_OIDC_*`, then sign in with an `ADMIN_GROUPS` account.
+- **Forward auth:** pre-selected instead when the wizard sees an identity from a trusted
+  reverse proxy. Your forwarded identity must belong to an `ADMIN_GROUPS` group.
+- **Built-in login:** one click away. Choose a username and password.
 
 See [Authentication](/guides/authentication/) for configuration and recovery.
 
 The setup preference **Allow apps and third-party clients (Public API)** is on by
 default. It enables native app sign-in, push notifications, and `/api/v1`. You can
 change it later at **Settings → Access**.
+
+The next step, **Your account is ready. Now the basics**, is optional and only shows
+problems, such as a background worker that does not answer. Change anything on it later
+in the admin settings.
+
+## 6. Add your libraries
+
+The library step lists the folders it found under `/data`, `/media`, `/mnt` and similar
+places under **Found these folders**. If a folder groups your libraries, for example
+`/data/media` holding `movies/`, `serien/` and `musique/`, the wizard looks one level
+inside it.
+
+- A folder named like a library gets its type preselected and is ticked. Names are
+  recognised in English, German, French, Spanish, Portuguese, Italian, Dutch, Polish and
+  Czech. For example, a movie library can be called `Movies`, `Filme`, `Films`,
+  `Películas`, `Filmes` or `Filmy`; a TV library `TV Shows`, `Serien`, `Séries`, `Serie TV`
+  or `Seriale`; a music library `Music`, `Musik`, `Musique`, `Muziek` or `Muzyka`.
+- Folders such as `Kids` or `Documentaries` are listed without a type. Pick one to add
+  them.
+- Audiobook folders are never suggested. Audiobooks come only from Audiobookshelf.
+- Ticked folders are added when you continue. The button shows the count, for example
+  **Add 3 libraries and continue**.
+- You can still type a folder path by hand under **Or enter a folder path**.
+
+To use audiobooks, open **Audiobooks from Audiobookshelf** on the same step, enter the
+server URL and an API key, and tick the book libraries to add. They are added when you
+continue, like the folders.
+
+After you continue, Lumastra scans the folders. If the scan ran without a TMDB API key,
+or the key was rejected, the finish screen says so. Paste a key there and select
+**Save key and re-scan**: the items are identified in place and keep their IDs. If you
+add the key later under **Admin → Settings → Metadata**, libraries that were waiting for
+a match are scanned again too.
+
+## Needs internet on first start
+
+The first start needs outbound internet. Each container that transcodes downloads
+FFmpeg from GitHub, and the app contacts `lumastra.org` for the licence. On a host behind
+a firewall, allow both, or see [What Lumastra sends where](/reference/data-flows/) for
+the full list and for running offline.
 
 ## Next: put it behind HTTPS
 
