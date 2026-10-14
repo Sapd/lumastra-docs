@@ -136,7 +136,8 @@ Before reading a filename, Lumastra:
 | `Metropolis (1927) {tmdb-19}.mkv`                   | TMDB id (exact match)            |
 | `Nosferatu.1922.{imdb-tt0013442}.mkv`               | IMDB id tt0013442                |
 
-- A parenthesized `(Year)` is preferred and tells remakes apart.
+- A parenthesized `(Year)` is preferred and tells remakes apart. In a file name it is read
+  from 1880 on, so early films such as `(1896)` keep a clean title.
 - A `{tmdb-NNN}` or `tt#######` id in the filename **or** the parent folder
   skips the fuzzy search entirely.
 
@@ -293,8 +294,7 @@ Nothing is dropped. A file that can't be matched:
 1. Embed a `{tmdb-NNN}` or `tt#######` id (filename or folder) to skip fuzzy
    matching.
 2. For TV, name the **show folder** well: it's the series search query. Id tags such as
-   `[tmdbid-1234]` or `{tvdb-5678}` in the folder name are removed from the title, and
-   a `(Year)` in parentheses is read from 1880 on.
+   `[tmdbid-1234]` or `{tvdb-5678}` in the folder name are removed from the title.
 3. Use `(Year)` for movies.
 4. Point each path at the correct **media type**.
 
