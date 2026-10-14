@@ -190,12 +190,31 @@ Why: to issue and renew license keys, and to know roughly how many Lumastra inst
 exist and run which versions.
 
 To stop the weekly check-in, turn off **Weekly licence check-in** in **Admin → Settings →
-General → Diagnostics** (the setup wizard offers the same switch on its main settings step). The
+General → Licensing** (the setup wizard offers the same switch on its main settings step). The
 install then contacts the licensing server only to enroll, to renew a key that is missing,
 invalid, expired or close to expiring, and for the push relay token while push uses the
 standard relay (every six hours). A moved early-access end date then reaches the install
 only in the last 14 days before its key expires. See [What Lumastra sends where](/reference/data-flows/).
 :::
+
+## Run without contacting lumastra.org
+
+Turn off **Contact lumastra.org for the licence** in **Admin → Settings → General →
+Licensing** (or in the setup wizard, or set `LICENSE_SERVER_CONTACT_ENABLED=false`).
+The install then never calls the licensing server: no enrolment, no renewal, no
+check-in, no push relay token.
+
+- Without a key it runs on the **free tier right away**, with no 30 day grace period,
+  so nothing drops away a month later. You lose: Jellyfin apps are limited to 2 streams
+  at a time, no AI assistant, no iPhone or Apple TV push notifications through the
+  standard relay, and no branding removal.
+- A key that is already stored keeps working until it expires. It is not renewed, and
+  there are no 14 extra days after it expires.
+- You can still paste a key you got by hand at
+  [lumastra.org/license](https://lumastra.org/license/); it is checked offline.
+
+**System → Instance** then shows "Not contacting lumastra.org: free tier." Turning the
+switch back on enrolls or renews right away.
 
 ## Trademarks & forks
 

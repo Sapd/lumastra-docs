@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | The weekly check-in: **Weekly licence check-in** in Admin → Settings → General → Diagnostics (also offered in setup), or `LICENSE_CHECK_IN_ENABLED=false`. Renewal itself can't be switched off; blocking it is safe |
+| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | All of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). Only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -78,10 +78,31 @@ keys, and hands out the push-relay token.
 | **Received** | A signed licence key, and a relay token valid for 24 hours and bound to that UUID. |
 | **Not sent** | Titles, files, users, prompts, library contents. |
 | **What the server records** | For its install counts, per successful call: issue or refresh, the licence tier, the release number (`0.1.3`; anything after it is cut), the country Cloudflare derives from the connection, and a pseudonymised install ID (a keyed hash of the UUID) instead of the UUID. No IP address, no licence key. Kept for three months, to know how many installs exist and which versions they run. Cloudflare's short-lived request logs for lumastra.org can contain the IP address, as for any request. |
-| **Switch off the check-in** | **Weekly licence check-in** in Admin → Settings → General → Diagnostics, the same switch on the setup wizard's settings step, or `LICENSE_CHECK_IN_ENABLED=false`. The install then only calls when its key is missing, invalid, expired or within 14 days of expiring (retried about every 30 minutes while it has no usable key), and for the push relay token while push uses the standard relay. A moved early-access end date then reaches it only in that 14-day window. |
+| **Switch off the check-in** | **Weekly licence check-in** in Admin → Settings → General → Licensing, the same switch on the setup wizard's settings step, or `LICENSE_CHECK_IN_ENABLED=false`. The install then only calls when its key is missing, invalid, expired or within 14 days of expiring (retried about every 30 minutes while it has no usable key), and for the push relay token while push uses the standard relay. A moved early-access end date then reaches it only in that 14-day window. |
 | **Avoid it** | Blocking it leaves the server on its current key until that expires, then on the free tier (never a lockout), and turns push off unless you run your own relay or use your own Apple key. See [iOS push notifications](/guides/push-notifications/). |
 
 Full detail is in the repository's
+#### Switch off all contact
+
+**Contact lumastra.org for the licence** (Admin → Settings → General → Licensing,
+the same switch in the setup wizard, or `LICENSE_SERVER_CONTACT_ENABLED=false`)
+stops every call to the licensing server: no enrolment, no renewal, no weekly
+check-in and no push relay token. It applies without a restart. What the install
+runs on then:
+
+- **No licence key**: the free tier from the start. There is no 30 day grace
+  period, so nothing changes later. Jellyfin apps are limited to 2 streams at a
+  time, there is no AI assistant, no iPhone or Apple TV push notifications
+  through the standard relay, and no branding removal.
+- **A licence key already stored**: it keeps working until it expires, but it is
+  not renewed, and there are no 14 extra days after it expires. Then the free
+  tier. Admin → System → Instance shows the end date.
+- You can still get a key by hand at [lumastra.org/license](https://lumastra.org/license/)
+  from any browser and paste it under Licensing. Keys are checked offline.
+
+Admin → System → Instance shows "Not contacting lumastra.org: free tier." while
+it is off. Turning it back on makes the first call right away.
+
 [`LICENSING.md`](https://github.com/Sapd/lumastra/blob/main/LICENSING.md)
 §3b: its "nothing else leaves the machine" refers to the licensing loop only,
 not to the features on this page.
@@ -268,14 +289,15 @@ disabled, and prevent the default contacts:
   `FFMPEG_PATH` / `FFPROBE_PATH`;
 - `DISABLE_FRIBB_ANIME_SYNC=true`;
 - `UPDATE_CHECK_ENABLED=false` (or the switch in Admin → Settings);
-- `LICENSE_CHECK_IN_ENABLED=false` (or the switch in Admin → Settings) to stop the weekly licence check-in;
+- `LICENSE_SERVER_CONTACT_ENABLED=false` (or **Contact lumastra.org for the licence** in Admin → Settings) to stop every call to the licensing server; the install then runs on the free tier ([details](#switch-off-all-contact));
 - `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` before adding a music library;
 - `SONIC_MODEL_FP` if you run the sonic sidecar;
 - `FEATURE_PUSH_NOTIFICATIONS=false`, unless you use your own Apple key.
 
-Licence renewal itself has no switch; when it can't get through, the
-install keeps its current key and then falls back to the free tier, as described
-[above](#lumastraorgapilicenserefresh-licence-renewal).
+If you leave contact on but block `lumastra.org` instead, the install keeps
+trying: it keeps its current key and then falls back to the free tier, as
+described [above](#lumastraorgapilicenserefresh-licence-renewal). A key-less
+install has the 30 day grace period first in that case.
 
 ## Where this is shown in the app
 
