@@ -213,9 +213,11 @@ check-in, no push relay token.
 - You can still paste a key you got by hand at
   [lumastra.org/license](https://lumastra.org/license/); it is checked offline.
 
-The install fetches its first key within half a minute of its first start, before you
-reach the setup wizard. To avoid even that first call, set
-`LICENSE_SERVER_CONTACT_ENABLED=false` before the first start (this also locks the switch).
+A new install fetches its first key only once setup has asked about it: when the first
+library is added, or one hour after the first admin was created if no library is added.
+Turning the switch off in the setup wizard therefore means nothing is ever sent. Setting
+`LICENSE_SERVER_CONTACT_ENABLED=false` in the environment does the same and also locks the
+switch.
 
 **System → Instance** then shows "Not contacting lumastra.org: free tier." Turning the
 switch back on enrolls or renews within half a minute, and turns the weekly check-in back on.
