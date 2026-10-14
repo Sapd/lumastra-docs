@@ -56,7 +56,6 @@ any feature.
 | **MusicBrainz**| Music metadata enrichment                             | (built-in)          |
 | **AcoustID**   | Identifies music without MusicBrainz tags by its sound (free key) | `ACOUSTID_API_KEY` |
 | **MDBList**    | Trending and Popular shows rows, aggregated ratings, rich keyword tags (**recommended**) | `MDBLIST_API_KEY`   |
-| **OMDb**       | OMDB/IMDB ratings and metadata                        | `OMDB_API_KEY`      |
 | **AniDB**      | Anime-specific metadata; an alternate to TMDB, selectable per library path | `ANIDB_CLIENT` + `ANIDB_CLIENT_VER` |
 | **Last.fm**    | Music popularity data                                 | `LASTFM_API_KEY`    |
 | **Discogs**    | Artist / album enrichment                             | `DISCOGS_TOKEN`     |

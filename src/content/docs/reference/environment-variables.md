@@ -305,7 +305,6 @@ the default relay is run by the Lumastra maintainer and is covered on that page.
 | ------------------------------------ | --------------------------------------- |
 | `TMDB_API_KEY`                    | Metadata, images, search             |
 | `MDBLIST_API_KEY`                 | Aggregated ratings + keyword tags    |
-| `OMDB_API_KEY`                    | OMDB / IMDB ratings                  |
 | `LASTFM_API_KEY`                  | Music popularity                     |
 | `DISCOGS_TOKEN`                   | Artist / album enrichment            |
 | `JELLYFINURL` / `JELLYFINAPIKEY`  | Jellyfin background **sync** (the `/j` compat API needs neither) |

@@ -126,7 +126,7 @@ have different defaults and payloads, listed below.
 | Service | Enabled by | When | What is sent |
 | --- | --- | --- | --- |
 | **TMDB** (`api.themoviedb.org`, `image.tmdb.org`) | `TMDB_API_KEY` | Library scans, enrichment tasks, people pages, artwork browsing, and **on demand** when a poster or still is first displayed (the image proxy fetches it from TMDB and caches it locally) | Search queries built from the parsed title and year of your files; TMDB ids for detail, season, episode, person and image lookups; person names for people search; the popular/trending feeds (no library data) |
-| **MDBList** (`api.mdblist.com`, `mdblist.com`) | `MDBLIST_API_KEY` | Ratings enrichment and list sync tasks; the curated lists behind the Trending and For You rails (every 12 hours, and when a rail is empty) | TMDB/IMDb ids of your titles; the ids of lists you subscribe to; the names of the public curated lists (no library data) |
+| **MDBList** (`api.mdblist.com`, `mdblist.com`) | `MDBLIST_API_KEY` | Ratings enrichment and list sync tasks; the curated lists behind the Trending and For You rails (every 12 hours, when a rail is empty, and right after the key is saved) | TMDB/IMDb ids of your titles; the ids of lists you subscribe to; the names of the public curated lists (no library data) |
 | **MusicBrainz** (`musicbrainz.org`) | Music enrichment enabled (no key; identifies itself with a Lumastra user agent) | Music scans and enrichment | Artist, album and track names parsed from your tags; MusicBrainz ids once matched |
 | **Cover Art Archive** (`coverartarchive.org`, redirects to `archive.org`) | With MusicBrainz, and in *Album enrichment* when TheAudioDB returns a release id (on by default, no key; off with `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true`) | Album artwork fetch | MusicBrainz release ids only |
 | **AcoustID** (`api.acoustid.org`) | `ACOUSTID_API_KEY` (MusicBrainz provider settings) and the `fpcalc` binary | The background fingerprint task, for music tracks that have no MusicBrainz recording ID in their tags (once per track; a track with no match isn't looked up again). Never during the scan itself. Also the admin provider health check below | A Chromaprint audio fingerprint of the first two minutes and the track duration, derived from the audio, not the audio itself. No file names, tags or user data |
@@ -140,7 +140,7 @@ have different defaults and payloads, listed below.
 | **Trakt** (`api.trakt.tv`) | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`, plus each user linking their own Trakt account | The bundled Trakt watch-sync plugin, in the direction the user chose | For a **linked** user: the movies and episodes they finished are added to their Trakt history as Trakt ids (marked watched "at release", no timestamps), and their Trakt history is read back. Only that user's own data, only after they link |
 
 The admin **provider health check** (Admin → Providers) additionally sends one
-test query with your key to TMDB, MDBList, OMDb, MusicBrainz, AcoustID, Trakt
+test query with your key to TMDB, MDBList, MusicBrainz, AcoustID, Trakt
 and the configured OpenAI endpoint when you run it.
 
 Provider artwork is fetched by your server and cached locally; the image URLs
