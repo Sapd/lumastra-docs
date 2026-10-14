@@ -121,6 +121,10 @@ yet. Add one read-only line under `volumes:` of the `lumastra` service, for exam
 `- /path/to/media:/data/media:ro` (on Windows: `- C:/Users/you/Videos:/data/media:ro`).
 In the setup wizard you then add `/data/media/...` as a library. See
 [Deploy with Docker → Volumes](/guides/deploy-docker/#volumes).
+
+Audiobooks don't need a mount: they come from an Audiobookshelf server. On the
+wizard's library step, open **Audiobooks from Audiobookshelf**, enter the server
+URL and an admin API key, and pick its libraries. See [Audiobooks](/guides/audiobooks/).
 :::
 
 ## 2. Generate secrets

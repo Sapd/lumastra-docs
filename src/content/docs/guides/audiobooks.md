@@ -12,7 +12,11 @@ Lumastra, so AudiobookShelf need not be reachable from listeners' browsers.
 
 ## Before you start
 
-Three things must be in place.
+Three things must be in place. On a new install, the setup wizard does all
+three: on the library step, open **Audiobooks from Audiobookshelf**, enter the
+server URL and API key, select **Test & connect**, then pick the libraries to add.
+The wizard tests the connection before it saves anything. Later, or to change
+the server, use the steps below.
 
 | Requirement                | Where                                   | Notes                                                              |
 | -------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
