@@ -116,9 +116,10 @@ command, including `down` and `logs`.
 :::
 
 :::note[Mount your media]
-The example compose file mounts no media folder, so the app can't see your files
-yet. Add one read-only line under `volumes:` of the `lumastra` service, for example
-`- /path/to/media:/data/media:ro` (on Windows: `- C:/Users/you/Videos:/data/media:ro`).
+The example compose file mounts no media folder yet, so the app can't see your files.
+Under `volumes:` of the `lumastra` service, uncomment the line
+`- /path/to/media:/data/media:ro` and point it at your media folder (on Windows:
+`- C:/Users/you/Videos:/data/media:ro`).
 In the setup wizard the folder then shows up under **Found these folders**. See
 [Deploy with Docker → Volumes](/guides/deploy-docker/#volumes).
 
