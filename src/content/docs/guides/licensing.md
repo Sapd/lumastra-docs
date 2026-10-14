@@ -201,11 +201,11 @@ only in the last 14 days before its key expires. See [What Lumastra sends where]
 
 Turn off **Contact lumastra.org for the licence** in **Admin → Settings → General →
 Licensing** (or in the setup wizard, or set `LICENSE_SERVER_CONTACT_ENABLED=false`).
-The install then never calls the licensing server: no enrolment, no renewal, no
+The install then never calls the licensing server: no enrollment, no renewal, no
 check-in, no push relay token.
 
 - Without a key it runs on the **free tier right away**, with no 30 day grace period,
-  so nothing drops away a month later. You lose: Jellyfin apps are limited to 2 streams
+  so no feature lapses after 30 days. You lose: Jellyfin apps are limited to 2 streams
   at a time, no AI assistant, no iPhone or Apple TV push notifications through the
   standard relay, and no branding removal.
 - A key that is already stored keeps working until it expires. It is not renewed, and
@@ -213,8 +213,12 @@ check-in, no push relay token.
 - You can still paste a key you got by hand at
   [lumastra.org/license](https://lumastra.org/license/); it is checked offline.
 
+The install fetches its first key within half a minute of its first start, before you
+reach the setup wizard. To avoid even that first call, set
+`LICENSE_SERVER_CONTACT_ENABLED=false` before the first start (this also locks the switch).
+
 **System → Instance** then shows "Not contacting lumastra.org: free tier." Turning the
-switch back on enrolls or renews right away.
+switch back on enrolls or renews within half a minute, and turns the weekly check-in back on.
 
 ## Trademarks & forks
 

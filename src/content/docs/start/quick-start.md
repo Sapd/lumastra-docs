@@ -273,8 +273,10 @@ The first start needs outbound internet. Each container that transcodes download
 FFmpeg from GitHub, and the app contacts `lumastra.org` for the licence. On a host behind
 a firewall, allow both, or see [What Lumastra sends where](/reference/data-flows/) for
 the full list and for running offline. If you don't want any contact with `lumastra.org`,
-turn off **Contact lumastra.org for the licence** in the setup wizard; the install then
-runs on the free tier ([what that means](/guides/licensing/#run-without-contacting-lumastraorg)).
+set `LICENSE_SERVER_CONTACT_ENABLED=false` before the first start; the install then runs on
+the free tier ([what that means](/guides/licensing/#run-without-contacting-lumastraorg)).
+The same switch is in the setup wizard, but by then the server has usually fetched its
+first key already.
 
 ## Next: put it behind HTTPS
 

@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | All of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). Only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
+| `lumastra.org` | 5 to 30 seconds after the first start, then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | To stop all of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). To stop only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -82,30 +82,22 @@ keys, and hands out the push-relay token.
 | **Avoid it** | Blocking it leaves the server on its current key until that expires, then on the free tier (never a lockout), and turns push off unless you run your own relay or use your own Apple key. See [iOS push notifications](/guides/push-notifications/). |
 
 Full detail is in the repository's
+[`LICENSING.md`](https://github.com/Sapd/lumastra/blob/main/LICENSING.md)
+§3b: its "nothing else leaves the machine" refers to the licensing loop only,
+not to the features on this page.
+
 #### Switch off all contact
 
 **Contact lumastra.org for the licence** (Admin → Settings → General → Licensing,
 the same switch in the setup wizard, or `LICENSE_SERVER_CONTACT_ENABLED=false`)
-stops every call to the licensing server: no enrolment, no renewal, no weekly
-check-in and no push relay token. It applies without a restart. What the install
-runs on then:
-
-- **No licence key**: the free tier from the start. There is no 30 day grace
-  period, so nothing changes later. Jellyfin apps are limited to 2 streams at a
-  time, there is no AI assistant, no iPhone or Apple TV push notifications
-  through the standard relay, and no branding removal.
-- **A licence key already stored**: it keeps working until it expires, but it is
-  not renewed, and there are no 14 extra days after it expires. Then the free
-  tier. Admin → System → Instance shows the end date.
-- You can still get a key by hand at [lumastra.org/license](https://lumastra.org/license/)
-  from any browser and paste it under Licensing. Keys are checked offline.
-
-Admin → System → Instance shows "Not contacting lumastra.org: free tier." while
-it is off. Turning it back on makes the first call right away.
-
-[`LICENSING.md`](https://github.com/Sapd/lumastra/blob/main/LICENSING.md)
-§3b: its "nothing else leaves the machine" refers to the licensing loop only,
-not to the features on this page.
+stops every call to the licensing server: no enrollment, no renewal, no weekly
+check-in and no push relay token. It applies without a restart. An install
+without a key then runs on the free tier from the start; a key that is already
+stored works until it expires and is not renewed. The first key is fetched within
+half a minute of the first start, before the setup wizard; set the variable before
+that start to avoid even this call. What the free tier lacks, and
+how to add a key by hand, is in
+[Licensing](/guides/licensing/#run-without-contacting-lumastraorg).
 
 ### `lumastra.org/.well-known/lumastra-signing-keys.json`: plugin signing keys
 
