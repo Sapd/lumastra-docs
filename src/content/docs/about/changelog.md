@@ -45,6 +45,8 @@ The full changelog is in the repository:
 - Albums no longer show another album's cover, GIF, TIFF and AVIF covers are converted
   instead of failing, and artist images are retried when a provider is down.
 - Provider images stay visible while the image host refuses requests.
+- In the iPhone, iPad and Apple TV apps, subtitles show again after resuming from Continue
+  Watching or after a long seek.
 
 ### 0.1.0 (2026-10-15)
 
