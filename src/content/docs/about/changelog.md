@@ -27,6 +27,16 @@ The full changelog is in the repository:
   activity, playlist membership, library access and upstream requests.
 - Episode files named "Show_Series_2_-_03" (as iPlayer downloads are) or "Show.OVA.01"
   are filed under the right season and episode.
+- Web playback in Safari on iPhone and iPad starts right away instead of loading the
+  first segment over and over.
+- Live TV imports providers with more than 10,000 channels, sorts channels into genres
+  with chips on /livetv, and lets Configure Lineup keep several countries.
+- The sonic sidecar analyses long tracks in chunks, so it needs far less memory (a
+  30-minute track about 0.9 GB instead of 8 GB). See
+  [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory).
+- Albums no longer show another album's cover, GIF, TIFF and AVIF covers are converted
+  instead of failing, and artist images are retried when a provider is down.
+- Provider images stay visible while the image host refuses requests.
 
 ### 0.1.0 (2026-10-15)
 
