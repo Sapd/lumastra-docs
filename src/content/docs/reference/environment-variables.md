@@ -194,6 +194,13 @@ runtime, not bundled by Lumastra (review the
 | `MODEL_ID`               | sidecar           | No                | `msclap-2023`              | Model identifier recorded with the embeddings                                                         |
 | `HF_HOME`                | sidecar           | No                | `/app/.cache/huggingface`  | HuggingFace cache for the downloaded CLAP weights. Mount a persistent volume here to download once    |
 | `SONIC_MODEL_FP`         | sidecar           | No                | —                          | Absolute in-container path to a local CLAP weights `.pth`. Set it (with a read-only mount) for air-gapped / offline installs; the sidecar then loads locally and never reaches HuggingFace |
+| `SONIC_MEMORY_LIMIT_MB`  | sidecar           | No                | container limit            | Memory the sidecar plans its jobs with. Normally leave unset; see [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory) |
+| `SONIC_MEMORY_RESERVE_MB` | sidecar          | No                | max(512, 10 % of limit)    | Headroom kept out of the job budget                                                                   |
+| `SONIC_MAX_CONCURRENT_JOBS` | sidecar        | No                | CPUs ÷ threads, max 2      | Heavy jobs at once; the memory gate may run fewer                                                     |
+| `SONIC_ADMISSION_QUEUE_TIMEOUT_SEC` | sidecar | No               | `120`                      | How long a request may wait for memory before the sidecar answers 429                                 |
+| `SONIC_TEXT_ENCODER`     | sidecar           | No                | `auto`                     | `warm`, `lazy` or `auto` (warm at 8 GiB or more). Only Sound Search uses it                            |
+| `SONIC_TEXT_ENCODER_IDLE_SEC` | sidecar      | No                | `900`                      | Idle seconds before an on-demand text encoder is unloaded                                             |
+| `MALLOC_ARENA_MAX`       | sidecar           | No                | `2` (image)                | glibc malloc arenas; fewer hold on to less freed memory                                               |
 
 ## Branding
 

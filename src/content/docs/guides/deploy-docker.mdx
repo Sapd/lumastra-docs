@@ -737,12 +737,51 @@ Then enable the features you want. They are all **off by default**.
 [Music discovery guide](/guides/music-discovery/) walks through each flag and the
 one-time backfill.
 
-:::caution[Size sonic memory for its thread count]
-Set `SONIC_EMBEDDER_THREADS` at or below the container's `cpus:` limit. Memory grows
-with threads: 4 threads with 6 GB and 8 threads with 16 GB have been tested.
-If unset, current images use half the allowed container CPUs; images before
-30 September 2026 used half the host cores and can exceed their memory limit.
+:::caution[Keep threads at or below the CPU limit]
+Set `SONIC_EMBEDDER_THREADS` at or below the container's `cpus:` limit. If unset,
+current images use half the allowed container CPUs; images before 30 September 2026
+used half the host cores and can exceed their memory limit.
 :::
+
+### Sonic sidecar memory
+
+The sidecar sizes itself from its container memory limit (`memory:` under
+`deploy.resources.limits`), so that limit is the one setting that matters. Each heavy
+job is admitted by a memory gate: a job that doesn't fit next to the running ones
+waits, and a file that wouldn't fit even alone is refused instead of crashing the
+sidecar. Embedding reads only a short window of each track, so long tracks cost about
+the same as short ones. Music analysis still decodes the whole track, so the memory
+limit sets the longest track it can analyse.
+
+| Box                 | Sidecar memory           | What to expect                                                                                     |
+| ------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Small NAS / mini PC | `3g`                     | Text encoder loads on demand. Everything embeds; analysis runs one track at a time, up to ~7 minutes |
+| Home server         | `6g` (the example file)  | Analysis up to ~16 minutes next to other jobs, ~18 minutes alone                                    |
+| Large library       | `10g` or more            | Text encoder stays loaded; analysis up to the 30-minute default                                     |
+
+Measured with 4 threads. Longer tracks are refused, not crashed on.
+
+**What you see when it's too small.** A refused track shows in the **Failures** tab of
+the `music-analysis` (or `music-embedding-generation`) task with
+`Sonic sidecar memory too small` (code `exceeds_memory_budget`). Raise the sidecar's
+memory limit, recreate the container, then use **Retry all failed items**. When the
+sidecar is only busy, it answers with HTTP 429 and a `Retry-After`; Lumastra waits and
+sends the request again without marking the track as failed.
+
+The defaults fit most installs. To tune them, set these on the sidecar:
+
+| Variable                            | Default                                                    | What it does                                                    |
+| ----------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- |
+| `SONIC_MEMORY_LIMIT_MB`             | the container limit, else half the host RAM                | Memory the sidecar plans with. Normally leave unset             |
+| `SONIC_MEMORY_RESERVE_MB`           | 512 or 10 % of the limit, whichever is larger              | Headroom kept out of the job budget                             |
+| `SONIC_MAX_CONCURRENT_JOBS`         | CPUs ÷ threads, at most 2                                  | Heavy jobs at once (the memory gate may run fewer)              |
+| `SONIC_ADMISSION_QUEUE_TIMEOUT_SEC` | `120`                                                      | How long a request may wait for memory before a 429             |
+| `SONIC_TEXT_ENCODER`                | `auto` (loaded at 8 GiB or more, otherwise on demand)      | `warm`, `lazy` or `auto`. Only Sound Search uses the text encoder |
+| `SONIC_TEXT_ENCODER_IDLE_SEC`       | `900`                                                      | Idle time before an on-demand text encoder is unloaded again    |
+| `MALLOC_ARENA_MAX`                  | `2` (set in the image)                                     | glibc memory arenas; fewer arenas hold on to less freed memory  |
+
+`GET /health` on the sidecar reports the limit, the budget and the running jobs under
+`memory`.
 
 :::caution[Upgrading from an image before 27 September 2026]
 The image now runs as a non-root user (uid 1000); older images ran as root. If your
