@@ -278,6 +278,11 @@ TV app; the iPhone and iPad app can't join a session yet.
 iPhone, iPad and Apple TV apps, but seeing where other listeners are in the same book only
 works on the web for now.
 
+**Web playback in Safari on iPhone can start slowly.** On some installs, iOS requests the
+first video segment over and over before playback starts, which can take up to a minute.
+The Lumastra iPhone app and desktop browsers are not affected. We're investigating; until
+then, use the iPhone app.
+
 ## Integrations
 
 **Jellyfin is optional and only syncs in the background.** No Lumastra feature needs
