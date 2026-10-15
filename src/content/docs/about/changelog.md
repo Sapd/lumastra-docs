@@ -47,6 +47,10 @@ The full changelog is in the repository:
 - Provider images stay visible while the image host refuses requests.
 - In the iPhone, iPad and Apple TV apps, subtitles show again after resuming from Continue
   Watching or after a long seek.
+- Live TV's Configure Lineup can hide info and welcome screens, radio stations, local
+  stations and event slots, and its 24/7 switch also hides film loops and single titles.
+  Provider bouquets that mix many genres are split into those genres on import. See
+  [Configure Lineup](/guides/live-tv/#configure-lineup).
 
 ### 0.1.0 (2026-10-15)
 

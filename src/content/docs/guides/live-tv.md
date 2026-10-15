@@ -102,7 +102,9 @@ hundreds or thousands of near-duplicate entries by hand:
 - **Categories**: each channel gets a genre, read from the provider's section names in
   many languages: Live Events, Sports, News, Movies, Series, Kids, Documentary, Music,
   Entertainment, General, Regional, Radio, Shopping, 24/7, Religious or Adult. A section
-  that names no genre keeps the provider's bouquet name, without its country part.
+  that names no genre keeps the provider's bouquet name, without its country part. A
+  bouquet section whose stations span several genres is split into those genres (General
+  for a station without one), unless your Configure Lineup choices hide that bouquet.
 - **Country or region**: taken from the channel's `tvg-id`, a tag in its name (`US:`,
   `|BG|`, `[DE]`), the section header above it, or the script of the section name.
   Configure Lineup uses it to pick countries (below).
@@ -139,17 +141,36 @@ A large provider carries channels from many countries. After the import, choose
   selected, every country is kept.
 - **Channels without a country**: keep them too. Providers often leave the channels of
   their home market untagged.
-- **24/7 channels**: hide channels that loop one show or episode.
+- **24/7 channels**: hide channels that loop one show, film or episode. This also covers
+  film titles with a year and no guide (`Example Film (1998)`), a provider's large
+  families of film-loop channels (dozens of `Example Cinema <theme>` channels), and
+  single titles that sit next to loop channels in the playlist.
+- **Info and welcome screens** (on by default): hide the provider's announcement
+  channels, such as `Event Info`, `Welcome Channel` or a channel overview. A station whose
+  name merely ends in "Info" stays.
+- **Radio stations** (on by default): hide channels in the Radio category.
+- **Local stations** (on by default): hide many stations of one network, each with its
+  own call sign in brackets, like `Network (WXYZ) City`.
+- **Event slots** (off by default): hide numbered channels without a guide that only show
+  a picture during a match, such as `Example Event 1` to `Example Event 40`. They stay by
+  default because `/livetv` shows each family as one card. A slot with its own guide is
+  treated as a station and stays.
 - **Categories**: hide single categories.
 
 - **Quality preference**: with **Prefer highest quality** on, each backup group keeps only
   its primary feed visible and hides the other feeds.
 
+A switch only appears when the source has channels of that kind, with their count next to
+it.
+
 Channels that Configure Lineup leaves out are hidden, not deleted; you can show them again
 in Channel Management.
 
 The choices are saved with the source. A re-import applies them again, and a refresh hides
-new channels they exclude.
+new channels they exclude. A source set up before the info, radio, local-station and
+event-slot switches existed keeps hiding none of those until you run Configure Lineup on
+it again; its 24/7 choice covers the wider loop detection after the next re-import or
+refresh.
 
 ## What viewers see
 
