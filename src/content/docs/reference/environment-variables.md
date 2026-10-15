@@ -201,6 +201,7 @@ runtime, not bundled by Lumastra (review the
 | `SONIC_TEXT_ENCODER`     | sidecar           | No                | `auto`                     | `warm`, `lazy` or `auto` (warm at 8 GiB or more). Only Sound Search uses it                            |
 | `SONIC_TEXT_ENCODER_IDLE_SEC` | sidecar      | No                | `900`                      | Idle seconds before an on-demand text encoder is unloaded                                             |
 | `MALLOC_ARENA_MAX`       | sidecar           | No                | `2` (image)                | glibc malloc arenas; fewer hold on to less freed memory                                               |
+| `SONIC_ANALYZE_MAX_DURATION_SEC` | sidecar   | No                | `7200`                     | Longest file the sidecar analyses; longer ones are refused before decoding                            |
 
 ## Branding
 

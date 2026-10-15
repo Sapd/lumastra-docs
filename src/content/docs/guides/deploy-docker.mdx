@@ -750,16 +750,20 @@ The sidecar sizes itself from its container memory limit (`memory:` under
 job is admitted by a memory gate: a job that doesn't fit next to the running ones
 waits, and a file that wouldn't fit even alone is refused instead of crashing the
 sidecar. Embedding reads only a short window of each track, so long tracks cost about
-the same as short ones. Music analysis still decodes the whole track, so the memory
-limit sets the longest track it can analyse.
+the same as short ones. Music analysis reads the track in chunks: about 0.5 GB plus
+22 MB per minute of audio, so a 30-minute track needs about 0.9 GB on top of the
+loaded model and a 2-hour mix about 2.7 GB.
 
-| Box                 | Sidecar memory           | What to expect                                                                                     |
-| ------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| Small NAS / mini PC | `3g`                     | Text encoder loads on demand. Everything embeds; analysis runs one track at a time, up to ~7 minutes |
-| Home server         | `6g` (the example file)  | Analysis up to ~16 minutes next to other jobs, ~18 minutes alone                                    |
-| Large library       | `10g` or more            | Text encoder stays loaded; analysis up to the 30-minute default                                     |
+| Box                 | Sidecar memory          | What to expect                                                                                          |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| Small NAS / mini PC | `3g`                    | Text encoder loads on demand. Everything embeds; analysis covers the 30-minute default, up to ~1 hour |
+| Home server         | `6g` (the example file) | Every job; analysis up to the sidecar's 2-hour cap                                                     |
+| Large library       | `10g` or more           | Text encoder stays loaded; more room for two jobs at once                                              |
 
-Measured with 4 threads. Longer tracks are refused, not crashed on.
+Measured with 4 threads. Lumastra skips tracks longer than
+`MUSIC_ANALYSIS_MAX_DURATION_MINUTES` (30 by default, see
+[Organizing music](/guides/organizing-music/)); a track too big for the memory limit is
+refused, not crashed on.
 
 **What you see when it's too small.** A refused track shows in the **Failures** tab of
 the `music-analysis` (or `music-embedding-generation`) task with
@@ -778,6 +782,7 @@ The defaults fit most installs. To tune them, set these on the sidecar:
 | `SONIC_ADMISSION_QUEUE_TIMEOUT_SEC` | `120`                                                      | How long a request may wait for memory before a 429             |
 | `SONIC_TEXT_ENCODER`                | `auto` (loaded at 8 GiB or more, otherwise on demand)      | `warm`, `lazy` or `auto`. Only Sound Search uses the text encoder |
 | `SONIC_TEXT_ENCODER_IDLE_SEC`       | `900`                                                      | Idle time before an on-demand text encoder is unloaded again    |
+| `SONIC_ANALYZE_MAX_DURATION_SEC`    | `7200`                                                     | Longest file the sidecar analyses; longer ones are refused      |
 | `MALLOC_ARENA_MAX`                  | `2` (set in the image)                                     | glibc memory arenas; fewer arenas hold on to less freed memory  |
 
 `GET /health` on the sidecar reports the limit, the budget and the running jobs under

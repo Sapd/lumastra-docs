@@ -877,9 +877,9 @@ libraries:
 
 The sidecar needs the same media paths as the app, so use `music: true` on the library.
 See the [Docker page](/guides/deploy-docker/#sonic-embedder-sidecar) for the feature
-flags. The sidecar sizes itself from its `limits.memory` (6 Gi by default), and that
-limit sets the longest track music analysis accepts: about 7 minutes at 3 Gi, 16–18
-minutes at 6 Gi, and the 30-minute default at 10 Gi or more. See
+flags. The sidecar sizes itself from its `limits.memory` (6 Gi by default). 3 Gi is
+enough for the 30-minute analysis default; 6 Gi takes tracks up to the sidecar's
+2-hour cap, and 10 Gi or more keeps the text encoder loaded. See
 [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory) for the sizing
 table, the tuning variables and what a `Sonic sidecar memory too small` failure means.
 
