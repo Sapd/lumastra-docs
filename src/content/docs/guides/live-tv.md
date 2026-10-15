@@ -1,6 +1,6 @@
 ---
 title: Setting up Live TV
-description: Add M3U, Xtream Codes, or HDHomeRun sources, import channels with automatic quality-variant grouping and EPG, and manage them from the admin UI.
+description: Add M3U, Xtream Codes, or HDHomeRun sources, import channels with automatic backup groups, genres and EPG, choose the countries to keep, and manage channels from the admin UI.
 sidebar:
   order: 3.5
 ---
@@ -86,22 +86,82 @@ private/LAN address (a local IPTV box, or an HDHomeRun on `192.168.x` / `10.x`),
 ## What the import does
 
 While importing, Lumastra auto-processes the channel list so you don't have to clean up
-hundreds of near-duplicate entries by hand:
+hundreds or thousands of near-duplicate entries by hand:
 
-- **Quality-variant grouping**: variants of the same channel (e.g. `MDR Sachsen FHD` and
-  `MDR Sachsen HD`) collapse into a single entry. The highest-quality stream becomes the
-  primary; the others become automatic [backup/failover](/architecture/live-tv/#backup-channels-failover)
-  streams, so a dropped stream silently switches to the next.
+- **Section headers**: many large playlists put decorated header rows between their
+  channels, such as `✦●✦ DE • News ✦●✦`. These rows are not imported as channels. They
+  give the channels below them their group, and often their country.
+- **Backup groups**: the feeds of one station (for example `Example One HD`,
+  `Example One FHD`, `Example One HD+`, `Example One HDraw`, `Example One Cable`,
+  `Example One (Transcoded)` and `Example One (Mobile)`) form one backup group. The best
+  clean feed becomes the primary; the others become automatic
+  [backup/failover](/architecture/live-tv/#backup-channels-failover) streams, so a dropped
+  stream switches to the next. A transcoded or mobile feed is never the primary while a
+  normal feed exists.
 - **Quality tiers**: SD / HD / FHD / UHD are detected from channel names.
-- **Categories**: channels are grouped by their playlist `group-title`.
+- **Categories**: each channel gets a genre, read from the provider's section names in
+  many languages: Live Events, Sports, News, Movies, Series, Kids, Documentary, Music,
+  Entertainment, General, Regional, Radio, Shopping, 24/7, Religious or Adult. A section
+  that names no genre keeps the provider's bouquet name, without its country part.
+- **Country or region**: taken from the channel's `tvg-id`, a tag in its name (`US:`,
+  `|BG|`, `[DE]`), the section header above it, or the script of the section name.
+  Configure Lineup uses it to pick countries (below).
 - **EPG matching**: if you supplied an XMLTV URL, programs are matched to each channel for
-  the guide.
+  the guide. When a guide lists the same station once per country, a channel gets the
+  entry of its own country. All feeds of a backup group share the guide and the logo
+  that one of them has.
 - **Parallel-schedule collapsing**: many aggregator XMLTV feeds reuse one `tvg-id` across
   several channel variants and concatenate each variant's schedule under it, so a single
   channel arrives carrying two or more complete schedules offset by seconds to hours.
   Lumastra keeps the richest one, gap-fills from the rest, and preserves genuine repeats.
   The import summary reports how many duplicate entries were dropped and on how many
   channels; a large count is normal for such feeds and needs no action.
+
+Providers with more than 10,000 channels import too. The source shows the progress of the
+channel import, and then of the guide import, which starts when the channels are in.
+
+:::tip[Playlists without channel IDs]
+A playlist link that ends in a bare `type=` parameter usually carries no channel IDs,
+groups or logos, so the guide can only be matched by name. The Sources tab shows a hint
+for such a playlist. If the provider uses Xtream (a `get.php` link), change the end of
+the M3U URL to `type=m3u_plus`, or add the provider as an Xtream Codes source instead.
+:::
+
+## Configure Lineup
+
+A large provider carries channels from many countries. After the import, choose
+**Configure Lineup** on the source to decide which channels viewers see:
+
+- **Countries**: keep channels from any number of countries or regions. The list shows
+  every country the provider tags, with channel counts, plus regional groups (for example
+  Arabic) and the religious and adult groups. Countries that match your browser languages
+  are pre-selected. Religious and adult channels are never pre-selected. With no country
+  selected, every country is kept.
+- **Channels without a country**: keep them too. Providers often leave the channels of
+  their home market untagged.
+- **24/7 channels**: hide channels that loop one show or episode.
+- **Categories**: hide single categories.
+
+- **Quality preference**: with **Prefer highest quality** on, each backup group keeps only
+  its primary feed visible and hides the other feeds.
+
+Channels that Configure Lineup leaves out are hidden, not deleted; you can show them again
+in Channel Management.
+
+The choices are saved with the source. A re-import applies them again, and a refresh hides
+new channels they exclude.
+
+## What viewers see
+
+Viewers see each backup group as one channel. That channel plays the group's primary feed
+when it is visible. If the primary is hidden, viewers get the best visible feed of the
+group instead: a normal feed before a transcoded or mobile one, then the higher quality. A
+group disappears only when none of its feeds is visible.
+
+On `/livetv`, a row of category chips filters the channel grid and the guide to one genre;
+the last choice is remembered. A family of numbered channels (for example "Live Event 1"
+to "Live Event 10") is one card that opens a dialog with those channels and a guide of
+just them.
 
 ## Sending Live TV through an outbound proxy
 
@@ -135,10 +195,39 @@ container that provides your outbound route, instead of using
 
 ## Manage channels
 
-Once imported, manage everything from **`/admin/settings/livetv`** (Channels tab): channel
-visibility, display names, quality tier, categories, ordering, and EPG-match review. See
+Once imported, manage everything from **`/admin/settings/livetv`**. See
 [Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio) for the full
 reference.
+
+The **Channels** tab (Channel Management) holds channel visibility, display names, quality
+tier, categories, ordering, and EPG-match review. It is built for lineups with thousands of
+channels:
+
+- **Show hidden** is off by default, so the list shows what viewers get. Turn it on to see
+  and restore hidden channels; the setting is remembered in your browser. While hidden
+  channels are out of view, moving a channel takes its hidden feeds along.
+- A **category rail** beside the list jumps to a category and highlights the one you are
+  scrolling through. On phones it is a **Jump to category…** list.
+- The header of an open category stays at the top while you scroll its channels. Long
+  categories show their first 100 channels and a button for more.
+- **Move to category…** (in the context menu and for a selection) opens a picker you can
+  type into, and adds the channels at the end or at the top of that category.
+
+**Backup Groups**, next to the channel list on the Channels tab, lists the groups the
+import detected:
+
+- Search group and feed names, filter by category, country and on/off air, and sort by
+  name, number of feeds or category.
+- Each group shows how many of its feeds are visible ("2 of 4 on air") and tags the feed
+  viewers get as **On air**. Every feed has a button to show or hide it.
+- Problem badges point out groups to check: **Primary hidden**, **No primary**, **Mixed
+  countries** (probably two stations in one group; split it) and **Mixed categories**.
+  **Problems only** lists just those groups.
+- **Make primary** (the star on a feed) makes that feed the group's primary. A group whose
+  primary is hidden offers **Make the on-air feed primary**, and the toolbar does this for
+  all such groups at once. A refresh keeps the primary you chose.
+- **Add to group** moves an ungrouped channel into a group, through a picker you can type
+  into.
 
 ## Keeping channels fresh
 
@@ -147,9 +236,12 @@ the admin list. Two manual actions are also available on each source:
 
 - **Refresh**: an incremental update that absorbs provider-side changes (new/removed
   channels, changed URLs) while **preserving your admin customizations** (visibility,
-  renames, categories, grouping).
+  renames, categories, grouping, the primary of a group). New channels that your
+  Configure Lineup choices exclude are hidden.
 - **Re-import**: rebuilds the source's channel list from scratch. Use this if you want a
-  clean slate; it discards per-channel customizations for that source.
+  clean slate; it discards per-channel customizations for that source. Your Configure
+  Lineup choices are applied again. A re-import is also how existing channels pick up
+  improvements to the import, such as new grouping or category rules.
 
 ## When a source is unavailable
 

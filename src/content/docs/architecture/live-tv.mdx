@@ -31,9 +31,18 @@ an M3U playlist, Xtream Codes account, or HDHomeRun device. Each is imported int
 channels, along with EPG (program guide) data that is matched to each channel. During
 import, Lumastra **auto-processes** the channel list to:
 
-- group duplicate channels into **backup groups** (see below),
+- drop playlist section headers and use them as the group (and often the country) of
+  the channels below them,
+- group the feeds of one station (HD, FHD, HD+, raw, cable, transcoded, mobile) into
+  **backup groups** (see below),
 - detect **quality tiers** (SD / HD / FHD / …) within a group,
-- sub-group by country code so regional variants aren't mistaken for backups.
+- detect each channel's country or region, and sub-group by it so regional variants aren't
+  mistaken for backups,
+- sort channels into genre categories (Sports, News, Movies, Kids and so on).
+
+**Configure Lineup** then hides the channels outside the countries, categories and options
+an admin picks. The choices are stored with the source, so a re-import and a refresh apply
+them again. See [Setting up Live TV](/guides/live-tv/#configure-lineup).
 
 Channels, groups, and visibility are then managed in
 [Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio).
@@ -113,6 +122,10 @@ web and worker can keep using `LIVETV_UPSTREAM_PROXY_URL` as normal.
 Live TV streams can be unreliable, so a channel can belong to a **backup group**:
 a set of channels that are alternate sources for the same logical channel.
 
+Viewers see a backup group as one channel: its primary feed when that is visible, else its
+best visible feed (a normal feed before a transcoded or mobile one, then the higher
+quality).
+
 When a viewer starts a channel, the app builds an **ordered list of stream URLs**:
 the channel's primary URL followed by the other URLs in its backup group. The proxy
 plays the first that works and **fails over to the next** if a stream drops or won't
@@ -120,8 +133,9 @@ start. With `preferHighQuality`, higher-quality tiers in the group are tried fir
 
 Backup groups are **detected automatically** during import (by normalizing channel
 names, separating regional variants by country, and ranking quality tiers), and can
-be curated by an operator: create a group from ungrouped channels, split a group, or
-remove members. If every source in the group fails, the client shows a stream-failure
+be curated by an operator under Backup Groups on the Channels tab: make another feed the
+primary, show or hide single feeds, create a group from ungrouped channels, split a group,
+or remove members. A refresh keeps the primary an operator chose. If every source in the group fails, the client shows a stream-failure
 overlay.
 
 ## Stream limits & contention

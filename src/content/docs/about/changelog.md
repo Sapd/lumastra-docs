@@ -29,8 +29,16 @@ The full changelog is in the repository:
   are filed under the right season and episode.
 - Web playback in Safari on iPhone and iPad starts right away instead of loading the
   first segment over and over.
-- Live TV imports providers with more than 10,000 channels, sorts channels into genres
-  with chips on /livetv, and lets Configure Lineup keep several countries.
+- Live TV imports providers with more than 10,000 channels. Playlist section headers are
+  no longer imported as channels, and all quality feeds of a station (including HD+, raw,
+  cable, transcoded and mobile ones) form one backup group. Channels are sorted into
+  genres, with category chips on /livetv, and numbered channel families open in a dialog
+  with their own guide. Configure Lineup keeps any number of countries, can hide 24/7 loop
+  channels and single categories, and remembers its choices for re-imports and refreshes.
+  Channel Management handles large lineups, and Backup Groups gets search,
+  filters, problem badges and **Make primary**. See
+  [Setting up Live TV](/guides/live-tv/#what-the-import-does). Re-import a source to apply
+  the new grouping to its existing channels.
 - The sonic sidecar analyses long tracks in chunks, so it needs far less memory (a
   30-minute track about 0.9 GB instead of 8 GB). See
   [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory).
