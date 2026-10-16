@@ -38,6 +38,14 @@ just turns the source off while leaving the feature flag on.)
 
 ## Adaptive quality
 
+With adaptive bitrate the server encodes a channel in several qualities at once (1080p up
+to 8 Mbps, 720p, 540p and 360p up to 1 Mbps), and the player switches between them to
+match each viewer's connection. Click the quality badge in the player to see the qualities
+and which one is playing.
+
+It needs a GPU for hardware encoding and is tested with an Intel Arc A380; see
+[GPU transcoding](/guides/gpu-transcoding/).
+
 The synchronized quality ladder is off by default: enable
 `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings → Live TV** to offer multiple
 qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by default).
