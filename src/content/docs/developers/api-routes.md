@@ -112,10 +112,10 @@ releases.
 | `GET` | `/playback/{id}/file` | user | Direct file download (accepts `api_key`) |
 | `GET` | `/playback/{id}/hls` | user | HLS master playlist |
 | `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (accepts `api_key`) |
-| `GET` | `/playback/{id}/chapters` | user | Chapter list |
+| `GET` | `/playback/{id}/timeline` | user | Chapters, skip segments and trickplay variants for the selected file (ms) |
 | `GET` | `/playback/{id}/probe-status` | user | Transcode probe status |
 | `GET` | `/playback/{id}/trickplay/{width}` | user | Trickplay sprite |
-| `GET` | `/playback/{id}/trickplay/{width}/manifest` | user | Trickplay manifest |
+| `GET` | `/playback/{id}/trickplay/{width}/manifest` | user | Trickplay manifest (JSON, sheet hrefs) |
 | `GET` | `/playback/{id}/subtitles/{id}` | user | Subtitle file by track id |
 | `GET` | `/playback/{id}/subtitles/{n}` | user | Subtitle file by index |
 | `POST` | `/playback/stream-tokens` | user | Mint a `stream_` playback token |
@@ -137,9 +137,8 @@ releases.
 | `GET` | `/watch-state/{id}` | user | `{ watched, positionMs, resumeAnchor, favorite, rating }` |
 | `PUT` | `/watch-state/{id}` | user | Set watched / favorite / rating (partial) |
 
-`positionMs` uses milliseconds. Playback chapters expose `runTimeTicks` and
-`startPositionTicks` in 100 ns ticks (10,000,000 = 1 s); their media segments
-use seconds. Follow the schema for each time field.
+`positionMs` uses milliseconds, and so does `/playback/{id}/timeline` (chapters, skip
+segments, trickplay). Follow the schema for each time field.
 
 ### Library management
 

@@ -238,10 +238,14 @@ dimensions; images are also in the master playlist as
 `#EXT-X-IMAGE-STREAM-INF` (Roku) and `#EXT-X-I-FRAME-STREAM-INF` (Apple TV), or
 fetched directly at `GET /api/v1/playback/{id}/trickplay/{width}`.
 
-`GET /api/v1/playback/{id}/chapters` returns `chapters[]` with
-`startPositionTicks` (10,000,000 ticks = 1 s). Its `mediaSegments[]` use
-`startTime`/`endTime` in **seconds** and types `Intro`, `Outro`, `Recap`,
-`Preview` or `Commercial`. Wire the segments to skip controls.
+`GET /api/v1/playback/{id}/timeline?fileId=` returns everything for one file in one call:
+`chapters[]` (with `startMs`, `endMs` and a ready `image.href`), `segments[]`
+(`intro`, `outro`, `recap`, `preview` or `commercial`, with `startMs`/`endMs`) and
+`trickplay.variants[]` (`width`, `manifestHref`). All times are integer **milliseconds**
+on the selected file's clock, and the response echoes the resolved `fileId`. Show the skip
+button while the position is inside a segment and seek to its `endMs`. The trickplay
+manifest is JSON (`tileColumns`, `tileRows`, `intervalMs`, `thumbnailCount`, `sheets[]` with
+ready `href`s); fetch the sheets as given.
 
 ## Next
 

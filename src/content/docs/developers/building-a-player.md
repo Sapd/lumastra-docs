@@ -90,7 +90,7 @@ one continuing to work.
 | Images | `images{}` hrefs follow `/api/v1/{entity}/{id}/images/{role}[/{index}]`; add `?width=600&format=webp` for sizing. |
 | Errors | Resource errors use `application/problem+json`; HLS startup has a JSON exception documented in [Streaming](/developers/building-a-player-streaming/). Switch on `code` for problem responses. |
 | Header-less bearer | Pass the token as `?api_key=<token>`, or for long content a stream-session `?stream_token=stream_…` (see [Streaming](/developers/building-a-player-streaming/)). |
-| Time units | Playback progress uses **milliseconds**. On `/api/v1/playback/{id}/chapters`, `runTimeTicks` and `chapters[].startPositionTicks` use **ticks** (10,000,000 = 1 s), while `mediaSegments[].startTime/endTime` use **seconds**. Follow each field’s schema. |
+| Time units | Playback progress and `/api/v1/playback/{id}/timeline` (chapters, skip segments, trickplay) use **milliseconds**. Follow each field’s schema. |
 
 ## Errors
 

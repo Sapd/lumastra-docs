@@ -562,7 +562,7 @@
         {
           "path": "src/content/docs/developers/building-a-player-streaming.mdx",
           "op": "contains",
-          "text": "`GET /api/v1/playback/{id}/chapters` returns `chapters[]` with `startPositionTicks` (10,000,000 ticks = 1 s). Its `mediaSegments[]` use `startTime`/`endTime` in **seconds** and types `Intro`, `Outro`, `Recap`, `Preview` or `Commercial`. Wire the segments to skip controls."
+          "text": "`GET /api/v1/playback/{id}/timeline?fileId=` returns everything for one file in one call: `chapters[]` (with `startMs`, `endMs` and a ready `image.href`), `segments[]` (`intro`, `outro`, `recap`, `preview` or `commercial`, with `startMs`/`endMs`) and `trickplay.variants[]` (`width`, `manifestHref`). All times are integer **milliseconds** on the selected file's clock, and the response echoes the resolved `fileId`."
         }
       ]
     },
@@ -582,12 +582,12 @@
         {
           "path": "src/content/docs/developers/building-a-player.md",
           "op": "contains",
-          "text": "Playback progress uses **milliseconds**. On `/api/v1/playback/{id}/chapters`, `runTimeTicks` and `chapters[].startPositionTicks` use **ticks** (10,000,000 = 1 s), while `mediaSegments[].startTime/endTime` use **seconds**. Follow each field\u2019s schema."
+          "text": "Playback progress and `/api/v1/playback/{id}/timeline` (chapters, skip segments, trickplay) use **milliseconds**. Follow each field’s schema."
         },
         {
           "path": "src/content/docs/developers/api-routes.md",
           "op": "contains",
-          "text": "`positionMs` uses milliseconds. Playback chapters expose `runTimeTicks` and `startPositionTicks` in 100 ns ticks (10,000,000 = 1 s); their media segments use seconds. Follow the schema for each time field."
+          "text": "`positionMs` uses milliseconds, and so does `/playback/{id}/timeline` (chapters, skip segments, trickplay). Follow the schema for each time field."
         }
       ]
     },
