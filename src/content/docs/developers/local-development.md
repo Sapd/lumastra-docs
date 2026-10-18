@@ -14,8 +14,9 @@ Docker with Compose, and Git.
 | --- | --- | --- |
 | **Node.js** | 22.0.0 | The codebase uses Svelte 5 / Vitest 5 APIs that require Node 22+. Use `.nvmrc` (pin: 24) or any Node ≥ 22. |
 | **npm** | 10.x | Bundled with Node 22+ |
-| **Docker + Compose** | Docker ≥ 24, Compose ≥ 2.20 | Runs PostgreSQL 18 + pgvector and Valkey locally |
+| **Docker + Compose** | Docker ≥ 24, Compose ≥ 2.20 | Runs PostgreSQL 18 + pgvector and two Valkeys locally |
 | **Git** | any recent | — |
+| **Rust** | Pinned in `native/rust-toolchain.toml` | Required by the default worker watcher build. The explicit TypeScript watcher fallback skips this native build. |
 
 Jellyfin is **not required** for development. The app starts in setup mode and
 most UI can be exercised without it.
@@ -31,7 +32,7 @@ most UI can be exercised without it.
    ```
 
 2. **Start the infrastructure.** The repo ships a `docker-compose.dev.yml` that
-   starts PostgreSQL 18 + pgvector and Valkey (the plain `docker-compose.yml`
+   starts PostgreSQL 18 + pgvector and two Valkeys (the plain `docker-compose.yml`
    name is reserved for an operator's own copy of the example, and is
    gitignored):
 
@@ -43,14 +44,16 @@ most UI can be exercised without it.
    ```
 
    The compose file exposes PostgreSQL on `127.0.0.1:5432` (database
-   `lumastra`, user `lumastra`) and Valkey on `127.0.0.1:6379`.
+   `lumastra`, user `lumastra`), persistent task/shared-coordination Valkey on
+   `127.0.0.1:6379`, and disposable cache Valkey on `127.0.0.1:6380`.
 
 3. **Set environment variables.** Copy `.env.example` to `.env`. The minimum
-   set to start a dev server:
+   set to start a dev server (replace password placeholders with actual values):
 
    ```bash
    DATABASE_URL=postgresql://lumastra:<POSTGRES_PASSWORD>@localhost:5432/lumastra
-   CACHE_URL=redis://:${CACHE_PASSWORD}@localhost:6379/0
+   CACHE_URL=redis://default:<CACHE_PASSWORD>@localhost:6380/0
+   TASK_CACHE_URL=redis://default:<CACHE_PASSWORD>@localhost:6379/0
    TMDB_API_KEY=<your_tmdb_key>          # required for metadata enrichment
 
    # --- Dev auth bypass ---
@@ -90,14 +93,24 @@ most UI can be exercised without it.
    connectivity, proxy posture). A misconfiguration causes a loud startup
    error, so check the output before starting the dev server.
 
-5. **Start the dev server.**
+5. **Start the web server and dedicated worker.**
 
    ```bash
    npm run dev
    ```
 
-   The server starts on `http://localhost:5173` (Vite default). Hot Module
-   Replacement is enabled for `.svelte`, `.ts`, and `.css` files.
+   The web server starts on `http://localhost:5173` (Vite default). Hot Module
+   Replacement is enabled for `.svelte`, `.ts`, and `.css` files. In a second
+   terminal, start exactly one worker:
+
+   ```bash
+   npm run dev:worker
+   ```
+
+   This builds and runs the lean TypeScript task host, existing tasks/plugins and
+   one Rust watcher child. For the explicit filtered TypeScript watcher fallback,
+   run `LUMASTRA_WATCHER_IMPLEMENTATION=chokidar npm run dev:worker`; that command
+   skips the Rust build. Web remains separate from task execution.
 
 ## Code quality
 

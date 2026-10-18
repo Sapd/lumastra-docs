@@ -34,23 +34,20 @@ Stale BullMQ state is always reconcilable from Postgres, never the reverse.
 
 ## Process model
 
-The same Docker image runs two roles, selected by `WORKER_MODE`:
+The same Docker image runs two separate roles, selected by its start script:
 
 | Role | `WORKER_MODE` | Runs |
 |------|---------------|------|
 | Web server | `disabled` | API routes, SSR, image proxy, admin UI |
-| Worker | `enabled` | BullMQ workers + orchestrator + scheduler |
+| Dedicated worker (`start-worker.sh`) | `enabled` | Lean TypeScript host: existing tasks/plugins, BullMQ workers, orchestrator, scheduler and one supervised Rust watcher child |
 
-Both roles boot the **orchestrator** and **registry**; only the worker boots the
-BullMQ `Worker` instances that actually execute tasks. The default `enabled` mode
-runs both roles in one container.
-`auto` enables workers in development and disables them in production.
-
-:::note[Separate worker recommended for production]
-For any serious library size, run a dedicated worker container
-(`WORKER_MODE=enabled`) so background jobs don't contend with web request
-concurrency. See [Deployment](/guides/deployment/).
-:::
+Web replicas register plugins/providers and retain per-process feature startup
+needed by HTTP handlers. Their compatible submission/admin facade starts no task
+consumers, mutating scheduler or file watcher. Run exactly one dedicated
+worker; combined web/task execution is unsupported. The worker keeps TypeScript
+task/plugin behavior and BullMQ. Task/shared coordination uses persistent
+`noeviction` Valkey; disposable cache uses a separate evictable Valkey. See
+[Deployment](/guides/deployment/).
 
 ## Core components
 

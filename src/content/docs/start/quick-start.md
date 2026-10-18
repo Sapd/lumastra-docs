@@ -60,17 +60,19 @@ Everything else works the same. See
 
 ## The stack
 
-The example compose file starts **three containers**:
+The example compose file starts **five containers**:
 
-| Container  | Role                                                    |
-| ---------- | -------------------------------------------------------- |
-| `lumastra-postgres` | PostgreSQL 18 + pgvector (catalog, users, vectors) |
-| `lumastra-valkey` | Valkey 9: cache, task queues, locks |
-| `lumastra` | The Lumastra app (SvelteKit on Node.js ≥ 22; the shipped image runs Node 24), port 3000. It also runs the background jobs (metadata, images, embeddings) |
+| Service | Role |
+| --- | --- |
+| `postgres` | PostgreSQL 18 + pgvector (catalog, users, vectors) |
+| `valkey` | Persistent noeviction BullMQ/task/shared coordination |
+| `valkey-cache` | Disposable evictable application cache |
+| `lumastra` | Web UI and API on port 3000; submits background work |
+| `worker` | Exactly one lean TypeScript task host, existing tasks/plugins and one supervised Rust watcher child in its container |
 
-For heavier multi-user load you can move the background jobs into a separate
-`worker` container. The example file has a commented-out "SCALE-UP" section for
-that; see [Deploy with Docker](/guides/deploy-docker/).
+Web and worker use the same application image (Node 24), share the `config` volume
+and connect to the same PostgreSQL and two Valkeys. For more web replicas or worker
+resource tuning, see [Deploy with Docker](/guides/deploy-docker/).
 
 :::tip[Install with an AI assistant]
 Prefer to let an AI assistant with shell access (Claude Code, Codex, Cursor and similar)

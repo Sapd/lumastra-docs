@@ -166,8 +166,7 @@ as already finished. For Force stop, see
 
 ## Preparing a dedicated worker for an upgrade
 
-A dedicated worker using the opt-in standalone runtime supports a reversible
-preparation step. It temporarily pauses new local task claims and scheduled
+The dedicated lean TypeScript worker supports a reversible preparation step. It temporarily pauses new local task claims and scheduled
 starts, then waits for the work it tracks to settle. Pending jobs keep their
 identities and delays; administrator pauses remain in force. The watcher stays
 alive during preparation.

@@ -20,48 +20,33 @@ commands. The example below is a trimmed version of the file.
 | Service    | Image                          | Role                                                               | Required |
 | ---------- | ------------------------------ | ------------------------------------------------------------------ | -------- |
 | `postgres` | `pgvector/pgvector:pg18`       | PostgreSQL 18 + pgvector: all application data and search vectors  | Yes      |
-| `valkey`   | `valkey/valkey:9-alpine`       | Valkey 9 for cache, BullMQ job queues, and leader locks             | Yes      |
-| `lumastra` | `ghcr.io/lumastra/lumastra:latest` | The app (UI and API). Can also run background jobs (see below)     | Yes      |
-| `worker`   | same image                     | Background jobs (scans, metadata, embeddings, image extraction)    | Optional |
+| `valkey`   | `valkey/valkey:9-alpine`       | Persistent noeviction BullMQ/task/shared coordination             | Yes      |
+| `valkey-cache` | `valkey/valkey:9-alpine`   | Disposable evictable application cache                            | Yes      |
+| `lumastra` | `ghcr.io/lumastra/lumastra:latest` | Web app (UI and API), plus durable task submission     | Yes      |
+| `worker`   | same image                     | Lean TS tasks/plugins and Rust watcher child                      | Yes |
 | `proxy`    | same image                     | Live TV stream proxy, only with `LIVETV_SOURCE=standalone`         | Optional |
 
 Image tags: **`ghcr.io/lumastra/lumastra:stable`** and **`:latest`** (the latest release, amd64 +
 arm64), version tags such as **`:0.1.0`**, and **`:edge`** (every commit to `main`, amd64
 only, for testing, not production).
 
-### One container or two? The worker split
+### Separate web and task roles
 
-The same image runs the web app and the background worker; `WORKER_MODE` decides
-which:
+The same image runs separate web and worker services. `start.sh` serves HTTP/API
+requests with `WORKER_MODE=disabled`; `start-worker.sh` runs the dedicated lean
+TypeScript task host. Run exactly one worker. It preserves existing tasks/plugins
+and supervises one credential-free Rust file-watcher child in its container.
 
-- **Combined (simplest)**: one `lumastra` container with `WORKER_MODE=enabled` (the
-  default, and also settable to `auto`) runs the web app **and** the worker
-  in-process. Good for most home setups.
-- **Split (more headroom)**: set `WORKER_MODE=disabled` on the web container and add
-  a dedicated `worker` container (`./start-worker.sh`). This isolates heavy jobs
-  (embeddings, ffmpeg) from web latency and lets you give the worker its own
-  resources.
-
-:::note
-`start-worker.sh` forces `WORKER_MODE=enabled` and `DEDICATED_WORKER=true`, so a split
-worker always shows up correctly in **System → Health** → Cluster tab. The web and
-worker containers must **share the `config` volume** (the worker writes artwork the
-web tier serves).
-:::
-
-:::tip[Combined setup on a small host]
-When one container runs both web and jobs, a big initial library scan can add latency
-to web requests on a small host (≲ 4 cores). If you notice it, lower the heavy-job
-parallelism: drop the CPU task class, e.g. `LUMASTRA_CONCURRENCY_CPU=2`. Its default
-is already auto-sized to `floor(cores/2)` (clamped to 1–6), so on a small host it may
-already be at 1 or 2; lowering it further trades scan throughput for web latency. For
-very large libraries on capable hardware you can tune the other way. See
-[Performance tuning](/guides/performance-tuning/).
-:::
+The web and worker containers must **share the `config` volume**: the worker writes
+artwork the web tier serves. BullMQ and shared coordination use persistent
+`noeviction` Valkey; disposable cache uses a separate evictable Valkey. The worker
+uses the Rust watcher by default; set `LUMASTRA_WATCHER_IMPLEMENTATION=chokidar`
+on the worker for the filtered TypeScript fallback during diagnosis or rollback. See [Performance tuning](/guides/performance-tuning/)
+for task parallelism and resource limits.
 
 ## Minimal docker-compose.yml
 
-A single-host, combined (web + worker in one) setup. Put passwords and keys in a
+A single-host setup with separate web and worker services and two Valkeys. Put passwords and keys in a
 `.env` file (copy from `.env.example`).
 
 ```yaml
@@ -71,20 +56,23 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      WORKER_MODE: enabled # web + background jobs in one container (also: auto)
+      WORKER_MODE: disabled # web requests and durable task submission
       BASE_PATH: /config
       DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
-      CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+      CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-cache:6379/0"
+      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
       ORIGIN: "https://lumastra.example.com" # so the login cookie gets its Secure flag
     env_file: [.env]
     volumes:
-      - config:/config # admin settings + artwork (shared with a split worker)
+      - config:/config # admin settings + artwork (shared with the worker)
       - cache:/app/.cache # image cache
+      - plugins:/app/plugins # installed plugins, shared with the worker
     ports:
       - "127.0.0.1:3000:3000" # bind to loopback; front with a reverse proxy
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
+      valkey-cache: { condition: service_healthy }
     healthcheck:
       test:
         [
@@ -95,6 +83,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s # time for first-boot migrations
+
+  worker:
+    image: ghcr.io/lumastra/lumastra:latest
+    restart: unless-stopped
+    command: ["./start-worker.sh"]
+    cpu_shares: 512 # yield to web + Postgres under contention (idle = still uses everything)
+    # cpus: 8       # hard ceiling — set to ~half your host's cores (8 on a 16-core box)
+    environment:
+      NODE_ENV: production
+      BASE_PATH: /config
+      DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
+      CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-cache:6379/0"
+      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+    env_file: [.env]
+    volumes:
+      - config:/config # MUST be the same config volume as the web container
+      - plugins:/app/plugins # the worker loads the installed task plugins
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      valkey-cache: { condition: service_healthy }
 
   postgres:
     image: pgvector/pgvector:pg18
@@ -124,7 +133,7 @@ services:
     restart: unless-stopped
     command: >
       valkey-server --requirepass ${CACHE_PASSWORD}
-      --maxmemory-policy noeviction
+      --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
     volumes:
       - valkey_data:/data
     healthcheck:
@@ -141,48 +150,38 @@ services:
       timeout: 5s
       retries: 3
 
+  valkey-cache:
+    image: valkey/valkey:9-alpine
+    restart: unless-stopped
+    command: >
+      valkey-server --requirepass ${CACHE_PASSWORD}
+      --save "" --appendonly no
+      --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "valkey-cli", "--no-auth-warning", "-a", "${CACHE_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres_data:
   valkey_data:
   config:
   cache:
+  plugins:
 ```
 
 Compose prefixes these names with the project name (the folder name by default), so
 an install in a folder called `lumastra` gets `lumastra_config`, `lumastra_postgres_data`
 and so on, and a second install in another folder gets its own set. Don't pin them with
 `name:`: two stacks that share a Postgres volume corrupt the database as soon as both
-run. Installs created from the older example file (which pinned `lumastra_*` names) can
-keep their data by adding `name: lumastra_postgres_data` etc. back to each volume.
+run.
 
-### Adding a dedicated worker
+### Worker resources
 
-To split the worker out: set `WORKER_MODE: disabled` on the `lumastra` service and add:
-
-```yaml
-worker:
-  image: ghcr.io/lumastra/lumastra:latest
-  restart: unless-stopped
-  command: ["./start-worker.sh"]
-  cpu_shares: 512 # yield to web + Postgres under contention (idle = still uses everything)
-  # cpus: 8       # hard ceiling — set to ~half your host's cores (8 on a 16-core box)
-  environment:
-    NODE_ENV: production
-    BASE_PATH: /config
-    DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
-    CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
-  env_file: [.env]
-  volumes:
-    - config:/config # MUST be the same config volume as the web container
-  depends_on:
-    postgres: { condition: service_healthy }
-    valkey: { condition: service_healthy }
-```
-
-`cpu_shares` is safe to leave on (relative weight, only bites under contention);
-`cpus` is a hard ceiling, so pick a number for **your** host. See
-[Capping total CPU](/guides/performance-tuning/#capping-total-cpu-concurrency-limits-jobs-not-threads)
-in the performance guide for the full rationale.
+The required worker service above uses `cpu_shares` as a relative scheduling weight
+under contention. A `cpus` limit is a hard ceiling; size it for your host. See
+[Capping total CPU](/guides/performance-tuning/#capping-total-cpu-concurrency-limits-jobs-not-threads).
 
 ## Required environment
 
@@ -215,55 +214,23 @@ in `.env` by its variable name, which then locks the field in the UI. See the fu
 
 ## Production Valkey layout
 
-The minimal Compose file intentionally uses one Valkey instance, run with
-`noeviction` and no memory cap. Task keys (BullMQ locks, run state) carry an
-expiry time, so any eviction policy, `volatile-lru` included, could drop them under
-memory pressure and run a job twice. Cache entries expire on their own, so memory
-stays bounded without a cap. If you want a hard memory limit, or have sustained task
-traffic, use two instances instead:
+The Compose file uses two Valkeys with distinct policies:
 
-| Instance          | Environment variable | Policy                        | Holds                                                             |
-| ----------------- | -------------------- | ----------------------------- | ----------------------------------------------------------------- |
-| General cache     | `CACHE_URL`          | `allkeys-lru` + `--maxmemory` | Recommendations, metadata and other expiring cache data           |
-| Task coordination | `TASK_CACHE_URL`     | `noeviction`                  | BullMQ jobs, task-run state, identity keys, and distributed locks |
+| Instance | Environment variable | Policy | Holds |
+| --- | --- | --- | --- |
+| Disposable cache (`valkey-cache`) | `CACHE_URL` | bounded `allkeys-lru`, no persistence | Rebuildable cache data |
+| Task/shared coordination (`valkey`) | `TASK_CACHE_URL` | AOF synced every second, `noeviction` | BullMQ jobs, run state, identity keys, locks and shared session/playback coordination |
 
-Add a second `valkey-tasks` service with its own persistent volume, and set the same
-`TASK_CACHE_URL` on **both** the `lumastra` and `worker` services:
+Task Valkey uses AOF with `appendfsync everysec`; a crash can lose roughly the last second of writes. Keep its data volume and include it in backups.
 
-```yaml
-  lumastra:
-    environment:
-      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-tasks:6379/0"
+Set the same two URLs on web and worker. Keep task/shared-coordination persistence
+when recreating containers. Never publish either Valkey port to the Internet.
+`noeviction` ensures memory exhaustion rejects writes visibly instead of dropping
+a live queue lock or task record. Monitor memory and leave capacity headroom.
 
-  worker:
-    environment:
-      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-tasks:6379/0"
-
-  valkey-tasks:
-    image: valkey/valkey:9-alpine
-    restart: unless-stopped
-    command: >
-      valkey-server --requirepass ${CACHE_PASSWORD}
-      --maxmemory ${TASK_VALKEY_MAXMEMORY:-512mb} --maxmemory-policy noeviction
-    volumes:
-      - valkey_tasks_data:/data
-    networks: [default]
-
-volumes:
-  valkey_tasks_data:
-```
-
-Do not publish the task instance's port to the host or Internet. `512mb` is a
-starting point, not a capacity target: keep steady-state use below 70%, investigate
-at 80%, and increase memory before 95%. `noeviction` is intentional: if this instance
-fills, it must reject new writes visibly instead of evicting a live queue lock or
-task record.
-
-Cut over only after draining active work and restarting the web and worker together;
-moving `TASK_CACHE_URL` during a rolling deploy splits queue and lock state across
-instances. Keep the task volume when recreating containers. Do not use `FLUSHDB` to
-recover capacity; see [task troubleshooting](/guides/task-troubleshooting/) for the
-safe, targeted procedure.
+Keep the persistent task volume and both roles configured with the same task URL.
+Do not flush task/shared-coordination data to recover cache capacity; see
+[task troubleshooting](/guides/task-troubleshooting/).
 
 ## Volumes
 
@@ -274,8 +241,8 @@ safe, targeted procedure.
 | `config`        | `/config`             | Admin settings, extracted artwork, trickplay tiles | web **and** worker (shared) |
 | `cache`         | `/app/.cache`         | TMDB / Jellyfin image cache, avatars               | web                          |
 
-To index local files, mount your media (read-only) into the worker (or the combined
-container) and add it as a library in **Library → Sources & scanning**. See
+To index local files, mount your media (read-only) into the worker and web
+containers and add it as a library in **Library → Sources & scanning**. See
 [Organizing your media](/guides/organizing-media/):
 
 ```yaml

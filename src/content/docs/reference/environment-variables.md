@@ -21,8 +21,8 @@ deployment settings below are environment-only.
 | --------------------- | ------------------- | -------------------------- | ------------------------------------------------------ |
 | `DATABASE_PASSWORD` / `CACHE_PASSWORD` | Yes, with the example compose file | — (`.env.example` ships them empty) | Passwords for the bundled PostgreSQL and Valkey. The compose file builds `DATABASE_URL` / `CACHE_URL` from them and refuses to start while either is empty. Use hex (`openssl rand -hex 24`): they end up in connection strings. |
 | `DATABASE_URL`        | Yes                 | —                          | PostgreSQL connection string (needs pgvector)        |
-| `CACHE_URL`           | Yes                 | —                          | Valkey/Redis URL (cache + task queues)               |
-| `TASK_CACHE_URL`      | No                  | falls back to `CACHE_URL` | Separate Valkey for task/BullMQ state. Point at a `noeviction` instance to isolate it from cache eviction (multi-replica). |
+| `CACHE_URL`           | Yes                 | —                          | Disposable evictable cache Valkey URL. Set `TASK_CACHE_URL` separately for persistent task/shared coordination. |
+| `TASK_CACHE_URL`      | Yes, in the deployment examples | — | Persistent `noeviction` Valkey for BullMQ and shared coordination. Keep separate from the disposable evictable cache. |
 | `LUMASTRA_MASTER_KEY` | **Yes** for multi-replica | auto-generated at `<config>/master.key` | Encrypts stored secrets and client credentials; derives `JWT_SECRET` when that is unset. Keep stable and back it up. Replicas that share neither this variable nor the `/config` volume generate **different** keys. See [Configuration → Secrets at rest](/guides/configuration/#secrets-at-rest). |
 | `JWT_SECRET`          | No                  | derived from the master key | Signs access tokens for the apps and the public API (≥ 32 chars). Usually left unset. |
 | `NODE_ENV`            | Recommended         | —                          | Set `production` for deployments                     |
@@ -32,7 +32,7 @@ deployment settings below are environment-only.
 | `BODY_SIZE_LIMIT`     | No                  | `50M` (image)              | Largest request body the app accepts (Node's own default is 512K). Uploads fail with `413` if this, or your reverse proxy's limit, is lower than the upload. |
 | `SETUP_UNLOCK`        | No                  | —                          | Set to `1` and restart to reopen `/setup` on a server with no administrator left. Applies only while no admin exists; remove it afterwards (the Security Self-Check warns while it is set). |
 | `PUBLIC_BASE_URL`     | No                  | —                          | Public origin used for absolute links the server builds without a request: the Trakt sign-in redirect, poster links in notification webhooks, and the Security Self-Check's edge probes. |
-| `WORKER_MODE`         | No                  | `enabled`                  | `enabled` / `disabled` / `auto`. Multiple `enabled` replicas are supported: per-class leader locks elect leadership independently across them. Running **exactly one** is still the recommended deployment, since it's simpler to reason about. |
+| `WORKER_MODE`         | Set by start script | `disabled` for web | `start.sh` runs web only; `start-worker.sh` sets `enabled` and `DEDICATED_WORKER=true` for the dedicated lean TypeScript task host. Run exactly one worker. Combined execution is unsupported. |
 | `INSTANCE_ID`         | No                  | hostname + random suffix   | Node name for the cluster/admin UI. The random suffix means the default is **not** stable across restarts (it avoids a Valkey key collision when the same hostname restarts in a new container); set it explicitly if you need a name that persists. |
 | `UPDATE_CHECK_ENABLED` | No               | `true`                     | Once a day, read the Lumastra release list from `api.github.com` and tell admins about newer versions (red until installed for a security release). Usually set in Admin → Settings → General → Diagnostics instead; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#update-check). |
 | `LICENSE_CHECK_IN_ENABLED` | No           | `true`                     | About once a week, send the install ID, Lumastra version and licence status code to `lumastra.org` so the project can count installs (pseudonymised counts, no IP address). Off skips only this check-in; renewal and the push relay token are unaffected. Usually set in Admin → Settings → General → Licensing or during setup; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#lumastraorgapilicenserefresh-licence-renewal). |
@@ -100,7 +100,8 @@ Mostly relevant for **very large libraries** or busy servers. See
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `WORKER_MODE` | `enabled` | `enabled` runs task workers + can lead; `disabled` = enqueue-only web tier |
+| `WORKER_MODE` | `disabled` for web | Set by the role start script: web submits work; the dedicated worker runs tasks/plugins and supervises its Rust watcher child. |
+| `LUMASTRA_WATCHER_IMPLEMENTATION` | `rust` in the worker | Same-container watcher child. Set `chokidar` explicitly for the filtered TypeScript watcher fallback; use one implementation at a time. |
 | `LUMASTRA_ORCHESTRATOR_LEADER_TTL_MS` | `15000` | **Advanced (rarely tuned).** Per-class leader-lock TTL. Raise to `30000` on a single heavy worker to avoid leadership flapping under cold-start backlog. |
 | `LUMASTRA_ORCHESTRATOR_LEADER_RENEW_MS` | `5000` | **Advanced.** Leader-lock renew cadence (must be `<` TTL). |
 | `LUMASTRA_RUN_STATE_TTL_ACTIVE_MS` | `900000` | **Advanced.** Zombie self-heal window: a crashed run is reclaimed ~15 min after its last heartbeat. |

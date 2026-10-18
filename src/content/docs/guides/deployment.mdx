@@ -19,10 +19,12 @@ Images are published to GHCR:
 - `ghcr.io/lumastra/lumastra:0.1.0`: a specific release
 - `ghcr.io/lumastra/lumastra:edge`: every commit to `main`, amd64 only (testing)
 
-A full deployment runs four containers: **PostgreSQL 18 + pgvector**, **Valkey 9**, the
-**app**, and a **worker** for background jobs. An optional **stream proxy** handles
-Live TV. The app and worker can run in one container or be split; the database and
-cache always run separately and should stay on a private network.
+A deployment runs separate **web** and **worker** containers, **PostgreSQL 18 +
+pgvector**, and two **Valkey 9** instances: persistent `noeviction` task/shared
+coordination and disposable evictable cache. Exactly one lean TypeScript worker
+runs the existing tasks/plugins and supervises one Rust watcher child in the same
+container. An optional separate **stream proxy** handles Live TV. Keep storage
+services on a private network.
 
 ## Reverse proxy
 
@@ -38,12 +40,13 @@ covers compression, credential-safe logs, and upload limits for all deployment m
 
 For **two or more web replicas**, use the following topology:
 
-Run **N web replicas + exactly one worker**, sharing PostgreSQL and Valkey:
+Run **N web replicas + exactly one worker**, sharing PostgreSQL and both Valkeys:
 
 - **Web replicas** (`WORKER_MODE=disabled`) serve HTTP/API/SSE. Scale these freely.
-- **Worker replica** (`WORKER_MODE=enabled`) runs the task runner, scheduler, and
-  file-scanner watcher. Run **exactly one**: it's the single source of background job
-  orchestration, and only it needs the media library mounted. Running more than one
+- **Worker replica** (`start-worker.sh`) runs the lean TypeScript task host,
+  existing task/plugin execution, scheduler and supervised Rust watcher child. Run **exactly one**: it's the single source of background job
+  orchestration, and it scans the mounted media library. Web replicas also need media mounts
+  for direct play and transcoding. Running more than one
   worker is **not supported**. If background processing is your bottleneck, give the
   single worker more CPU/RAM and tune its
   [concurrency](/guides/performance-tuning/). Don't add worker replicas.

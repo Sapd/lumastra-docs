@@ -154,10 +154,13 @@ at runtime; for air-gapped hosts set `SONIC_MODEL_FP` to a local weights file. S
 
 ### Background workers
 
-Setting `WORKER_MODE=disabled` runs the app as an enqueue-only web tier with
-no worker at all. Background tasks (metadata sync, image sync, embeddings)
-never run. Only use it if you want a read-only browsing instance;
-otherwise leave it at the default `enabled` (or `auto`).
+Run the web role with `start.sh` (`WORKER_MODE=disabled`) and exactly one dedicated
+worker with `start-worker.sh`. The worker starts the lean TypeScript task host,
+existing tasks/plugins and one supervised Rust watcher child in its container.
+The web tier can submit work while the worker is temporarily unavailable; accepted
+jobs remain queued. Keep both roles for a functioning installation. There is no
+combined web/worker mode or task-runtime opt-in selector. BullMQ and the two Valkeys
+retain their existing task/shared-coordination and disposable-cache roles.
 
 On constrained hosts, `LUMASTRA_LOW_RAM_MODE=true` caps the Node.js heap and
 also makes BullMQ Queue connections share a single Valkey client instead of

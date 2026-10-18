@@ -653,9 +653,9 @@ To resume immediately, use **Resume now** on the task page (or
 
 ## Preparing a dedicated worker for an upgrade
 
-This procedure applies to a dedicated worker already running the opt-in
-`LUMASTRA_TASK_RUNTIME=standalone` implementation. Keep the tested old image for
-rollback. The default legacy worker does not expose this control socket.
+This procedure applies to the dedicated lean TypeScript worker. Keep the tested
+old image for rollback. Exactly one worker may execute tasks; preparation does
+not permit overlapping old and replacement workers.
 
 Before preparing, coordinate the worker's supervisor and deployment automation so
 that the old worker cannot automatically restart and no replacement starts early.
@@ -807,7 +807,8 @@ docker logs "$WORKER_CONTAINER" --since 10m 2>&1 | grep -iE '<keyword>'
 docker logs "$APP_CONTAINER" --since 10m 2>&1 | grep -iE '<keyword>'
 ```
 
-Both containers use the same image; `WORKER_MODE` controls their roles. For state
+Both containers use the same image; `start.sh` starts the web role and
+`start-worker.sh` starts the dedicated lean TypeScript worker. For state
 and recovery rules, see [Task system](/architecture/task-system/#reliability-mechanisms).
 
 ## Next

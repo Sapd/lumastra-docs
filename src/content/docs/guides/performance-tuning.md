@@ -241,7 +241,7 @@ Set once per deployment:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `WORKER_MODE` | `enabled` | `enabled` = this replica runs the task workers and can lead; `disabled` = enqueue-only web tier. The core multi-container topology knob (see [Docker](/guides/deploy-docker/) / [Kubernetes](/guides/deploy-kubernetes/)). |
+| `WORKER_MODE` | `disabled` for web | Start scripts set each role: `start.sh` serves web requests; `start-worker.sh` runs the dedicated lean task host with `enabled`. Run exactly one worker (see [Docker](/guides/deploy-docker/) / [Kubernetes](/guides/deploy-kubernetes/)). |
 | `INSTANCE_ID` | hostname + suffix | Stable, human-readable node name in the admin cluster view. Set one per replica. |
 
 ### Advanced: leader election & run-state internals

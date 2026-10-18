@@ -7,9 +7,9 @@
 		{ id: 'edge', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Ingress / Gateway', sub: 'TLS, no affinity needed', kind: 'default', hasTarget: true, hasSource: true } },
 		{ id: 'router', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Router (nginx)', sub: 'keeps a session on one pod', kind: 'default', hasTarget: true, hasSource: true } },
 		{ id: 'web', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'web-0 … web-N', sub: 'StatefulSet', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'worker', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Worker', sub: 'one pod', kind: 'proxy', hasSource: true } },
-		{ id: 'postgres', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'PostgreSQL 17+', sub: 'external or CloudNativePG', kind: 'infra', hasTarget: true } },
-		{ id: 'valkey', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Valkey', sub: 'tasks + cache', kind: 'infra', hasTarget: true } },
+		{ id: 'worker', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Worker', sub: 'one pod: lean TS + Rust watcher', kind: 'proxy', hasSource: true } },
+		{ id: 'postgres', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'PostgreSQL 18', sub: 'external or CloudNativePG', kind: 'infra', hasTarget: true } },
+		{ id: 'valkey', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Two Valkeys', sub: 'persistent tasks + evictable cache', kind: 'infra', hasTarget: true } },
 	];
 
 	const edges: Edge[] = [

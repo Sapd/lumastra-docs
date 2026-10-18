@@ -102,10 +102,11 @@ host"; on a host where the extractor works they are picked up again after a rest
 
 **The web tier scales out; the worker doesn't.** Run as many web replicas as you like
 (`WORKER_MODE=disabled` on each) plus one dedicated worker container
-(`WORKER_MODE=enabled`). The shipped `docker-compose.example.yml` runs all-in-one by
-default and has this split as a commented-out "SCALE-UP" section. Give the worker more resources rather than more copies: it holds the leader lock
+(`start-worker.sh`). The shipped `docker-compose.example.yml` starts separate web
+and worker services. The worker runs the lean TypeScript task host and one Rust
+watcher child in the same container. Give the worker more resources rather than more copies: it holds the leader lock
 for background tasks, and while a second worker wouldn't poll Jellyfin twice, running
-more than one worker isn't something we test or recommend.
+more than one worker is unsupported.
 
 **Several web replicas need requests for one playback session to reach the same
 replica.** HLS transcode state lives on the replica that started a session. On
@@ -119,16 +120,15 @@ worker writes artwork and trickplay images that the web pods serve, so `/config`
 ReadWriteMany volume (or one node). A shared transcode volume lets a pod take over a
 session and serve the segments already written.
 
-**Keep task data from being evicted.** The task system keeps its authoritative state
-(locks, run state, BullMQ jobs) in Valkey keys with an expiry time, on the same Valkey
-instance as the app cache by default. Any eviction policy can pick those keys,
-`volatile-lru` included, and a job in progress could then be picked up again and run
-twice. So a single Valkey runs with `--maxmemory-policy noeviction` and **no**
-`--maxmemory` cap, as the shipped compose file does: cache entries expire on their own.
-If you need a hard memory limit, run a second Valkey for the cache with `--maxmemory`
-and `allkeys-lru` (`CACHE_URL`), and keep the task keys on the `noeviction` one
-(`TASK_CACHE_URL`). The admin Health page warns when the instance holding task data
-uses an evicting policy.
+**Keep task data separate from the disposable cache.** The supported deployment
+runs two Valkeys. BullMQ jobs, locks, run state and shared session/playback
+coordination use persistent `noeviction` Valkey (`TASK_CACHE_URL`). Application
+cache uses a separate evictable Valkey (`CACHE_URL`) with a memory cap and
+`allkeys-lru`. Never put task keys on an evictable store: losing a live lock can
+allow duplicate execution. The shipped Compose task store uses AOF synced every
+second; a crash can lose roughly the last second of writes. Keep its data volume
+and include it in backups. The admin Health page warns when the instance holding
+task data uses an evicting policy.
 
 **While Valkey is unreachable, signed-in apps cost database reads.** On each request from
 a phone, TV app or other device-flow client, Lumastra checks whether that device was

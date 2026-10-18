@@ -31,16 +31,16 @@ role. The sonic sidecar has its own image, `ghcr.io/lumastra/lumastra-sonic-embe
 | Component                   | What it does                                                             | Default                                       |
 | --------------------------- | ------------------------------------------------------------------------ | --------------------------------------------- |
 | `web`                       | UI, API and HLS (`WORKER_MODE=disabled`). A StatefulSet: `web-0` to `web-N` | 2 replicas, one-at-a-time updates, PDB       |
-| `worker`                    | Task runner, scanner, enrichment                                         | 1 (or 0), Recreate                            |
-| `app` (`mode: allInOne`)    | Web and worker in one pod, for small installs                            | off                                           |
+| `worker`                    | Lean TypeScript tasks/plugins and supervised Rust watcher child                                         | 1, Recreate                            |
 | `router`                    | nginx. Keeps HLS sessions on one web pod. Optional forward-auth          | on, 2 replicas                                |
 | `proxy`                     | Live TV stream proxy                                                     | off                                           |
 | `sonic`                     | Sonic embedder sidecar (music similarity)                                | off                                           |
-| `valkey-cache`, `valkey-tasks` | Bundled Valkey, or one instance with `valkey.single`                  | on                                            |
+| `valkey-cache`, `valkey-tasks` | Separate cache and persistent task/shared-coordination Valkeys                  | on                                            |
 | CloudNativePG `Cluster`     | PostgreSQL, with `database.mode: cnpg` (recommended)                     | off (you bring a database)                    |
 
-`mode: split` (the default) runs `web` and `worker` separately. `mode: allInOne` runs
-one pod that does both and needs no router.
+`mode: split` runs web pods and exactly one dedicated lean TypeScript worker
+separately. The watcher is a child in the worker container. Combined mode is
+unsupported; use the same topology for small and large installations.
 
 Resource names start with the release name. This guide uses the release name
 `lumastra`, which gives names like `lumastra-web-0`, `lumastra-worker` and the entry
@@ -89,28 +89,28 @@ does need:
 **Storage.** The chart creates these volumes. Every one takes `storageClassName`,
 `accessModes`, `size` and `existingClaim`.
 
-| Value                                     | Mounted on                     | Access mode (split / `allInOne`)  | `ReadWriteOnce` works when                          | What it holds                                                                                          |
+| Value                                     | Mounted on                     | Access mode  | `ReadWriteOnce` works when                          | What it holds                                                                                          |
 | ----------------------------------------- | ------------------------------ | --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `persistence.config` (`/config`)          | web, worker                    | `ReadWriteMany` / `ReadWriteOnce` | `allInOne`, or every web and worker pod on one node | `settings.json`, artwork, trickplay, caches. Split mode always needs it.                               |
-| `persistence.transcode` (`/transcode`)    | web, worker                    | `ReadWriteMany` / `ReadWriteOnce` | `allInOne`, or every web and worker pod on one node | HLS output. One shared volume, so a pod that takes a session over serves the segments already written. `type: emptyDir` needs no volume: each pod then has its own, and FFmpeg restarts on takeover. |
-| `persistence.plugins` (`/app/plugins`)    | web, worker                    | `ReadWriteMany` / `ReadWriteOnce` | `allInOne`, or every web and worker pod on one node | Installed external plugins. With `enabled: false` each pod gets an empty directory, and installed plugins are lost on restart. |
-| `persistence.appCache` (`/app/.cache`)    | web, worker                    | `ReadWriteMany` / `ReadWriteOnce` | `allInOne`, or every web and worker pod on one node | Rebuildable caches: artwork, extracted subtitles, library backdrops. `enabled: auto` (the default, chart 0.1.0-beta.9+) turns it on in `allInOne` and leaves it off in split mode. Turn it on in split mode too when you can (see below). |
-| `persistence.ffmpegCache` (`/config/bin`) | web, worker, proxy (read-only) | `ReadWriteMany` / `ReadWriteOnce` | every pod that mounts it on one node                | Off by default. Needed when the Live TV proxy is on. Without it the FFmpeg download lives in `/config`. |
+| `persistence.config` (`/config`)          | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | `settings.json`, artwork, trickplay, caches. Both roles need it.                               |
+| `persistence.transcode` (`/transcode`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | HLS output. One shared volume, so a pod that takes a session over serves the segments already written. `type: emptyDir` needs no volume: each pod then has its own, and FFmpeg restarts on takeover. |
+| `persistence.plugins` (`/app/plugins`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | Installed external plugins. With `enabled: false` each pod gets an empty directory, and installed plugins are lost on restart. |
+| `persistence.appCache` (`/app/.cache`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | Rebuildable caches: artwork, extracted subtitles, library backdrops. `enabled: auto` leaves it off. Enable it when shared storage is available (see below). |
+| `persistence.ffmpegCache` (`/config/bin`) | web, worker, proxy (read-only) | `ReadWriteMany` | every pod that mounts it on one node                | Off by default. Needed when the Live TV proxy is on. Without it the FFmpeg download lives in `/config`. |
 | `valkey.tasks.persistence`                | the tasks Valkey               | `ReadWriteOnce`                   | always                                              | AOF data.                                                                                              |
 | `sonic.persistence`                       | the sonic sidecar              | `ReadWriteOnce`                   | always                                              | The downloaded model.                                                                                  |
 | `libraries[]`                             | web, worker (sonic for music)  | your volume                       | every pod that mounts it on one node                | Your media. `hostPath`, `existingClaim` or `nfs`. See below.                                           |
 
-With `accessModes: []` (the default) the chart asks for `ReadWriteMany` in split mode
-and `ReadWriteOnce` in `allInOne` mode. In split mode the web pods and the worker mount
+With `accessModes: []` (the default) the chart asks for `ReadWriteMany`. The web
+pods and worker mount
 config, transcode and plugins at the same time, usually on different nodes. Without
-`ReadWriteMany` storage, use `allInOne`, or pin every pod to one node and set
+`ReadWriteMany` storage, pin every pod to one node and set
 `accessModes: [ReadWriteOnce]` on shared volumes (including `ffmpegCache` when enabled).
 
 **Keep the app cache.** Set `persistence.appCache.enabled: true` in split mode whenever you
 have `ReadWriteMany` storage or run every web and worker pod on one node. Without it each
 pod caches into its own empty directory, which every restart clears: after each deploy
 artwork is fetched from the providers again, and the first viewer of a title waits while
-its subtitles are extracted again. `allInOne` installs get the volume by default.
+its subtitles are extracted again.
 
 The web pods need your media libraries too. Direct play and transcoding read the files
 there, so mount each library on web and worker. Libraries are read-only by default. If
@@ -193,7 +193,7 @@ See [Backup & recovery](/guides/backup-recovery/).
 Write a values file, `my-values.yaml`:
 
 ```yaml
-mode: allInOne
+mode: split
 
 app:
   origin: https://lumastra.example.com
@@ -201,8 +201,11 @@ app:
 secrets:
   existingSecret: lumastra
 
-valkey:
-  single: true
+web:
+  replicas: 1
+
+worker:
+  replicas: 1
 
 libraries:
   - name: media
@@ -251,8 +254,7 @@ buffering and timeout annotations for you.
 With no OIDC and no forward-auth in the values, the chart turns built-in login on
 (`AUTH_NATIVE_LOGIN_ENABLED=true`), the same as the Compose quick start.
 
-The chart's `ci/` directory holds example values for every topology: `allinone`,
-`scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
+The chart's `ci/` directory holds example values for every topology: `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
 `full`, `icu`, `migration` and `stopped`.
 
 ## Configuration
@@ -263,7 +265,7 @@ and `README.md`. This section covers the choices you have to make.
 
 ### Mode and replicas
 
-For several web pods, run split mode:
+Scale the web replicas while keeping exactly one worker:
 
 ```yaml
 mode: split
@@ -295,7 +297,6 @@ The chart sets `INSTANCE_ID` to the pod name.
 | --------------------------------------------------- | ---------------- | ------------------------------------------ |
 | `web.replicas`                                      | 0 or more        | Stops web. The router answers `502`.       |
 | `worker.replicas`                                   | 0 or 1           | Stops background tasks.                    |
-| `allInOne.replicas`                                 | 0 or 1           | Stops the pod.                             |
 | `router.replicas`                                   | 0 or more        | No traffic reaches the web pods.           |
 | `proxy.replicas`, `sonic.replicas`                  | 0 or 1           | Stops it. `proxy` drops every live channel. |
 | `valkey.cache.replicas`, `valkey.tasks.replicas`    | 0 or 1           | Stops that Valkey.                         |
@@ -563,10 +564,10 @@ The chart runs Valkey for you in `valkey.mode: bundled`, as two instances:
   run state, locks and BullMQ jobs here. An evicting policy could drop them and run a
   job twice.
 
-`valkey.single: true` runs one `noeviction` instance for both roles, which is fine for
-small installs. `valkey.mode: external` reads `CACHE_URL` (and optionally
-`TASK_CACHE_URL`) from a Secret. If you leave out `TASK_CACHE_URL`, the tasks share the
-cache URL, and that instance must then be `noeviction`.
+Keep the two stores separate. `valkey.mode: external` requires `CACHE_URL` and
+`TASK_CACHE_URL` in the Secret, pointing to the evictable cache and persistent
+`noeviction` task/shared-coordination instances respectively. Single-store mode
+is unsupported.
 
 The bundled password comes from `valkey.auth` and is embedded into `redis://` URLs at
 runtime, so it must be URL-safe. Use hex.
@@ -620,7 +621,7 @@ from **Library → Sources & scanning**. To push exact changes from bucket event
 
 Two modes give pods access to the GPU. In both, `gpu.acceleration` sets
 `GPU_ACCELERATION` (`none`, `qsv`, `vaapi`, `nvenc` or `amf`), and `gpu.components`
-decides which pods get the GPU. The default is `[web, worker, allInOne]`. Add `proxy`
+decides which pods get the GPU. The default is `[web, worker]`. Add `proxy`
 if the Live TV proxy should use it.
 
 **Device plugin** (`gpu.mode: resource`). The chart adds your `gpu.resources` to the
@@ -675,7 +676,7 @@ worker:
   runtimeClassName: nvidia
 ```
 
-The value exists for `web`, `worker`, `allInOne` and `proxy`, and is unset by default.
+The value exists for `web`, `worker` and `proxy`, and is unset by default.
 Intel and AMD device plugins do not need it.
 
 **Host path** (`gpu.mode: hostPath`). Mounts `gpu.hostPath` (`/dev/dri` by default) and
@@ -739,7 +740,6 @@ Defaults for the other components:
 | --------- | --------------------- | ------------ |
 | web       | 250m CPU, 768 Mi      | 4 Gi memory  |
 | worker    | 500m CPU, 1 Gi        | 6 Gi memory  |
-| `allInOne` | 500m CPU, 1536 Mi    | 8 Gi memory  |
 | router    | 50m CPU, 64 Mi        | 256 Mi memory |
 | proxy     | 250m CPU, 256 Mi      | 2 Gi memory  |
 | sonic     | 1 CPU, 2 Gi           | 6 Gi memory  |
@@ -973,7 +973,7 @@ Everything else goes through a few generic values:
 
 - `features` sets `FEATURE_*` flags, `concurrency` sets pool and concurrency variables,
   `app.publicUrls` sets `PUBLIC_*` links shown in the UI, and `app.env` sets any other
-  non-secret variable for web, worker and `allInOne`. Later groups win, and `app.env`
+  non-secret variable for web and worker. Later groups win, and `app.env`
   wins over everything structured above it.
 - Each component takes `env` (a map), `extraEnv` (a list of `name`/`value` or
   `valueFrom` entries), `extraEnvFrom`, `extraVolumes` and `extraVolumeMounts`.
@@ -1139,7 +1139,7 @@ valkey:
       enabled: true
 ```
 
-In `allInOne` mode, set `allInOne.replicas: 0` instead. With CloudNativePG, add the
+With CloudNativePG, add the
 `initdb` locale from the [database section](#database) before the first sync, and check
 the source locale with the `SELECT` shown there.
 
@@ -1257,12 +1257,12 @@ Health** for the cluster view. Keep the old install stopped but intact for a whi
 | Endpoint                  | Where             | Meaning                                                              |
 | ------------------------- | ----------------- | -------------------------------------------------------------------- |
 | `/api/health`             | web, worker       | Liveness. Always `200`, no dependency checks. Used for startup and liveness probes. |
-| `/api/health/ready`       | web, `allInOne`   | Readiness. `200` or `503`. An admin caller sees a verdict per component. |
+| `/api/health/ready`       | web, worker | Readiness. `200` or `503`; the worker drops readiness during startup, upgrade preparation and shutdown. |
 | `/__router/healthz`       | router            | The router's own probes.                                             |
 | `/status`                 | proxy             | Reports `healthy` and `activeChannels`.                              |
 | `/health`                 | sonic             | Probes.                                                              |
 
-The worker has no readiness probe because it serves no traffic.
+Worker readiness reports task-host capability even though it serves no application traffic.
 **System → Health → Cluster** shows pod CPU/memory usage and requests.
 
 For Prometheus, enable `serviceMonitor.enabled`, put `LUMASTRA_METRICS_BEARER_TOKEN`
@@ -1326,7 +1326,7 @@ logs every `router.dnsValid`; these are expected.
 The worker is a singleton: give it more CPU/memory and tune
 [concurrency](/guides/performance-tuning/) rather than adding replicas.
 
-For maintenance, set web and worker (or `allInOne`) replicas to `0`. Do not restart
+For maintenance, set web and worker replicas to `0`. Do not restart
 them until a database restore is complete.
 
 ### Backups
