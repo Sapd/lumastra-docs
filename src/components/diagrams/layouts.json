@@ -2673,7 +2673,7 @@
   },
   "Live TV container connections": {
     "width": 734.8666666666667,
-    "height": 843,
+    "height": 846,
     "nodes": [
       {
         "id": "clients",
@@ -2759,15 +2759,16 @@
       {
         "id": "upstream",
         "width": 230,
-        "height": 71,
+        "height": 91,
         "$H": 1099,
         "x": 476.8666666666667,
         "y": 727,
         "title": [
-          "Upstream IPTV"
+          "Tuner / approved",
+          "provider"
         ],
         "sub": [
-          "live streams · failover"
+          "permitted feeds · failover"
         ],
         "kind": "ext"
       }
@@ -3059,20 +3060,21 @@
   },
   "Live TV processing and delivery": {
     "width": 601,
-    "height": 798,
+    "height": 818,
     "nodes": [
       {
         "id": "src",
         "width": 230,
-        "height": 71,
+        "height": 91,
         "$H": 1201,
         "x": 86.33333333333333,
         "y": 28,
         "title": [
-          "IPTV / M3U source"
+          "Your tuner / approved",
+          "feed"
         ],
         "sub": [
-          "channel list · LIVETV_SOURCE"
+          "HDHomeRun · M3U · Xtream"
         ],
         "kind": "source"
       },
@@ -3082,7 +3084,7 @@
         "height": 88,
         "$H": 1203,
         "x": 86.33333333333333,
-        "y": 134,
+        "y": 154,
         "title": [
           "Import & auto-process"
         ],
@@ -3098,7 +3100,7 @@
         "height": 105,
         "$H": 1205,
         "x": 86.33333333333333,
-        "y": 257,
+        "y": 277,
         "title": [
           "Lumastra app"
         ],
@@ -3115,7 +3117,7 @@
         "height": 105,
         "$H": 1207,
         "x": 86.33333333333333,
-        "y": 462,
+        "y": 482,
         "title": [
           "Stream Proxy"
         ],
@@ -3132,13 +3134,13 @@
         "height": 88,
         "$H": 1209,
         "x": 48,
-        "y": 682,
+        "y": 702,
         "title": [
-          "Live stream"
+          "Permitted live feed"
         ],
         "sub": [
-          "upstream URL · fails over to",
-          "backups"
+          "configured upstream ·",
+          "permitted backups"
         ],
         "kind": "ext"
       },
@@ -3148,13 +3150,13 @@
         "height": 88,
         "$H": 1211,
         "x": 343,
-        "y": 682,
+        "y": 702,
         "title": [
-          "Viewers"
+          "Permitted viewers"
         ],
         "sub": [
-          "HLS · many viewers, one",
-          "shared pull"
+          "HLS · shared upstream",
+          "connection"
         ],
         "kind": "viewer"
       }
@@ -3174,18 +3176,18 @@
             "id": "e-src-import_s0",
             "startPoint": {
               "x": 201.33333333333331,
-              "y": 99
+              "y": 119
             },
             "endPoint": {
               "x": 201.33333333333331,
-              "y": 134
+              "y": 154
             },
             "incomingShape": "src",
             "outgoingShape": "import"
           }
         ],
         "container": "root",
-        "path": "M 201.33333333333331 99 L 201.33333333333331 134"
+        "path": "M 201.33333333333331 119 L 201.33333333333331 154"
       },
       {
         "id": "e-import-app",
@@ -3201,18 +3203,18 @@
             "id": "e-import-app_s0",
             "startPoint": {
               "x": 201.33333333333331,
-              "y": 222
+              "y": 242
             },
             "endPoint": {
               "x": 201.33333333333331,
-              "y": 257
+              "y": 277
             },
             "incomingShape": "import",
             "outgoingShape": "app"
           }
         ],
         "container": "root",
-        "path": "M 201.33333333333331 222 L 201.33333333333331 257"
+        "path": "M 201.33333333333331 242 L 201.33333333333331 277"
       },
       {
         "id": "e-app-proxy",
@@ -3229,7 +3231,7 @@
             "width": 148.6,
             "height": 30,
             "x": 50.73333333333332,
-            "y": 397
+            "y": 417
           }
         ],
         "sections": [
@@ -3237,18 +3239,18 @@
             "id": "e-app-proxy_s0",
             "startPoint": {
               "x": 201.33333333333331,
-              "y": 362
+              "y": 382
             },
             "endPoint": {
               "x": 201.33333333333331,
-              "y": 462
+              "y": 482
             },
             "incomingShape": "app",
             "outgoingShape": "proxy"
           }
         ],
         "container": "root",
-        "path": "M 201.33333333333331 362 L 201.33333333333331 462"
+        "path": "M 201.33333333333331 382 L 201.33333333333331 482"
       },
       {
         "id": "e-proxy-up",
@@ -3265,7 +3267,7 @@
             "width": 133,
             "height": 30,
             "x": 28,
-            "y": 617
+            "y": 637
           }
         ],
         "sections": [
@@ -3273,18 +3275,18 @@
             "id": "e-proxy-up_s0",
             "startPoint": {
               "x": 163,
-              "y": 567
+              "y": 587
             },
             "endPoint": {
               "x": 163,
-              "y": 682
+              "y": 702
             },
             "incomingShape": "proxy",
             "outgoingShape": "upstream"
           }
         ],
         "container": "root",
-        "path": "M 163 567 L 163 682"
+        "path": "M 163 587 L 163 702"
       },
       {
         "id": "e-proxy-view",
@@ -3301,7 +3303,7 @@
             "width": 39.4,
             "height": 30,
             "x": 461,
-            "y": 617
+            "y": 637
           }
         ],
         "sections": [
@@ -3309,20 +3311,20 @@
             "id": "e-proxy-view_s0",
             "startPoint": {
               "x": 239.66666666666669,
-              "y": 567
+              "y": 587
             },
             "endPoint": {
               "x": 458,
-              "y": 682
+              "y": 702
             },
             "bendPoints": [
               {
                 "x": 239.66666666666669,
-                "y": 592
+                "y": 612
               },
               {
                 "x": 458,
-                "y": 592
+                "y": 612
               }
             ],
             "incomingShape": "proxy",
@@ -3330,7 +3332,7 @@
           }
         ],
         "container": "root",
-        "path": "M 239.66666666666669 567 L 239.66666666666669 592 L 458 592 L 458 682"
+        "path": "M 239.66666666666669 587 L 239.66666666666669 612 L 458 612 L 458 702"
       }
     ]
   },

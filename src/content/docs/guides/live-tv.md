@@ -1,18 +1,19 @@
 ---
 title: Setting up Live TV
-description: Add M3U, Xtream Codes, or HDHomeRun sources, import channels with automatic backup groups, genres and EPG, choose the countries to keep, and manage channels from the admin UI.
+description: Set up tuner broadcasts or provider-approved Live TV feeds, organize channels and program guides, and configure playback and source limits.
 sidebar:
   order: 3.5
 ---
 
-Lumastra's Live TV is **standalone**: you bring your own channel source (an M3U
-playlist, an Xtream Codes account, or an HDHomeRun tuner), and Lumastra imports the
-channels, matches a program guide, groups quality variants of the same channel, and
-streams everything through a dedicated [stream proxy](/architecture/live-tv/). There is
-no separate IPTV middleware to run.
+Lumastra's Live TV brings broadcasts from your own tuner and provider-approved feeds
+into the same interface as your media library. Use broadcasts you are entitled to receive
+and feeds whose broadcaster or provider permits playback in third-party players. A paid
+subscription alone does not establish that permission.
 
-Only add sources you're licensed to receive: your own tuner, free-to-air broadcasts, or a
-provider you have a proper subscription with.
+Sources connect through HDHomeRun, M3U playlists or Xtream Codes. Lumastra imports their
+channels, matches a program guide, groups alternate feeds of the same station, and streams
+through a dedicated [stream proxy](/architecture/live-tv/). It supplies no channels or TV
+subscriptions, and needs no separate IPTV middleware.
 
 Here's how to turn Live TV on and add your first source. The proxy, multiplexing and
 failover are covered in [Live TV architecture](/architecture/live-tv/); day-to-day channel
@@ -55,32 +56,32 @@ the original stream; choose `refuse` to fail playback instead.
 ## Add a source
 
 Open **`/admin/settings/livetv`** (Sources tab) and choose **Add Source**, then pick a
-source type and fill in its fields:
+source type supported by your tuner or provider and fill in its fields:
 
 #### M3U playlist
 
 | Field | Required | Notes |
 | --- | --- | --- |
 | Name | ✓ | Label shown in the admin list. |
-| M3U URL | ✓ | The playlist URL (`http`/`https`). |
-| XMLTV URL | — | Program-guide (EPG) URL. Optional but recommended. |
-| Max streams | — | Concurrent-stream cap for this source (default 1). |
+| M3U URL | ✓ | A playlist supplied or approved by your broadcaster/provider, or exported by your own tuner (`http`/`https`). |
+| XMLTV URL | — | An XMLTV program guide you have permission to use. Optional but recommended. |
+| Max streams | — | Set the concurrent-channel cap within your source’s permitted limits (default 1). |
 
 #### Xtream Codes
 
 | Field | Required | Notes |
 | --- | --- | --- |
 | Name | ✓ | |
-| Server URL | ✓ | The Xtream server base URL. |
-| Username / Password | ✓ | Use **Test credentials** to verify before saving. |
-| Max streams | — | |
+| Server URL | ✓ | The base URL supplied by a provider that permits this connection. |
+| Username / Password | ✓ | Your provider-issued credentials. **Test credentials** checks the connection, not the rights to a service. |
+| Max streams | — | Use the cap permitted by your provider. |
 
 #### HDHomeRun
 
 | Field | Required | Notes |
 | --- | --- | --- |
 | Name | ✓ | |
-| Device IP | ✓ | e.g. `192.168.1.50`. |
+| Device IP | ✓ | Your own tuner’s LAN address, e.g. `192.168.1.50`, for broadcasts you are entitled to receive. |
 | Max streams | — | Auto-filled from the device's tuner count. |
 
 Saving starts the channel import immediately.
@@ -93,16 +94,15 @@ private/LAN address (a local IPTV box, or an HDHomeRun on `192.168.x` / `10.x`),
 
 ## What the import does
 
-While importing, Lumastra auto-processes the channel list so you don't have to clean up
-hundreds or thousands of near-duplicate entries by hand:
+The import organizes the channels supplied by your configured tuner or approved feed.
+It cleans up metadata and alternate quality entries without adding access to other
+channels:
 
-- **Section headers**: many large playlists put decorated header rows between their
-  channels, such as `✦●✦ DE • News ✦●✦`. These rows are not imported as channels. They
-  give the channels below them their group, and often their country.
+- **Section headers**: playlist headings such as `DE • News` are metadata, not channels.
+  They give the channels below them their group, and often their country.
 - **Backup groups**: the feeds of one station (for example `Example One HD`,
-  `Example One FHD`, `Example One HD+`, `Example One HDraw`, `Example One Cable`,
-  `Example One (Transcoded)` and `Example One (Mobile)`) form one backup group. The best
-  clean feed becomes the primary; the others become automatic
+  `Example One FHD` and `Example One (Mobile)`) form one backup group. Use only alternate
+  feeds you are entitled to play. The preferred feed becomes the primary; the others become automatic
   [backup/failover](/architecture/live-tv/#backup-channels-failover) streams, so a dropped
   stream switches to the next. A transcoded or mobile feed is never the primary while a
   normal feed exists.
@@ -120,15 +120,14 @@ hundreds or thousands of near-duplicate entries by hand:
   the guide. When a guide lists the same station once per country, a channel gets the
   entry of its own country. All feeds of a backup group share the guide and the logo
   that one of them has.
-- **Parallel-schedule collapsing**: many aggregator XMLTV feeds reuse one `tvg-id` across
+- **Parallel-schedule collapsing**: an XMLTV feed can reuse one `tvg-id` across
   several channel variants and concatenate each variant's schedule under it, so a single
   channel arrives carrying two or more complete schedules offset by seconds to hours.
   Lumastra keeps the richest one, gap-fills from the rest, and preserves genuine repeats.
   The import summary reports how many duplicate entries were dropped and on how many
   channels; a large count is normal for such feeds and needs no action.
 
-Providers with more than 10,000 channels import too. The source shows the progress of the
-channel import, and then of the guide import, which starts when the channels are in.
+The Sources tab shows channel-import progress, followed by guide-import progress.
 
 :::tip[Playlists without channel IDs]
 A playlist link that ends in a bare `type=` parameter usually carries no channel IDs,
@@ -139,20 +138,20 @@ the M3U URL to `type=m3u_plus`, or add the provider as an Xtream Codes source in
 
 ## Configure Lineup
 
-A large provider carries channels from many countries. After the import, choose
-**Configure Lineup** on the source to decide which channels viewers see:
+After importing your source, choose **Configure Lineup** to organize the channels
+viewers see. These are display filters for the supplied lineup; they do not change
+which broadcasts or regions you are entitled to access:
 
-- **Countries**: keep channels from any number of countries or regions. The list shows
+- **Countries**: filter the supplied channels by country or region. The list shows
   every country the provider tags, with channel counts, plus regional groups (for example
   Arabic) and the religious and adult groups. Countries that match your browser languages
   are pre-selected. Religious and adult channels are never pre-selected. With no country
   selected, every country is kept.
 - **Channels without a country**: keep them too. Providers often leave the channels of
   their home market untagged.
-- **24/7 channels**: hide channels that loop one show, film or episode. This also covers
-  film titles with a year and no guide (`Example Film (1998)`), a provider's large
-  families of film-loop channels (dozens of `Example Cinema <theme>` channels), and
-  single titles that sit next to loop channels in the playlist.
+- **24/7 channels**: hide continuous-programming channels if you prefer scheduled
+  broadcasts. The filter detects loops using channel names, missing guide data and
+  neighboring playlist entries, including title-and-year names and themed channel families.
 - **Info and welcome screens** (on by default): hide the provider's announcement
   channels, such as `Event Info`, `Welcome Channel` or a channel overview. A station whose
   name merely ends in "Info" stays.
@@ -198,8 +197,8 @@ own numbered channels and what is on now and next, optionally locked with a PIN.
 
 ## Sending Live TV through an outbound proxy
 
-Some networks only allow outbound traffic through a proxy. To send **all** outbound Live
-TV traffic through a forward proxy, set one variable:
+On managed networks that require an outbound HTTP proxy, route your permitted Live TV
+connections through that network’s gateway with one variable:
 
 | Variable | Notes |
 | --- | --- |
@@ -233,8 +232,7 @@ Once imported, manage everything from **`/admin/settings/livetv`**. See
 reference.
 
 The **Channels** tab (Channel Management) holds channel visibility, display names, quality
-tier, categories, ordering, and EPG-match review. It is built for lineups with thousands of
-channels:
+tier, categories, ordering, and EPG-match review, including large tuner or provider lineups:
 
 - **Show hidden** is off by default, so the list shows what viewers get. Turn it on to see
   and restore hidden channels; the setting is remembered in your browser. While hidden
@@ -294,11 +292,15 @@ channel.
 
 Live TV is restricted to the identity-provider groups in `LIVETV_GROUPS` (default
 `livetv,admin`). Users outside those groups don't see the Live TV section at all.
+Assign access only to viewers covered by your source’s viewing and sharing permissions;
+Lumastra groups are application access controls, not broadcaster or provider authorization.
 
 ### How stream limits are counted
 
-Per-source **Max streams** counts distinct channels, not viewers. Ten viewers watching
-one channel use one slot; joining an already-live channel uses no extra slot.
+Per-source **Max streams** counts distinct upstream channels, not viewers. Viewers joining
+an already-active channel reuse that upstream connection. This is a transport counter:
+it does not enforce or extend a provider’s separate viewer, device, household or
+redistribution permissions. Set the source cap and user access to fit those permissions.
 
 ### Priority and preemption
 
@@ -306,7 +308,8 @@ When a source is already at its stream limit and someone tries to start an *addi
 (different) channel:
 
 - A **low-priority** viewer is **refused**: they're told the stream limit is reached and can
-  either wait or join a channel that's already live (joining a live channel is always free).
+  either wait or join a channel that's already live (no additional upstream slot, subject
+  to the same viewing permissions).
 - A **high-priority** viewer **preempts**: Lumastra evicts one low-priority viewer to free a
   slot. The evicted viewer's stream stops, and they see a message that they were disconnected
   because a higher-priority viewer needed the slot.
@@ -324,7 +327,7 @@ Which low-priority viewer is evicted is set by `LIVETV_KICK_POLICY`:
 Preemption only ever targets a low-priority viewer on a *different* channel. If every occupied
 slot is held by a high-priority viewer (or the only other viewers are on the channel you're
 joining), even a high-priority request is refused. Priority lets you bump casual viewers, not
-each other.
+each other. This priority only allocates the capacity already permitted for the source.
 
 ### Configure it
 
@@ -333,7 +336,7 @@ each other.
 | `LIVETV_GROUPS` | `livetv,admin` | Groups allowed to use Live TV at all. |
 | `LIVETV_HIGH_PRIORITY_GROUPS` | `admin` | Groups whose members can preempt low-priority viewers. |
 | `LIVETV_KICK_POLICY` | `shortest` | Which low-priority viewer to evict (`shortest` / `longest`). |
-| Per-source **Max streams** | `1` | Concurrent *distinct channels* allowed from that source. |
+| Per-source **Max streams** | `1` | Local cap on concurrent *distinct upstream channels*; keep it within the source’s permitted limits. |
 | `LIVETV_VIEWER_TIMEOUT_SECONDS` | `30` | Heartbeat timeout before an idle viewer's slot is reclaimed. |
 | `LIVETV_GRACE_PERIOD_SECONDS` | `30` | How long the encoder keeps running after the last viewer leaves, so rejoining is instant. |
 

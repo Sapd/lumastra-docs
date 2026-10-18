@@ -1,6 +1,6 @@
 ---
 title: Live TV
-description: "How Live TV works: channel import, the dedicated stream proxy, and backup-channel failover."
+description: "How Lumastra imports tuner broadcasts and provider-approved feeds, manages stream delivery, and switches between permitted backup feeds."
 sidebar:
   order: 3
 ---
@@ -8,10 +8,11 @@ sidebar:
 import LiveTvDiagram from '../../../components/diagrams/LiveTvDiagram.astro';
 import LiveTvContainersDiagram from '../../../components/diagrams/LiveTvContainersDiagram.astro';
 
-Live TV in Lumastra has two moving parts that set it apart from a simple
-"play this URL" approach: a **dedicated stream proxy** that multiplexes one
-upstream pull to many viewers, and **backup channels** that fail a stream over to
-an alternate source automatically.
+Lumastra organizes broadcasts from your own tuner and feeds that a broadcaster or
+provider permits you to play in third-party clients. It supplies no channels or
+subscriptions. The architecture has two main parts: a **dedicated stream proxy** that
+shares an upstream connection between permitted viewers, and **backup channels** that
+switch between alternate feeds you are entitled to use.
 
 Live TV is gated by `FEATURE_LIVETV` (off by default); when on, channels come from sources
 added in the admin UI (`LIVETV_SOURCE` defaults to `standalone`).
@@ -27,13 +28,14 @@ added in the admin UI (`LIVETV_SOURCE` defaults to `standalone`).
 ## Channel import & auto-processing
 
 Sources are added from the admin UI (`LIVETV_SOURCE=standalone` selects this mode):
-an M3U playlist, Xtream Codes account, or HDHomeRun device. Each is imported into
+an approved M3U playlist, a provider-issued Xtream Codes account permitted for this use,
+or your own HDHomeRun tuner for broadcasts you are entitled to receive. Each is imported into
 channels, along with EPG (program guide) data that is matched to each channel. During
 import, Lumastra **auto-processes** the channel list to:
 
 - drop playlist section headers and use them as the group (and often the country) of
   the channels below them,
-- group the feeds of one station (HD, FHD, HD+, raw, cable, transcoded, mobile) into
+- group alternate permitted feeds of one station (for example HD, FHD and mobile) into
   **backup groups** (see below),
 - detect **quality tiers** (SD / HD / FHD / …) within a group,
 - detect each channel's country or region, and sub-group by it so regional variants aren't
@@ -52,7 +54,8 @@ Channels, groups, and visibility are then managed in
 The stream proxy is a **standalone process** (`start-proxy.sh` →
 `build/stream-proxy.js`), kept isolated: it imports only Node built-ins and
 a small shared module, with no app framework or database access. It exists to do one
-job well: pull live streams and fan them out efficiently.
+job well: deliver the configured sources efficiently within the operator’s viewing
+and distribution permissions.
 
 The diagram below shows how the containers relate: the web app handles channel
 selection and policy, while clients stream HLS **directly from the proxy** container.
@@ -61,7 +64,7 @@ selection and policy, while clients stream HLS **directly from the proxy** conta
 
 | Responsibility       | Detail                                                                       |
 | -------------------- | ---------------------------------------------------------------------------- |
-| **Multiplexing**     | One upstream connection per active channel, shared by all its viewers (reference-counted). Ten people on the same channel means **one** upstream pull, not ten. |
+| **Multiplexing**     | One upstream connection per active channel, shared by its permitted viewers (reference-counted). This reduces duplicate network work; it does not grant extra viewing or redistribution rights. |
 | **Transcoding**      | An FFmpeg manager remuxes or transcodes per a per-stream transcode decision. |
 | **SSRF protection**  | Upstream URLs are validated before they're fetched.                          |
 | **Health & cleanup** | A health monitor and orphan cleanup tear down streams with no viewers.       |
@@ -77,7 +80,7 @@ target codec, transcode mode) and the passthrough flags. See
 
 ## Outbound proxy
 
-For networks where outbound traffic has to go through a proxy, `LIVETV_UPSTREAM_PROXY_URL`
+On managed networks that require an outbound HTTP gateway, `LIVETV_UPSTREAM_PROXY_URL`
 sends **all** outbound Live TV traffic to the source through an HTTP **CONNECT** forward
 proxy. It's applied in two places, because the work happens in two processes:
 
@@ -120,7 +123,9 @@ web and worker can keep using `LIVETV_UPSTREAM_PROXY_URL` as normal.
 ## Backup channels (failover)
 
 Live TV streams can be unreliable, so a channel can belong to a **backup group**:
-a set of channels that are alternate sources for the same logical channel.
+a set of alternate feeds for the same station, each permitted for your use. Failover
+changes which configured feed is used; it does not unlock an unavailable subscription
+or add access to another region.
 
 Viewers see a backup group as one channel: its primary feed when that is visible, else its
 best visible feed (a normal feed before a transcoded or mobile one, then the higher
@@ -140,7 +145,10 @@ overlay.
 
 ## Stream limits & contention
 
-Concurrent live streams are bounded per source. Access is restricted to the groups
+Concurrent upstream channels are bounded per source. Configure those caps and viewer
+access within the tuner’s capacity and the broadcaster/provider’s permissions. The
+proxy counts upstream connections, so its cap alone is not a viewer, device or
+redistribution entitlement check. Access is restricted to the groups
 in `LIVETV_GROUPS`, and members of `LIVETV_HIGH_PRIORITY_GROUPS` can preempt a stream
 when capacity is contended (governed by `LIVETV_KICK_POLICY`). Idle viewers are
 reaped using `LIVETV_VIEWER_TIMEOUT_SECONDS` and `LIVETV_GRACE_PERIOD_SECONDS`.
