@@ -7,8 +7,9 @@ sidebar:
 
 Lumastra's Live TV brings broadcasts from your own tuner and provider-approved feeds
 into the same interface as your media library. Use broadcasts you are entitled to receive
-and feeds whose broadcaster or provider permits playback in third-party players. A paid
-subscription alone does not establish that permission.
+and feeds licensed for this use by the broadcaster or an authorized TV provider,
+including playback in third-party players. A paid subscription alone does not establish
+that permission.
 
 Sources connect through HDHomeRun, M3U playlists or Xtream Codes. Lumastra imports their
 channels, matches a program guide, groups alternate feeds of the same station, and streams
