@@ -93,7 +93,9 @@ and other discovery tools, see [Music discovery](/guides/music-discovery/).
 
 Audiobook search stays within your selected shelf, language, and filters.
 **Continue listening** covers all shelves. Live TV search includes all channels and
-scheduled programmes, even when you're browsing Favorites.
+scheduled programmes, even when you're browsing Favorites. For a larger, simpler Live TV
+screen with only your own numbered channels, see
+[Live TV simple mode](/guides/live-tv-simple-mode/).
 
 ## Preferences
 

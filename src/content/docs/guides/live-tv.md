@@ -192,6 +192,10 @@ the last choice is remembered. A family of numbered channels (for example "Live 
 to "Live Event 10") is one card that opens a dialog with those channels and a guide of
 just them.
 
+For older viewers, a helper or the admin can switch on
+[Live TV simple mode](/guides/live-tv-simple-mode/): a large, calm screen with only their
+own numbered channels and what is on now and next, optionally locked with a PIN.
+
 ## Sending Live TV through an outbound proxy
 
 Some networks only allow outbound traffic through a proxy. To send **all** outbound Live
@@ -350,6 +354,7 @@ DVR** today.
 
 ## Next
 
+- [Live TV simple mode](/guides/live-tv-simple-mode/): a large, simple Live TV screen for older viewers
 - [Live TV architecture](/architecture/live-tv/): the stream proxy, multiplexing, and failover
 - [Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio): day-to-day channel management
 - [Deploy with Docker](/guides/deploy-docker/): running the stream proxy as its own container

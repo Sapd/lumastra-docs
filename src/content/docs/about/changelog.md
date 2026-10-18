@@ -51,6 +51,9 @@ The full changelog is in the repository:
   stations and event slots, and its 24/7 switch also hides film loops and single titles.
   Provider bouquets that mix many genres are split into those genres on import. See
   [Configure Lineup](/guides/live-tv/#configure-lineup).
+- Live TV simple mode: a large, calm Live TV screen for older viewers with their own
+  numbered channels, on the web and on Apple TV. A helper or the admin sets it up and can
+  lock it with a PIN. See [Live TV simple mode](/guides/live-tv-simple-mode/).
 
 ### 0.1.0 (2026-10-15)
 

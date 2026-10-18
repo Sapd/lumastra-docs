@@ -50,6 +50,7 @@ export const sidebar = [
 					{ slug: 'guides/music-discovery' },
 					{ slug: 'guides/audiobooks' },
 					{ slug: 'guides/live-tv' },
+					{ slug: 'guides/live-tv-simple-mode' },
 					{ slug: 'guides/media-enrichment' },
 					{ slug: 'guides/ai-assistant' },
 					{ slug: 'guides/push-notifications' },
