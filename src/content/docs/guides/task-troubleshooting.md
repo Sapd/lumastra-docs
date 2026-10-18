@@ -635,7 +635,7 @@ appears in Runs.
 ### Diagnosis
 
 On builds before 2026-10-07, opening the task page or reading
-`GET /api/v1/tasks/{id}/state` after the cooldown took the circuit's one probe
+`GET /api/v1/tasks/{taskId}/state` after the cooldown took the circuit's one probe
 slot (a 5-minute lock in Valkey) and moved it to `half_open` without starting a run.
 Real runs were refused until the lock expired. Current builds read the state
 without touching the circuit.
@@ -647,7 +647,7 @@ returns `422`.
 
 Wait up to 5 minutes: the next start after the lock expires claims the probe.
 To resume immediately, use **Resume now** on the task page (or
-`PUT /api/v1/tasks/{id}/state` with `{ "breaker": "enable", "force": true }`).
+`PUT /api/v1/tasks/{taskId}/state` with `{ "breaker": "enable", "force": true }`).
 
 ---
 

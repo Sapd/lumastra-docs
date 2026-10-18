@@ -61,12 +61,13 @@ Startup triggers run once per start even during multi-replica rolling restarts.
 - Pausing keeps trigger settings intact and still allows manual runs.
 
 The API supports `GET`, `PUT`, and `DELETE`
-[`/api/v1/tasks/{id}/triggers`](/developers/api-routes/#tasks-runs-and-queues)
+[`/api/v1/tasks/{taskId}/triggers`](/developers/api-routes/#tasks-runs-and-queues)
 with `tasks:admin` scope. `PUT` replaces the set with `{ triggers: [...] }`
-(1–8 entries); `DELETE` restores defaults. The older
-`PUT /api/v1/tasks/{id}/schedule` endpoint remains supported: presets become
-interval triggers, `"never"` pauses the task, and custom trigger sets read back
-as `"custom"`.
+(1–8 entries); `DELETE` restores defaults. Saving or resetting triggers does not
+resume a paused task. Pause or resume separately with
+`PUT /api/v1/tasks/{taskId}/state` and `{ "schedule": "paused" }` or
+`{ "schedule": "active" }`. The older `GET/PUT /api/v1/tasks/{taskId}/schedule`
+endpoint has been removed.
 
 ## Run options on the task page
 

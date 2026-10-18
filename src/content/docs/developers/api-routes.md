@@ -164,14 +164,14 @@ detailed scan and ingest documentation.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/tasks` | `tasks:read` | List scheduled task definitions |
-| `GET` | `/tasks/{id}` | `tasks:read` | One task definition |
-| `POST` | `/tasks/{id}/run` | `tasks:run` | Enqueue a run |
-| `PUT` | `/tasks/{id}/state` | `tasks:admin` | Pause/resume schedule, manage circuit breaker |
-| `GET` | `/tasks/{id}/backlog` | `tasks:read` | Backlog item listing |
-| `GET/PUT` | `/tasks/{id}/settings` | `tasks:admin` | Per-task settings |
-| `GET/PUT/DELETE` | `/tasks/{id}/triggers` | `tasks:admin` | Interval/daily/weekly/startup triggers (`PUT` body `{ triggers: [...] }`, 1–8, replaces all; `DELETE` resets to the task's default schedule) |
-| `GET` | `/tasks/{id}/failures` | `tasks:read` | Per-item failure log |
-| `POST` | `/tasks/{id}/failures/{id}/retry` | `tasks:run` | Retry one failed item |
+| `GET` | `/tasks/{taskId}` | `tasks:read` | One task definition |
+| `POST` | `/tasks/{taskId}/run` | `tasks:run` | Enqueue a run |
+| `PUT` | `/tasks/{taskId}/state` | `tasks:admin` | Pause/resume schedule, manage circuit breaker |
+| `GET` | `/tasks/{taskId}/backlog` | `tasks:read` | Backlog item listing |
+| `GET/PUT` | `/tasks/{taskId}/settings` | `tasks:admin` | Per-task settings |
+| `GET/PUT/DELETE` | `/tasks/{taskId}/triggers` | `tasks:admin` | Interval/daily/weekly/startup triggers (`PUT` body `{ triggers: [...] }`, 1–8, replaces all; `DELETE` resets to the task's default schedule) |
+| `GET` | `/tasks/{taskId}/failures` | `tasks:read` | Per-item failure log |
+| `POST` | `/tasks/{taskId}/failures/{itemId}/retry` | `tasks:run` | Retry one failed item |
 | `GET` | `/runs` | `runs:read` | Run history (`{items,page}`) |
 | `GET` | `/runs/{id}` | `runs:read` | One run + result |
 | `GET` | `/runs/{id}/logs` | `runs:read` | Log lines for one run |
