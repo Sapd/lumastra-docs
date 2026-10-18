@@ -26,7 +26,7 @@ The following tables list the major route groups on `/api/v1`. The interactive
 | `GET` | `/series/{id}/seasons` | user | List seasons |
 | `GET` | `/series/{id}/seasons/{id}` | user | Season detail |
 | `GET` | `/series/{id}/episodes` | user | All episodes |
-| `GET` | `/series/{id}/next-episode` | user | Next unwatched episode; with `?season=N&episode=M`, the episode at that position |
+| `GET` | `/series/{id}/next-episode` | user | Next unwatched episode; `?season=N&episode=M` fetches that position; `?afterPlayback=<episode UUID>` advances past its whole default file |
 | `GET` | `/series/{id}/watch-status` | user | Aggregate watch status |
 | `GET` | `/people/{id}` | user | Person detail |
 | `GET` | `/people/{id}/images/{role}` | user | Person image (TMDB size vocabulary, see [Images](#images)) |

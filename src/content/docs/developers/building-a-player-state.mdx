@@ -215,6 +215,12 @@ accounting for any in-progress session. Add `?season=N&episode=M` (both
 required) to fetch the episode at that position instead. Feed the Continue
 Watching rail from `GET /api/v1/continue-watching`.
 
+For autoplay after a file ends, use `?afterPlayback=<episode UUID>`. This
+advances past every episode sharing that episode’s default file in the active
+series ordering, independently of watch history. A combined E1–E2 file therefore
+advances to E3 from either entry point. The lookup skips unavailable files and
+returns `404 not_found` when no next episode is available.
+
 ### Next-episode prompt
 
 Show the next-episode card from two playback preferences, read from
