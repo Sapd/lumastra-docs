@@ -115,6 +115,12 @@ absolute.
 
 ## Setup defaults
 
+Users start with sharing **off**: new accounts hide their streams and share no listening or
+audiobook activity until they opt in under **Settings → Privacy**. The upgrade that
+introduced this default switched existing accounts that never saved a privacy choice to the
+same private state; accounts with a saved choice were not touched. Activity Audience Mode
+(above) is the operator-side audience; a user's switches decide whether they take part in it.
+
 Setup enables **Share activity between users** by default. Turning it off selects
 **Selected groups** with no groups, disabling activity sharing until a group is named.
 

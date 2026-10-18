@@ -73,7 +73,9 @@ title is playable. Requests require your administrator to enable them and config
 ## Watch Together
 
 Start a party from the player's **Watch party** button and share its code or link.
-Join through the **Watch Parties** widget or the shared link.
+A new party is **private**: only people who have the code or link can join. Choose to list
+it if you want it to appear in the **Watch Parties** widget for others on the server.
+Join through the widget (listed parties) or the shared link.
 
 - Anyone can pause or resume for everyone.
 - Only the host can seek, skip segments, change speed, or move to another title.
@@ -122,6 +124,11 @@ homepage and available widgets for the whole server.
 | **Hide my streams** | Hides streaming and social activity; overrides the sharing settings below. |
 | **Share audiobook activity** | Shares book progress, finished books, and shared listening. |
 | **Share coarse listening activity** | Shares books listened to, rounded duration, and day; never exact times. |
+
+Everything starts **off**: a new account hides its streams and shares no listening or
+audiobook activity until you turn it on here. Accounts that never opened these settings
+were switched to this private default when the server was upgraded; accounts that saved a
+choice keep it.
 
 Coarse listening activity is reciprocal: you can see others' activity only while sharing
 your own. Your administrator defines the audience, usually everyone on the server or
