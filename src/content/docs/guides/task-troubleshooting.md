@@ -651,6 +651,69 @@ To resume immediately, use **Resume now** on the task page (or
 
 ---
 
+## Preparing a dedicated worker for an upgrade
+
+This procedure applies to a dedicated worker already running the opt-in
+`LUMASTRA_TASK_RUNTIME=standalone` implementation. Keep the tested old image for
+rollback. The default legacy worker does not expose this control socket.
+
+Before preparing, coordinate the worker's supervisor and deployment automation so
+that the old worker cannot automatically restart and no replacement starts early.
+For example, Docker's `restart: unless-stopped` can restart a process that exits
+itself; a Kubernetes controller can also recreate a worker. Use deployment tooling
+that enforces stop-before-start, and restore the intended supervision policy only
+after the controlled replacement. The control commands do not change those
+policies or suspend a deployment controller.
+
+1. Find `Dedicated task upgrade control ready` in the current worker's startup
+   log. Copy its exact `socketPath`. Run commands inside that container as its
+   owning user; the socket is private and changes on every boot.
+2. Prepare and inspect the response:
+
+   ```bash
+   UPGRADE_SOCKET=/tmp/lumastra-upgrade-EXAMPLE/control.sock # replace from the live log
+   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --prepare-upgrade "$UPGRADE_SOCKET"
+   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --upgrade-status "$UPGRADE_SOCKET"
+   ```
+
+   Continue only when preparation exits successfully with `state: prepared`.
+   Readiness is deliberately unavailable while preparing or prepared. Claims and
+   local scheduler dispatch stay paused until resume or shutdown. Accepted queued
+   jobs, delays and existing administrator pauses are preserved.
+3. Copy the exact `instance` from that prepared receipt and request guarded stop:
+
+   ```bash
+   RECEIPT_INSTANCE=replace-with-the-prepared-instance
+   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --stop-upgrade "$UPGRADE_SOCKET" "$RECEIPT_INSTANCE"
+   docker wait "$WORKER_CONTAINER"
+   ```
+
+   Observe the old container's actual termination and check its exit result before
+   starting the replacement through your deployment tooling. A `stopping` response
+   alone is not proof of termination. A receipt from an older boot cannot stop a
+   replacement worker.
+4. If preparation is postponed, uncertain, times out or loses its response, keep
+   the original worker and inspect status. To abandon preparation, resume it:
+
+   ```bash
+   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --resume-upgrade "$UPGRADE_SOCKET"
+   ```
+
+   Confirm readiness and task progress return, unless the task was already
+   administratively paused. Do not terminate or start a replacement on
+   `postponed`, `unknown` or a missing receipt.
+
+Preparation has a 30-second work budget and a separate bounded restoration window.
+A long task or an active parent needing a queued child can postpone the upgrade;
+the same invocation continues after restoration without cancellation or replay.
+Unresolved terminal-persistence acknowledgements prevent a `prepared` receipt.
+A successfully restored `postponed` worker can regain ordinary readiness; an
+uncertain pause or restoration keeps readiness unavailable. A forced shutdown
+deadline does not certify safe drain. Arbitrary plugin timers, raw SQL outside tracked work and detached child
+processes require their own safety checks; this procedure does not certify them.
+
+---
+
 <span id="quick-reference-useful-sql--valkey--bash-snippets"></span>
 
 ## Command reference

@@ -164,6 +164,24 @@ A run that finished between loading the page and confirming **Stop** is reported
 as already finished. For Force stop, see
 [Run states and cancellation](/guides/administration-operations/#run-states-and-cancellation).
 
+## Preparing a dedicated worker for an upgrade
+
+A dedicated worker using the opt-in standalone runtime supports a reversible
+preparation step. It temporarily pauses new local task claims and scheduled
+starts, then waits for the work it tracks to settle. Pending jobs keep their
+identities and delays; administrator pauses remain in force. The watcher stays
+alive during preparation.
+
+A `prepared` receipt permits the guarded stop step. `postponed`, `unknown`, a
+missing response or a timeout means the upgrade must wait; do not start a second
+worker. An active parent waiting for a queued child can postpone preparation,
+then continue normally when claims are restored.
+
+Use the [dedicated-worker upgrade procedure](/guides/task-troubleshooting/#preparing-a-dedicated-worker-for-an-upgrade)
+and observe the old container's exit before starting its replacement. Preparation
+covers observed runner work, not arbitrary plugin background effects or detached
+processes. This opt-in procedure does not enable a new runtime automatically.
+
 ## Runs interrupted by a restart
 
 A restart or deploy stops every run in progress. Scheduled runs simply continue on
