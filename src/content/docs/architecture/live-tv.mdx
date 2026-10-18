@@ -17,6 +17,22 @@ switch between alternate feeds you are entitled to use.
 Live TV is gated by `FEATURE_LIVETV` (off by default); when on, channels come from sources
 added in the admin UI (`LIVETV_SOURCE` defaults to `standalone`).
 
+## Example delivery paths
+
+- **Home tuner:** a compatible HDHomeRun supplies broadcasts you lawfully receive for
+  private viewing at home. Lumastra imports the lineup and guide, and household viewers
+  watching the same channel share one upstream pull.
+- **Official broadcaster feed:** a broadcaster-published feed for external players enters
+  through an M3U playlist. Its channels appear in the same guide as your tuner channels;
+  permitted HD, SD or alternate feeds of a station can form a backup group.
+- **Your own live programme:** a compatible source carries a production you own or are
+  licensed to stream to the intended audience. Lumastra handles channel delivery while
+  your production system supplies the live feed.
+
+See [Example setups](/guides/live-tv/#example-setups) for the source choices. Each path
+uses the same pipeline below; a managed network can route its source connections through
+its required outbound gateway.
+
 ## How a channel reaches a viewer
 
 <LiveTvDiagram />

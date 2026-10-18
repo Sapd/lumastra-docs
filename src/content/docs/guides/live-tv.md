@@ -20,6 +20,32 @@ Here's how to turn Live TV on and add your first source. The proxy, multiplexing
 failover are covered in [Live TV architecture](/architecture/live-tv/); day-to-day channel
 administration is in [Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio).
 
+## Example setups
+
+### TV from your own tuner
+
+Use a compatible network tuner to watch broadcasts you lawfully receive, privately at
+home. For example, add your HDHomeRun’s LAN address, import its lineup and choose which
+channels your household sees. Use channels available without bypassing encryption or
+access restrictions; the tuner’s reception standard must match your local broadcasts.
+
+### Broadcaster-published streams
+
+Add an M3U playlist containing a broadcaster’s documented feeds for external players,
+along with an XMLTV guide if one is available for this use. A regional or community
+station that publishes such a feed can sit beside your tuner channels in the same guide.
+Use the broadcaster’s reception instructions and permitted viewing area as your source.
+
+### Your own live programming
+
+Add a compatible feed from a production you control, such as a community event or a
+live programme you make yourself. Include only material you own or have permission to
+stream to the intended viewers, including any music or other third-party material.
+Lumastra imports and plays the feed; you run the live production and source separately.
+
+The [architecture page](/architecture/live-tv/#example-delivery-paths) shows how these
+setups use the same import, guide and playback pipeline.
+
 ## Before you start
 
 Two things must be in place before the Live TV admin pages do anything. Until then,
@@ -95,7 +121,7 @@ private/LAN address (a local IPTV box, or an HDHomeRun on `192.168.x` / `10.x`),
 
 ## What the import does
 
-The import organizes the channels supplied by your configured tuner or approved feed.
+The import organizes your tuner’s lineup or a broadcaster/provider-approved playlist.
 It cleans up metadata and alternate quality entries without adding access to other
 channels:
 
@@ -293,13 +319,14 @@ channel.
 
 Live TV is restricted to the identity-provider groups in `LIVETV_GROUPS` (default
 `livetv,admin`). Users outside those groups don't see the Live TV section at all.
+For a home setup, choose which household accounts can watch the configured sources.
 Assign access only to viewers covered by your source’s viewing and sharing permissions;
 Lumastra groups are application access controls, not broadcaster or provider authorization.
 
 ### How stream limits are counted
 
-Per-source **Max streams** counts distinct upstream channels, not viewers. Viewers joining
-an already-active channel reuse that upstream connection. This is a transport counter:
+Per-source **Max streams** counts distinct upstream channels, not viewers. For example,
+household viewers watching the same tuner channel reuse one upstream connection. This is a transport counter:
 it does not enforce or extend a provider’s separate viewer, device, household or
 redistribution permissions. Set the source cap and user access to fit those permissions.
 
