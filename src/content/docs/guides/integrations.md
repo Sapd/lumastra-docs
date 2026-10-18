@@ -84,8 +84,11 @@ The environment alternatives are `ANIDB_CLIENT` and `ANIDB_CLIENT_VER`.
 
 ## Media servers & tools
 
-Connect Jellyfin and other media services during **setup**, where the wizard asks for
-and verifies the connection details, or add them later in **Admin → Settings**.
+**Most integration settings can be configured in Admin → Settings. Some are also
+requested during the first-run setup wizard.**
+
+For integrations offered during setup, the wizard asks for and verifies the connection
+details. You can also add or change connections later in **Admin → Settings**.
 For Jellyfin sync, enter your Jellyfin server URL and API key in the UI. The
 `JELLYFINURL` and `JELLYFINAPIKEY` variables are optional alternatives.
 
