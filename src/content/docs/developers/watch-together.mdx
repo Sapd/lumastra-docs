@@ -8,7 +8,6 @@ description: >
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import WatchTogetherResumeDiagram from '../../../components/diagrams/WatchTogetherResumeDiagram.astro';
-import SendToDeviceDiagram from '../../../components/diagrams/SendToDeviceDiagram.astro';
 import DriftCalibrationDiagram from '../../../components/diagrams/DriftCalibrationDiagram.astro';
 
 Watch Together synchronizes playback across devices for developers building a
@@ -551,55 +550,48 @@ converge on the same outcome; this variant just changes rate less often.
 `flash` `zoom` `spin` `rage` `matrix` `vhs`. Both are available to any
 participant.
 
-## Related feature: Send to Device
+## Device remote control
 
-A companion feature for pushing content to another of the user's own devices
-without manual navigation, e.g. tapping "watch on the living room TV" from a
-phone. Two action types: `join_party` (join a Watch Together session) and
-`play_media` (start a movie/episode directly, no session involved).
-
-<SendToDeviceDiagram />
+Any Lumastra device of the user's account can be controlled from another one: start
+media, pause, seek, pick tracks, tune a channel, join a party or show a message. This
+replaces the earlier `/devices/{id}/actions` endpoints, which no longer exist. For the
+user view, see [Remote control](/using/remote-control/).
 
 :::note[`{id}` is the device *session*, not the device-code id]
 `{id}` in the endpoints below is the `device_session_id` claim from your JWT,
-not the `device_id` you generated for the device-code request. `/heartbeat`
-and `GET /actions` enforce `{id} === deviceSessionId` and `403` otherwise; PAT
-and service tokens lack the claim entirely and cannot call these.
+not the `device_id` you generated for the device-code request. PAT and service
+tokens lack the claim and cannot report a device's own state or read its inbox.
 :::
 
 ```http
 POST /api/v1/devices/{id}/heartbeat
-{ "deviceName": "Living Room TV", "deviceType": "tv", "supportsWatchTogether": true }
+{ "deviceName": "Living Room TV", "deviceType": "tv", "capabilities": { "commands": { "playback.pause": {} } } }
 ```
 
-Send every 2–3 minutes while foregrounded; online status expires 10 minutes
-after the last heartbeat. `GET /api/v1/devices?scope=mine` lists the caller's
-devices with online status for a device picker.
+Send every 2-3 minutes while foregrounded; online status expires 10 minutes after the last
+heartbeat. `capabilities` lists the command types the device handles.
+`GET /api/v1/devices?scope=mine` lists the caller's devices with their capabilities and
+a summary of what each plays.
 
-<Tabs>
-<TabItem label="Send an action">
-```http
-POST /api/v1/devices/{targetDeviceId}/actions
-{ "type": "join_party", "sessionCode": "MOVIE-7X3K" }
-```
-or `{ "type": "play_media", "itemId": "…", "startPosition": 0 }`.
-</TabItem>
-<TabItem label="Receive (poll ~5 s)">
-```http
-GET /api/v1/devices/{id}/actions
-```
-Returns `{ items, page }` of pending actions. Accept or dismiss:
-```http
-PATCH /api/v1/devices/{id}/actions/{actionId}
-{ "status": "accepted" }   // or "dismissed"
-```
-</TabItem>
-</Tabs>
+- **Send:** `POST /api/v1/devices/{id}/commands` with `{ "type": "playback.seekBy",
+  "args": { "seconds": 10 } }`. The answer is `202` with the command.
+- **Follow:** `GET /api/v1/devices/{id}/commands/{commandId}`. The status moves from
+  `pending` to `delivered`, then `applied` or `rejected`. `DELETE` cancels a command
+  that has not been applied.
+- **State:** `GET /api/v1/devices/{id}/state` returns the device, its capabilities and
+  what it plays now, including `availableCommands`.
+- **Events:** on `GET /api/v1/events`, `device.command_status` reports each status change
+  and `device.state` reports new state. The target device receives `device.command`.
 
-**Security invariants:** a user may only send actions to their **own**
-devices. Ownership is verified from `deviceSessionId` on the JWT, never from
-client input. Pending actions expire after 5 minutes; online status expires
-after 10 minutes without a heartbeat.
+Command types are namespaced, for example `media.play`, `playback.pause`,
+`livetv.tune`, `queue.add`, `party.join` and `ui.message`. Commands that only matter now
+expire after seconds and are never applied late. Commands that may wait for the device
+live for minutes. Errors use stable codes such as `device_unsupported`,
+`device_unreachable` and `simple_mode_locked`.
+
+A user can control only their own devices, and the devices of users who allowed it
+through a household grant. The API reference lists every type, its arguments and the
+errors: see the [API reference](/reference/).
 
 ## Endpoint reference
 
@@ -611,7 +603,7 @@ after 10 minutes without a heartbeat.
 | `POST` | `/api/v1/watch-together/{code}/events` | user | Send an event |
 | `GET` | `/api/v1/watch-together/{code}/events?clientId=` | user | SSE event stream |
 | `POST` | `/api/v1/devices/{id}/heartbeat` | user | Report device online status |
-| `GET`/`POST`/`PATCH` | `/api/v1/devices/{id}/actions[/{actionId}]` | user | Poll, send, accept/dismiss Send to Device |
+| `POST` | `/api/v1/devices/{id}/commands` | user | Send a command to a device (see [Device remote control](#device-remote-control)) |
 
 All Watch Together endpoints require a valid bearer token. The SSE endpoint
 additionally returns `403` if the caller is not a participant, and `404` if

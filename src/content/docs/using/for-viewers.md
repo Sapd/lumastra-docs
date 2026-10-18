@@ -85,6 +85,12 @@ On Apple TV, start from a title's **Watch Together** button or join by code from
 sidebar. Pressing Home keeps the party membership; use **Rejoin Party** when you return.
 Pressing Back twice leaves the party, ending it for everyone if you are the host.
 
+## Remote control
+
+Use your phone or the web as a remote for your other devices. Start a title on the TV,
+pause, seek, pick a track or send a message. You can also allow a household helper to
+control your devices. See [Remote control](/using/remote-control/).
+
 ## Music, audiobooks, and Live TV
 
 Music's **Smart Queue / Autoplay** adds recommendations as the queue runs out. Crossfade
@@ -138,5 +144,6 @@ Link your account under **Settings → Connections** to optionally sync anime ra
 ## Related guides
 
 - [Using the video player](/using/player/)
+- [Remote control](/using/remote-control/)
 - [Connecting third-party apps](/using/third-party-players/)
 - [Music discovery](/guides/music-discovery/)

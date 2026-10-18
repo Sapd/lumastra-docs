@@ -17,6 +17,12 @@ The full changelog is in the repository:
 
 ### Unreleased
 
+- One remote control for every Lumastra device on your account. From the iPhone app or
+  the web, start a title on another device, pause, seek, pick tracks, skip an intro, set a
+  sleep timer, manage the music queue, tune Live TV, join a party or send a message.
+  You can allow a household helper to use it, and Jellyfin apps can control your devices.
+  The old `/devices/{id}/actions` endpoints are replaced by `/devices/{id}/commands`. See
+  [Remote control](/using/remote-control/).
 - The audio and subtitle menu shares one scrolling list and adapts to the player and
   viewport height. Mobile episode and season pickers scroll more reliably.
 - Music cards show crossfades correctly, and Jellyfin apps stop unused transcode work

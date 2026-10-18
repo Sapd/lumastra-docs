@@ -201,6 +201,9 @@ The music quick-picks recommender (bucket distribution, taste-cluster inspector)
 Inspect active playback across users, including delivery method, bandwidth, and
 transcoding jobs. With Jellyfin sync enabled, direct Jellyfin sessions also appear.
 
+Select a session to send a message to it. On a Lumastra app the message shows on the
+device. In other players it shows as a notice. You can also stop a session from here.
+
 When a viewer reports buffering, **Playback quality** (`/admin/users/playback-quality`)
 and **Playback incidents** (`/admin/users/playback-incidents`) hold the delivery evidence.
 See [Test your connection](/using/player/#test-your-connection).

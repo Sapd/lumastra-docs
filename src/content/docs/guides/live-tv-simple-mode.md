@@ -87,6 +87,12 @@ After 5 wrong PINs in 15 minutes, the PIN screen asks to wait.
 **Lock with a PIN** off. The admin never needs the PIN. Switching the lock off removes the
 PIN; set a new one to lock it again.
 
+## Remote control
+
+A locked simple mode setup also limits the [remote](/using/remote-control/). Commands
+that leave simple mode, such as starting a film or joining a party, are refused. Tuning a
+channel, pausing and sending a message still work.
+
 ## Open Live TV on start
 
 With **Open Live TV on start**, opening Lumastra in a browser goes straight to Live TV

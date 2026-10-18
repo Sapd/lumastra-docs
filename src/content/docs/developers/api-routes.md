@@ -269,21 +269,26 @@ requesting a device code. The two are different identifiers:
 - `device_id`: yours, stable per physical device, sent in the device-code
   request and in the `POST /play-sessions` body.
 - `device_session_id`: the server's, minted per authorization, embedded in
-  the JWT, and the addressing unit for heartbeat and cast actions.
+  the JWT, and the addressing unit for heartbeat and commands.
 
-`/heartbeat` and `GET /actions` enforce `{id} === deviceSessionId` and return
-`403` otherwise. A device can only heartbeat and read its own queue. Because
+`/heartbeat` enforces `{id} === deviceSessionId` and returns `403` otherwise. Because
 the session id is per-token, two accounts signed in on one physical device get
-separate presence and separate cast queues automatically.
+separate presence and separate command inboxes automatically.
 :::
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/devices` | user | List user devices (`?scope=mine`) |
 | `POST` | `/devices/{id}/heartbeat` | user | Device presence keepalive |
-| `GET` | `/devices/{id}/actions` | user | Pending cast actions |
-| `POST` | `/devices/{id}/actions` | user | Cast to a device (`{ type: "play_media\|join_party" }`) |
-| `PATCH` | `/devices/{id}/actions/{id}` | user | Accept or dismiss an action |
+| `POST` | `/devices/{id}/commands` | user | Send a command to a device |
+| `GET` | `/devices/{id}/commands/{commandId}` | user | Read a command and its status |
+| `DELETE` | `/devices/{id}/commands/{commandId}` | user | Cancel a command that is not applied yet |
+| `GET` | `/devices/{id}/state` | user | What the device plays now and what it can do |
+| `GET`/`POST`/`DELETE` | `/devices/grants[/{username}]` | user | Household helpers who may control your devices |
+| `GET` | `/devices/controllable` | user | Devices others allowed you to control |
+
+The commands and their arguments are described in
+[Device remote control](/developers/watch-together/#device-remote-control).
 
 ### Users and profile
 
@@ -462,7 +467,9 @@ from the Valkey buffer. Live signals such as `admin` carry no replay ID.
 |---|---|
 | `connected` | Bootstrap frame with server time |
 | `admin` | Operator message or maintenance state; discriminate on `data.type` |
-| `device.action_pending` | Cast action queued for this device |
+| `device.command` | A command for this device (sent to the target device only) |
+| `device.command_status` | A command you sent changed status |
+| `device.state` | A device of your account reported new state |
 | `session_changed` | Session/watch-state signal |
 | `watch_state_set_changed` | Watch-state-set signal |
 | `library.new_episode` | New episode for a followed series |
@@ -512,7 +519,7 @@ per-user and private).
   "events": {
     "url": "/api/v1/events",
     "reconnect_max_ms": 30000,
-    "event_types": ["social.comment", "device.action_pending", "…"]
+    "event_types": ["social.comment", "device.command_status", "…"]
   },
   "metadata": {
     "primary": "en",

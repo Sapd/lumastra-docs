@@ -243,7 +243,7 @@ after login; keep it open for the session.
 // EventSource cannot set an Authorization header — pass the token as a query param.
 const es = new EventSource(`/api/v1/events?api_key=${encodeURIComponent(accessToken)}`);
 es.addEventListener('connected', (e) => { const { serverTime } = JSON.parse(e.data); });
-es.addEventListener('device.action_pending', (e) => handleCastRequest(JSON.parse(e.data)));
+es.addEventListener('device.command', (e) => handleDeviceCommand(JSON.parse(e.data)));
 es.addEventListener('admin', (e) => handleAdminFrame(JSON.parse(e.data)));
 ```
 
@@ -255,7 +255,9 @@ verbatim. The per-install list is advertised at
 |---|---|---|
 | `connected` | bootstrap | — |
 | `admin` | signal | no |
-| `device.action_pending` | signal | no |
+| `device.command` | signal | no |
+| `device.command_status` | signal | no |
+| `device.state` | signal | no |
 | `session_changed` | signal | no |
 | `watch_state_set_changed` | signal | no |
 | `library.new_episode` | notification | yes |
