@@ -31,13 +31,22 @@ See [Backup & recovery](/guides/backup-recovery/) for backup and rotation.
 | Variable              | Required           | Purpose                                          |
 | --------------------- | ------------------- | -------------------------------------------------- |
 | `DATABASE_URL`        | Yes                 | PostgreSQL connection string (needs pgvector)    |
-| `CACHE_URL`           | Yes                 | Valkey/Redis URL (cache + task queues)           |
+| `CACHE_URL`           | In deployment examples | Disposable evictable cache Valkey URL |
+| `TASK_CACHE_URL`      | Yes | Dedicated persistent `noeviction` Valkey for tasks and shared coordination |
 | `LUMASTRA_MASTER_KEY` | Yes (with secrets)  | Encrypts stored secrets                          |
 | `JWT_SECRET`          | For token auth      | Signs session / access tokens                    |
 | `FORWARD_AUTH_ENABLED` | For forward auth   | Read identity headers at all (default off), environment only |
 | `TRUSTED_PROXY_IPS`   | Behind a proxy      | Proxy addresses allowed to set identity headers  |
 | `ORIGIN`              | Behind a proxy / HTTPS | Public address, marks the login cookie `Secure` |
 | `NODE_ENV`            | Recommended         | Set `production` for deployments                 |
+
+`TASK_CACHE_URL` has no fallback to `CACHE_URL`. When both are configured, they must
+use different server endpoints. Different database numbers, credentials or TLS schemes
+on the same host and port do not separate eviction policy; startup rejects that layout.
+Different DNS aliases are not proof of different servers: ensure they resolve to separate
+instances. After transient startup failures, web task coordination retries automatically
+with delays from one second up to thirty seconds. Fix invalid endpoint configuration and
+restart the process; permanent configuration errors are not retried.
 
 See the full [Environment Variables reference](/reference/environment-variables/)
 for every option, and [Authentication](/guides/authentication/) for the
