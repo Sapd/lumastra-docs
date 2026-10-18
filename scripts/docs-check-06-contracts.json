@@ -572,7 +572,7 @@
         {
           "path": "src/content/docs/developers/live-tv-playback.md",
           "op": "contains",
-          "text": "`GET /api/v1/livetv/channels/{id}` returns the channel object itself, useful for deep-link flows. It includes the list-item fields, a resolved logo URL and the enriched current program. Read the fields directly on the response object."
+          "text": "`GET /api/v1/livetv/stations/{stationId}` returns the station object itself, useful for deep-link flows. It includes the list-item fields and optional `nextProgram`. Read the fields directly on the response object."
         }
       ]
     },
@@ -597,7 +597,7 @@
         {
           "path": "src/content/docs/developers/live-tv-playback.md",
           "op": "contains",
-          "text": "| `channelNumber` | integer (optional) | Dense 1-based global lineup position |"
+          "text": "| `channelNumber` | integer (optional) | Stable station number (1\u20139999); numbers can have gaps |"
         },
         {
           "path": "src/content/docs/developers/live-tv-playback.md",
@@ -711,8 +711,8 @@
         },
         {
           "path": "src/content/docs/developers/api-routes.md",
-          "op": "excludes",
-          "text": "| `POST` | `/livetv/channels/{id}/stream` | user | Reserve a stream slot |"
+          "op": "contains",
+          "text": "| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` \u2192 `201` with `sessionId`, `streamUrl`, `heartbeatIntervalSeconds` and output details |"
         },
         {
           "path": "src/content/docs/developers/api-routes.md",
@@ -1148,6 +1148,76 @@
           "path": "src/content/docs/reference/environment-variables.md",
           "op": "contains",
           "text": "keep `FFMPEG_MAX_JOBS_PER_USER` well below `LUMASTRA_MAX_CONCURRENT_TRANSCODES`"
+        }
+      ]
+    },
+    {
+      "id": "LIVETV_SESSIONS",
+      "assertions": [
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "The guide returns a bare object `{ programs, windowStart, windowEnd }`, not a paginated collection. `programs` maps each **stationId** to its chronological program array."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "To choose one, pass its `id` as `feedId` when starting a session. It must belong to the station."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "Send every **`heartbeatIntervalSeconds`** from the start response. Success is `204 No Content`."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `evicted` | A higher-priority viewer took the slot | Stop, explain that playback was taken over, and do not auto-rejoin |"
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "`state` is `active` or `ended`; `endReason` uses the same four values below."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `superseded` | Another session replaced this viewer's session | Stop the old player and its keepalive timer |"
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `expired` | The session lifetime elapsed | Stop; start a new session only for a new playback attempt |"
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "| `left` | The session was explicitly ended | Stop and clear its handle |"
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "`/api/v1/livetv/channels/{feedId}/stream/**`; these protocol paths are unchanged."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "contains",
+          "text": "`POST /api/v1/livetv/playback-sessions/{sessionId}/leave` provides the same operation for `navigator.sendBeacon` on unload, with a browser session cookie."
+        },
+        {
+          "path": "src/content/docs/developers/live-tv-playback.md",
+          "op": "excludes",
+          "text": "GET /api/v1/livetv/channels/{id}/stream"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "excludes",
+          "text": "| `GET` | `/livetv/channels`"
+        },
+        {
+          "path": "src/content/docs/developers/api-routes.md",
+          "op": "excludes",
+          "text": "| `POST` | `/livetv/channels/{id}/keepalive`"
         }
       ]
     }

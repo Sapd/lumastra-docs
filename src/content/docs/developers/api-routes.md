@@ -345,14 +345,27 @@ Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/livetv/channels` | user | Channel list with EPG |
-| `GET` | `/livetv/channels/{id}` | user | One channel |
-| `GET` | `/livetv/channels/{id}/programs` | user | EPG programs (`?view=now-next\|day`) |
-| `GET` | `/livetv/channels/{id}/stream` | user | Stream info (JSON) |
-| `GET` | `/livetv/channels/{id}/stream/master.m3u8` | user | HLS master (accepts `api_key`) |
-| `GET` | `/livetv/channels/{id}/stream/{segment}` | user | HLS segment |
-| `POST` | `/livetv/channels/{id}/keepalive` | user | Proxy lease keepalive (204) |
-| `POST/DELETE` | `/livetv/channels/{id}/leave` | user | Leave a channel (204) |
+| `GET` | `/livetv/stations` | user | Stable stations with number, images, shown `feedId` and current program |
+| `GET` | `/livetv/stations/{stationId}` | user | One station with current and next program |
+| `GET` | `/livetv/stations/{stationId}/feeds` | user | Feed choices; pass a feed's `id` as `feedId` when starting playback |
+| `GET` | `/livetv/stations/{stationId}/programs` | user | EPG with required UTC `from` / `to`, at most 8 hours |
+| `GET` | `/livetv/stations/{stationId}/current-program` | user | Currently-airing program (`{ isLive, program? }`) |
+| `GET` | `/livetv/guide` | user | Required `from` / `to` (at most 8 hours), optional `stationIds`; programs keyed by station id |
+| `GET` | `/livetv/programs/search` | user | Program search; `channels[].id` identifies a station |
+| `GET` | `/livetv/availability` | user | Feed-keyed availability; join using the station's `feedId` |
+| `GET/PUT` | `/livetv/favorites` | user | Favorites use `stationIds`; PUT `{ stationId, favorite }` |
+| `PUT` | `/livetv/favorites/order` | user | Reorder favorites with `{ stationIds }` |
+| `GET/PATCH` | `/livetv/simple-mode` | user | Viewer settings use `stationIds`, `startStationId`, `clearStartStation` |
+| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with `sessionId`, `streamUrl`, `heartbeatIntervalSeconds` and output details |
+| `GET` | `/livetv/playback-sessions/{sessionId}` | user (owner) | State (`active` / `ended`), `endReason`, optional `adaptive` / `variant` |
+| `POST` | `/livetv/playback-sessions/{sessionId}/keepalive` | user (owner) | Every `heartbeatIntervalSeconds`; `204` or `410` with `reason: evicted\|superseded\|expired\|left` |
+| `DELETE` | `/livetv/playback-sessions/{sessionId}` | user (owner) | End session (`204`, idempotent) |
+| `POST` | `/livetv/playback-sessions/{sessionId}/leave` | user (owner) | Same cleanup for `sendBeacon` |
+| `GET` | `/livetv/channels/{feedId}/stream/**` | user | Unchanged HLS manifests and segments; use the returned `streamUrl` |
+
+Station and playback-session routes replace the old channel viewer routes
+without aliases. For the complete lifecycle, feed selection, quality options
+and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 
 ### Music
 
