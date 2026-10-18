@@ -107,6 +107,7 @@ export const sidebar = [
 					{ slug: 'developers/building-a-player-state' },
 					{ slug: 'developers/live-tv-playback' },
 					{ slug: 'developers/offline-downloads' },
+					{ slug: 'developers/library-sync' },
 					{ slug: 'developers/music-playback' },
 					{ slug: 'developers/audiobook-playback' },
 					{ slug: 'developers/watch-together' },
