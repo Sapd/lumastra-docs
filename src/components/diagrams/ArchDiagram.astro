@@ -54,8 +54,10 @@ const marker = `arrow-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 			const frame = figure.closest('.main-frame');
 			const frameStart = frame ? frame.getBoundingClientRect().left + parseFloat(getComputedStyle(frame).paddingLeft) : 0;
 			// Center in the space beside the navigation, using equal outer gutters.
-			const left = frameStart + gutter;
-			const width = document.documentElement.clientWidth - left - gutter;
+			const available = document.documentElement.clientWidth - frameStart - 2 * gutter;
+			const maximum = parseFloat(getComputedStyle(figure).maxWidth);
+			const width = Math.min(available, Number.isFinite(maximum) ? maximum : available);
+			const left = frameStart + gutter + (available - width) / 2;
 			// Subtract the current margin so repeated measurements never drift left.
 			const origin = figure.getBoundingClientRect().left - parseFloat(getComputedStyle(figure).marginLeft);
 			for (const [name, value] of [
@@ -134,7 +136,7 @@ const marker = `arrow-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 <style>
 	.connected-diagram { box-sizing: border-box; min-width: 0; margin: 1.5rem 0; padding: 1rem; border: 1px solid #69518e; border-radius: 16px; background: #100b1c; color: #f5f0ff; }
 	@media screen and (min-width: 72rem) {
-		.connected-diagram:dir(ltr):not(:fullscreen) { position: relative; z-index: 1; width: max(100%, var(--diagram-breakout-width, 100%)); margin-inline-start: var(--diagram-breakout-offset, 0px); }
+		.connected-diagram:dir(ltr):not(:fullscreen) { position: relative; z-index: 1; width: max(100%, var(--diagram-breakout-width, 100%)); max-width: 80rem; margin-inline-start: var(--diagram-breakout-offset, 0px); }
 	}
 	figcaption { margin-bottom: 0.6rem; font-size: 1.05rem; font-weight: 700; }
 	.fit-control { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; }
