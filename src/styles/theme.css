@@ -81,3 +81,15 @@
 	backdrop-filter: blur(14px) saturate(140%);
 	border-bottom: 1px solid var(--lum-line);
 }
+
+/* Let only diagram figures paint over the desktop page index. Keeping the main
+   pane at its normal stack level leaves prose and navigation unchanged. */
+@media screen and (min-width: 72rem) {
+	.main-pane:has(.connected-diagram:dir(ltr)) {
+		isolation: auto;
+	}
+	.main-frame:has(.connected-diagram:dir(ltr)) .right-sidebar:focus-within {
+		z-index: 2;
+		background: var(--sl-color-bg);
+	}
+}
