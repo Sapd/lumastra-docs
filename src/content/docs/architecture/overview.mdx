@@ -18,8 +18,9 @@ Lumastra aggregates media metadata from multiple sources, runs AI-powered
 recommendations, and serves a reactive UI built from server-driven page sections.
 Here's how requests, background work and shared state fit together.
 
-The first diagram shows the **components and request flow**; the
-[data tier](#the-layers) they share is shown separately below.
+The first diagram shows the **components and request flow**, including the
+separate task and cache Valkey instances. The full [data tier](#the-layers),
+including PostgreSQL, is shown below.
 
 <OverviewServeDiagram />
 
@@ -49,8 +50,8 @@ The first diagram shows the **components and request flow**; the
   provides BullMQ storage and shared coordination under `noeviction`. A separate
   cache Valkey holds disposable cached data and pub/sub under `allkeys-lru`.
 - **Stream proxy**: an optional separate service owns Live TV streams and media
-  processes independently of worker restarts. TypeScript is the default runtime;
-  the Rust runtime is opt-in. See [Live TV architecture](/architecture/live-tv/).
+  processes independently of worker restarts. See
+  [Live TV architecture](/architecture/live-tv/).
 
 Web nodes and the worker use PostgreSQL and both Valkeys. BullMQ runs against the
 **task Valkey**, while cache entries and pub/sub use the **cache Valkey**:
