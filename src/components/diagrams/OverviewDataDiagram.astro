@@ -3,17 +3,20 @@
 	import type { Node, Edge } from '@xyflow/svelte';
 
 	const nodes: Node[] = [
-		{ id: 'server', type: 'flow', position: { x: 40, y: 0 }, data: { title: 'SvelteKit server', sub: 'web requests', kind: 'app', hasSource: true } },
-		{ id: 'worker', type: 'flow', position: { x: 440, y: 0 }, data: { title: 'Worker process', sub: 'background jobs', kind: 'infra', hasSource: true } },
+		{ id: 'server', type: 'flow', position: { x: 40, y: 0 }, data: { title: 'Web node(s)', sub: 'HTTP / SSR · job producers', kind: 'app', hasSource: true } },
+		{ id: 'worker', type: 'flow', position: { x: 440, y: 0 }, data: { title: 'One worker container', sub: 'Lean Node/TS · Rust watcher child', kind: 'infra', hasSource: true } },
 		{ id: 'postgres', type: 'flow', position: { x: 40, y: 200 }, data: { title: 'PostgreSQL 18', sub: 'pgvector · source of truth · embeddings', kind: 'infra', hasTarget: true } },
-		{ id: 'valkey', type: 'flow', position: { x: 440, y: 200 }, data: { title: 'Valkey 9', sub: 'cache · queues · locks · pub/sub', kind: 'infra', hasTarget: true } },
+		{ id: 'task-valkey', type: 'flow', position: { x: 440, y: 200 }, data: { title: 'Task Valkey', sub: 'TASK_CACHE_URL · persistent · noeviction', kind: 'infra', hasTarget: true } },
+		{ id: 'cache-valkey', type: 'flow', position: { x: 840, y: 200 }, data: { title: 'Cache Valkey', sub: 'CACHE_URL · disposable · allkeys-lru', kind: 'infra', hasTarget: true } },
 	];
 
 	const edges: Edge[] = [
 		{ id: 'e-s-pg', source: 'server', target: 'postgres', label: 'read / write' },
-		{ id: 'e-s-vk', source: 'server', target: 'valkey', label: 'cache' },
+		{ id: 'e-s-task', source: 'server', target: 'task-valkey', label: 'enqueue · coordination' },
+		{ id: 'e-s-cache', source: 'server', target: 'cache-valkey', label: 'cache · pub/sub' },
 		{ id: 'e-w-pg', source: 'worker', target: 'postgres', label: 'task & media state' },
-		{ id: 'e-w-vk', source: 'worker', target: 'valkey', label: 'queues · locks' },
+		{ id: 'e-w-task', source: 'worker', target: 'task-valkey', label: 'consume · coordination' },
+		{ id: 'e-w-cache', source: 'worker', target: 'cache-valkey', label: 'cache · pub/sub' },
 	];
 ---
 

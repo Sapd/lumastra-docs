@@ -4,10 +4,12 @@
 
 	const nodes: Node[] = [
 		{ id: 'browser', type: 'flow', position: { x: 240, y: 0 }, data: { title: 'Browser / PWA', sub: 'Svelte 5 · HLS player · service worker', kind: 'viewer', hasSource: true } },
-		{ id: 'auth', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Auth layer', sub: 'forward-auth · JWT · PAT · device flow', kind: 'proxy', hasTarget: true, hasSource: true } },
-		{ id: 'server', type: 'flow', position: { x: 240, y: 170 }, data: { title: 'SvelteKit server', sub: 'API · SSR · services · image proxy', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'proxy', type: 'flow', position: { x: 480, y: 170 }, data: { title: 'Stream Proxy', sub: 'Live TV · HLS', kind: 'default', hasTarget: true } },
-		{ id: 'worker', type: 'flow', position: { x: 360, y: 350 }, data: { title: 'Worker process', sub: 'BullMQ · background jobs', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'auth', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Auth in each web node', sub: 'forward-auth · JWT · PAT · device flow', kind: 'proxy', hasTarget: true, hasSource: true } },
+		{ id: 'server', type: 'flow', position: { x: 240, y: 170 }, data: { title: 'Web node(s)', sub: 'SvelteKit · API / SSR · task producers', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'proxy', type: 'flow', position: { x: 480, y: 170 }, data: { title: 'Stream proxy (optional)', sub: 'TypeScript default · Rust opt-in', kind: 'default', hasTarget: true } },
+		{ id: 'worker', type: 'flow', position: { x: 360, y: 350 }, data: { title: 'One worker container', sub: 'Lean Node/TS · Rust watcher child', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'task-valkey', type: 'flow', position: { x: 240, y: 270 }, data: { title: 'Task Valkey', sub: 'Persistent · noeviction · BullMQ', kind: 'infra', hasTarget: true, hasSource: true } },
+		{ id: 'library', type: 'flow', position: { x: 600, y: 270 }, data: { title: 'Library files', sub: 'Mounted inside the worker container', kind: 'source', hasSource: true } },
 		{ id: 'external', type: 'flow', position: { x: 240, y: 520 }, data: { title: 'External APIs', sub: 'TMDB · Jellyfin · OpenAI · MDBList', kind: 'ext', hasTarget: true } },
 	];
 
@@ -16,7 +18,9 @@
 		{ id: 'e-br-server', source: 'browser', target: 'server', label: 'HTTP · SSE' },
 		{ id: 'e-br-proxy', source: 'browser', target: 'proxy', label: 'HLS' },
 		{ id: 'e-auth-server', source: 'auth', target: 'server', label: 'identity' },
-		{ id: 'e-server-worker', source: 'server', target: 'worker', label: 'enqueue jobs' },
+		{ id: 'e-server-queue', source: 'server', target: 'task-valkey', label: 'enqueue jobs' },
+		{ id: 'e-queue-worker', source: 'task-valkey', target: 'worker', label: 'deliver jobs' },
+		{ id: 'e-library-worker', source: 'library', target: 'worker', label: 'immediate filesystem events' },
 		{ id: 'e-server-ext', source: 'server', target: 'external', label: 'metadata · images' },
 		{ id: 'e-worker-ext', source: 'worker', target: 'external', label: 'ingest · embeddings' },
 	];

@@ -3578,36 +3578,37 @@
     ]
   },
   "Shared data stores": {
-    "width": 810.9333333333333,
-    "height": 365,
+    "width": 1220.2,
+    "height": 422,
     "nodes": [
       {
         "id": "server",
         "width": 230,
         "height": 71,
         "$H": 1338,
-        "x": 404.73333333333335,
-        "y": 28,
+        "x": 400.5,
+        "y": 45,
         "title": [
-          "SvelteKit server"
+          "Web node(s)"
         ],
         "sub": [
-          "web requests"
+          "HTTP / SSR · job producers"
         ],
         "kind": "app"
       },
       {
         "id": "worker",
         "width": 230,
-        "height": 71,
+        "height": 88,
         "$H": 1340,
-        "x": 109.73333333333333,
+        "x": 105.5,
         "y": 28,
         "title": [
-          "Worker process"
+          "One worker container"
         ],
         "sub": [
-          "background jobs"
+          "Lean Node/TS · Rust watcher",
+          "child"
         ],
         "kind": "infra"
       },
@@ -3616,8 +3617,8 @@
         "width": 230,
         "height": 88,
         "$H": 1342,
-        "x": 109.73333333333333,
-        "y": 249,
+        "x": 560.7333333333333,
+        "y": 306,
         "title": [
           "PostgreSQL 18"
         ],
@@ -3628,18 +3629,34 @@
         "kind": "infra"
       },
       {
-        "id": "valkey",
+        "id": "task-valkey",
         "width": 230,
         "height": 88,
         "$H": 1344,
-        "x": 552.9333333333333,
-        "y": 249,
+        "x": 903.9333333333333,
+        "y": 306,
         "title": [
-          "Valkey 9"
+          "Task Valkey"
         ],
         "sub": [
-          "cache · queues · locks ·",
-          "pub/sub"
+          "TASK_CACHE_URL · persistent",
+          "· noeviction"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "cache-valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 1346,
+        "x": 86.33333333333333,
+        "y": 306,
+        "title": [
+          "Cache Valkey"
+        ],
+        "sub": [
+          "CACHE_URL · disposable ·",
+          "allkeys-lru"
         ],
         "kind": "infra"
       }
@@ -3659,29 +3676,37 @@
             "text": "read / write",
             "width": 109.6,
             "height": 30,
-            "x": 369.79999999999995,
-            "y": 169
+            "x": 658.4,
+            "y": 226
           }
         ],
         "sections": [
           {
             "id": "e-s-pg_s0",
             "startPoint": {
-              "x": 481.40000000000003,
-              "y": 99
+              "x": 515.5,
+              "y": 116
             },
             "endPoint": {
-              "x": 263.06666666666666,
-              "y": 249
+              "x": 714.0666666666667,
+              "y": 306
             },
             "bendPoints": [
               {
-                "x": 481.4,
-                "y": 224
+                "x": 515.5,
+                "y": 161
               },
               {
-                "x": 263.06666666666666,
-                "y": 224
+                "x": 770,
+                "y": 161
+              },
+              {
+                "x": 770,
+                "y": 281
+              },
+              {
+                "x": 714.0666666666667,
+                "y": 281
               }
             ],
             "incomingShape": "server",
@@ -3689,61 +3714,107 @@
           }
         ],
         "container": "root",
-        "path": "M 481.40000000000003 99 L 481.4 224 L 263.06666666666666 224 L 263.06666666666666 249"
+        "path": "M 515.5 116 L 515.5 161 L 770 161 L 770 281 L 714.0666666666667 281 L 714.0666666666667 306"
       },
       {
-        "id": "e-s-vk",
+        "id": "e-s-task",
         "sources": [
           "server"
         ],
         "targets": [
-          "valkey"
+          "task-valkey"
         ],
         "labels": [
           {
-            "id": "e-s-vk-label",
-            "text": "cache",
-            "width": 55,
+            "id": "e-s-task-label",
+            "text": "enqueue · coordination",
+            "width": 187.6,
             "height": 30,
-            "x": 650.5999999999999,
-            "y": 169
+            "x": 1001.6,
+            "y": 226
           }
         ],
         "sections": [
           {
-            "id": "e-s-vk_s0",
+            "id": "e-s-task_s0",
             "startPoint": {
-              "x": 558.0666666666667,
-              "y": 99
+              "x": 573,
+              "y": 116
             },
             "endPoint": {
-              "x": 706.2666666666667,
-              "y": 249
+              "x": 1057.2666666666667,
+              "y": 306
             },
             "bendPoints": [
               {
-                "x": 558.0666666666667,
-                "y": 124
+                "x": 573,
+                "y": 141
               },
               {
-                "x": 707.5999999999999,
-                "y": 124
+                "x": 1191.2,
+                "y": 141
               },
               {
-                "x": 707.5999999999999,
-                "y": 224
+                "x": 1191.2,
+                "y": 281
               },
               {
-                "x": 706.2666666666667,
-                "y": 224
+                "x": 1057.2666666666667,
+                "y": 281
               }
             ],
             "incomingShape": "server",
-            "outgoingShape": "valkey"
+            "outgoingShape": "task-valkey"
           }
         ],
         "container": "root",
-        "path": "M 558.0666666666667 99 L 558.0666666666667 124 L 707.5999999999999 124 L 707.5999999999999 224 L 706.2666666666667 224 L 706.2666666666667 249"
+        "path": "M 573 116 L 573 141 L 1191.2 141 L 1191.2 281 L 1057.2666666666667 281 L 1057.2666666666667 306"
+      },
+      {
+        "id": "e-s-cache",
+        "sources": [
+          "server"
+        ],
+        "targets": [
+          "cache-valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-s-cache-label",
+            "text": "cache · pub/sub",
+            "width": 133,
+            "height": 30,
+            "x": 323,
+            "y": 226
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-s-cache_s0",
+            "startPoint": {
+              "x": 458,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 239.66666666666669,
+              "y": 306
+            },
+            "bendPoints": [
+              {
+                "x": 458,
+                "y": 281
+              },
+              {
+                "x": 239.66666666666669,
+                "y": 281
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "cache-valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 458 116 L 458 281 L 239.66666666666669 281 L 239.66666666666669 306"
       },
       {
         "id": "e-w-pg",
@@ -3759,86 +3830,132 @@
             "text": "task & media state",
             "width": 156.4,
             "height": 30,
-            "x": 28,
-            "y": 169
+            "x": 479,
+            "y": 226
           }
         ],
         "sections": [
           {
             "id": "e-w-pg_s0",
             "startPoint": {
-              "x": 186.4,
-              "y": 99
+              "x": 220.5,
+              "y": 116
             },
             "endPoint": {
-              "x": 186.4,
-              "y": 249
+              "x": 637.4,
+              "y": 306
             },
+            "bendPoints": [
+              {
+                "x": 220.5,
+                "y": 201
+              },
+              {
+                "x": 637.4,
+                "y": 201
+              }
+            ],
             "incomingShape": "worker",
             "outgoingShape": "postgres"
           }
         ],
         "container": "root",
-        "path": "M 186.4 99 L 186.4 249"
+        "path": "M 220.5 116 L 220.5 201 L 637.4 201 L 637.4 306"
       },
       {
-        "id": "e-w-vk",
+        "id": "e-w-task",
         "sources": [
           "worker"
         ],
         "targets": [
-          "valkey"
+          "task-valkey"
         ],
         "labels": [
           {
-            "id": "e-w-vk-label",
-            "text": "queues · locks",
-            "width": 125.2,
+            "id": "e-w-task-label",
+            "text": "consume · coordination",
+            "width": 187.6,
             "height": 30,
-            "x": 502.3999999999999,
-            "y": 169
+            "x": 791,
+            "y": 226
           }
         ],
         "sections": [
           {
-            "id": "e-w-vk_s0",
+            "id": "e-w-task_s0",
             "startPoint": {
-              "x": 263.06666666666666,
-              "y": 99
+              "x": 278,
+              "y": 116
             },
             "endPoint": {
-              "x": 629.5999999999999,
-              "y": 249
+              "x": 980.5999999999999,
+              "y": 306
             },
             "bendPoints": [
               {
-                "x": 263.06666666666666,
-                "y": 144
+                "x": 278,
+                "y": 181
               },
               {
-                "x": 629.5999999999999,
-                "y": 144
+                "x": 980.6,
+                "y": 181
               }
             ],
             "incomingShape": "worker",
-            "outgoingShape": "valkey"
+            "outgoingShape": "task-valkey"
           }
         ],
         "container": "root",
-        "path": "M 263.06666666666666 99 L 263.06666666666666 144 L 629.5999999999999 144 L 629.5999999999999 249"
+        "path": "M 278 116 L 278 181 L 980.6 181 L 980.5999999999999 306"
+      },
+      {
+        "id": "e-w-cache",
+        "sources": [
+          "worker"
+        ],
+        "targets": [
+          "cache-valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-w-cache-label",
+            "text": "cache · pub/sub",
+            "width": 133,
+            "height": 30,
+            "x": 28,
+            "y": 226
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-w-cache_s0",
+            "startPoint": {
+              "x": 163,
+              "y": 116
+            },
+            "endPoint": {
+              "x": 163,
+              "y": 306
+            },
+            "incomingShape": "worker",
+            "outgoingShape": "cache-valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 163 116 L 163 306"
       }
     ]
   },
   "Components and request flow": {
-    "width": 797.5999999999999,
-    "height": 939,
+    "width": 848.2,
+    "height": 1179,
     "nodes": [
       {
         "id": "browser",
         "width": 230,
         "height": 88,
-        "$H": 1401,
-        "x": 323,
+        "$H": 1428,
+        "x": 550.7,
         "y": 28,
         "title": [
           "Browser / PWA"
@@ -3853,11 +3970,11 @@
         "id": "auth",
         "width": 230,
         "height": 88,
-        "$H": 1403,
-        "x": 323,
-        "y": 231,
+        "$H": 1430,
+        "x": 428.20000000000005,
+        "y": 251,
         "title": [
-          "Auth layer"
+          "Auth in each web node"
         ],
         "sub": [
           "forward-auth · JWT · PAT ·",
@@ -3869,55 +3986,89 @@
         "id": "server",
         "width": 230,
         "height": 88,
-        "$H": 1405,
-        "x": 464.66666666666663,
-        "y": 434,
+        "$H": 1432,
+        "x": 569.8666666666667,
+        "y": 454,
         "title": [
-          "SvelteKit server"
+          "Web node(s)"
         ],
         "sub": [
-          "API · SSR · services · image",
-          "proxy"
+          "SvelteKit · API / SSR · task",
+          "producers"
         ],
         "kind": "app"
       },
       {
         "id": "proxy",
         "width": 230,
-        "height": 71,
-        "$H": 1407,
-        "x": 28,
-        "y": 231,
+        "height": 88,
+        "$H": 1434,
+        "x": 133.20000000000005,
+        "y": 251,
         "title": [
-          "Stream Proxy"
+          "Stream proxy (optional)"
         ],
         "sub": [
-          "Live TV · HLS"
+          "TypeScript default · Rust",
+          "opt-in"
         ],
         "kind": "default"
       },
       {
         "id": "worker",
         "width": 230,
-        "height": 71,
-        "$H": 1409,
-        "x": 323,
-        "y": 637,
+        "height": 88,
+        "$H": 1436,
+        "x": 398.2666666666667,
+        "y": 860,
         "title": [
-          "Worker process"
+          "One worker container"
         ],
         "sub": [
-          "BullMQ · background jobs"
+          "Lean Node/TS · Rust watcher",
+          "child"
         ],
         "kind": "infra"
+      },
+      {
+        "id": "task-valkey",
+        "width": 230,
+        "height": 88,
+        "$H": 1438,
+        "x": 436.6,
+        "y": 657,
+        "title": [
+          "Task Valkey"
+        ],
+        "sub": [
+          "Persistent · noeviction ·",
+          "BullMQ"
+        ],
+        "kind": "infra"
+      },
+      {
+        "id": "library",
+        "width": 230,
+        "height": 88,
+        "$H": 1440,
+        "x": 141.60000000000002,
+        "y": 657,
+        "title": [
+          "Library files"
+        ],
+        "sub": [
+          "Mounted inside the worker",
+          "container"
+        ],
+        "kind": "source"
       },
       {
         "id": "external",
         "width": 230,
         "height": 88,
-        "$H": 1411,
-        "x": 464.66666666666663,
-        "y": 823,
+        "$H": 1442,
+        "x": 569.8666666666667,
+        "y": 1063,
         "title": [
           "External APIs"
         ],
@@ -3943,27 +4094,37 @@
             "text": "sign in",
             "width": 70.6,
             "height": 30,
-            "x": 365.4,
-            "y": 166
+            "x": 470.6,
+            "y": 186
           }
         ],
         "sections": [
           {
             "id": "e-br-auth_s0",
             "startPoint": {
-              "x": 438,
+              "x": 665.7,
               "y": 116
             },
             "endPoint": {
-              "x": 438,
-              "y": 231
+              "x": 543.2,
+              "y": 251
             },
+            "bendPoints": [
+              {
+                "x": 665.7,
+                "y": 161
+              },
+              {
+                "x": 543.2,
+                "y": 161
+              }
+            ],
             "incomingShape": "browser",
             "outgoingShape": "auth"
           }
         ],
         "container": "root",
-        "path": "M 438 116 L 438 231"
+        "path": "M 665.7 116 L 665.7 161 L 543.2 161 L 543.2 251"
       },
       {
         "id": "e-br-server",
@@ -3979,37 +4140,27 @@
             "text": "HTTP · SSE",
             "width": 94,
             "height": 30,
-            "x": 621,
-            "y": 260
+            "x": 726.2,
+            "y": 280
           }
         ],
         "sections": [
           {
             "id": "e-br-server_s0",
             "startPoint": {
-              "x": 495.5,
+              "x": 723.2,
               "y": 116
             },
             "endPoint": {
-              "x": 618,
-              "y": 434
+              "x": 723.2,
+              "y": 454
             },
-            "bendPoints": [
-              {
-                "x": 495.5,
-                "y": 141
-              },
-              {
-                "x": 618,
-                "y": 141
-              }
-            ],
             "incomingShape": "browser",
             "outgoingShape": "server"
           }
         ],
         "container": "root",
-        "path": "M 495.5 116 L 495.5 141 L 618 141 L 618 434"
+        "path": "M 723.2 116 L 723.2 454"
       },
       {
         "id": "e-br-proxy",
@@ -4025,28 +4176,28 @@
             "text": "HLS",
             "width": 39.4,
             "height": 30,
-            "x": 101.60000000000002,
-            "y": 166
+            "x": 206.80000000000007,
+            "y": 186
           }
         ],
         "sections": [
           {
             "id": "e-br-proxy_s0",
             "startPoint": {
-              "x": 380.5,
+              "x": 608.2,
               "y": 116
             },
             "endPoint": {
-              "x": 143,
-              "y": 231
+              "x": 248.20000000000005,
+              "y": 251
             },
             "bendPoints": [
               {
-                "x": 380.5,
+                "x": 608.2,
                 "y": 141
               },
               {
-                "x": 143,
+                "x": 248.20000000000005,
                 "y": 141
               }
             ],
@@ -4055,7 +4206,7 @@
           }
         ],
         "container": "root",
-        "path": "M 380.5 116 L 380.5 141 L 143 141 L 143 231"
+        "path": "M 608.2 116 L 608.2 141 L 248.20000000000005 141 L 248.20000000000005 251"
       },
       {
         "id": "e-auth-server",
@@ -4071,29 +4222,29 @@
             "text": "identity",
             "width": 78.4,
             "height": 30,
-            "x": 357.59999999999997,
-            "y": 354
+            "x": 462.80000000000007,
+            "y": 374
           }
         ],
         "sections": [
           {
             "id": "e-auth-server_s0",
             "startPoint": {
-              "x": 438,
-              "y": 319
+              "x": 543.2,
+              "y": 339
             },
             "endPoint": {
-              "x": 541.3333333333333,
-              "y": 434
+              "x": 646.5333333333333,
+              "y": 454
             },
             "bendPoints": [
               {
-                "x": 438,
-                "y": 409
+                "x": 543.2,
+                "y": 429
               },
               {
-                "x": 541.3333333333333,
-                "y": 409
+                "x": 646.5333333333334,
+                "y": 429
               }
             ],
             "incomingShape": "auth",
@@ -4101,53 +4252,135 @@
           }
         ],
         "container": "root",
-        "path": "M 438 319 L 438 409 L 541.3333333333333 409 L 541.3333333333333 434"
+        "path": "M 543.2 339 L 543.2 429 L 646.5333333333334 429 L 646.5333333333333 454"
       },
       {
-        "id": "e-server-worker",
+        "id": "e-server-queue",
         "sources": [
           "server"
+        ],
+        "targets": [
+          "task-valkey"
+        ],
+        "labels": [
+          {
+            "id": "e-server-queue-label",
+            "text": "enqueue jobs",
+            "width": 109.6,
+            "height": 30,
+            "x": 440.00000000000006,
+            "y": 592
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-server-queue_s0",
+            "startPoint": {
+              "x": 646.5333333333333,
+              "y": 542
+            },
+            "endPoint": {
+              "x": 551.6,
+              "y": 657
+            },
+            "bendPoints": [
+              {
+                "x": 646.5333333333334,
+                "y": 567
+              },
+              {
+                "x": 551.6,
+                "y": 567
+              }
+            ],
+            "incomingShape": "server",
+            "outgoingShape": "task-valkey"
+          }
+        ],
+        "container": "root",
+        "path": "M 646.5333333333333 542 L 646.5333333333334 567 L 551.6 567 L 551.6 657"
+      },
+      {
+        "id": "e-queue-worker",
+        "sources": [
+          "task-valkey"
         ],
         "targets": [
           "worker"
         ],
         "labels": [
           {
-            "id": "e-server-worker-label",
-            "text": "enqueue jobs",
+            "id": "e-queue-worker-label",
+            "text": "deliver jobs",
             "width": 109.6,
             "height": 30,
-            "x": 326.4,
-            "y": 572
+            "x": 440.00000000000006,
+            "y": 780
           }
         ],
         "sections": [
           {
-            "id": "e-server-worker_s0",
+            "id": "e-queue-worker_s0",
             "startPoint": {
-              "x": 541.3333333333333,
-              "y": 522
+              "x": 551.6,
+              "y": 745
             },
             "endPoint": {
-              "x": 438,
-              "y": 637
+              "x": 551.6,
+              "y": 860
             },
-            "bendPoints": [
-              {
-                "x": 541.3333333333333,
-                "y": 547
-              },
-              {
-                "x": 438,
-                "y": 547
-              }
-            ],
-            "incomingShape": "server",
+            "incomingShape": "task-valkey",
             "outgoingShape": "worker"
           }
         ],
         "container": "root",
-        "path": "M 541.3333333333333 522 L 541.3333333333333 547 L 438 547 L 438 637"
+        "path": "M 551.6 745 L 551.6 860"
+      },
+      {
+        "id": "e-library-worker",
+        "sources": [
+          "library"
+        ],
+        "targets": [
+          "worker"
+        ],
+        "labels": [
+          {
+            "id": "e-library-worker-label",
+            "text": "immediate filesystem events",
+            "width": 226.6,
+            "height": 30,
+            "x": 28,
+            "y": 780
+          }
+        ],
+        "sections": [
+          {
+            "id": "e-library-worker_s0",
+            "startPoint": {
+              "x": 256.6,
+              "y": 745
+            },
+            "endPoint": {
+              "x": 474.9333333333334,
+              "y": 860
+            },
+            "bendPoints": [
+              {
+                "x": 256.6,
+                "y": 835
+              },
+              {
+                "x": 474.9333333333334,
+                "y": 835
+              }
+            ],
+            "incomingShape": "library",
+            "outgoingShape": "worker"
+          }
+        ],
+        "container": "root",
+        "path": "M 256.6 745 L 256.6 835 L 474.9333333333334 835 L 474.9333333333334 860"
       },
       {
         "id": "e-server-ext",
@@ -4163,27 +4396,27 @@
             "text": "metadata · images",
             "width": 148.6,
             "height": 30,
-            "x": 621,
-            "y": 657.5
+            "x": 572.6,
+            "y": 780
           }
         ],
         "sections": [
           {
             "id": "e-server-ext_s0",
             "startPoint": {
-              "x": 618,
-              "y": 522
+              "x": 723.2,
+              "y": 542
             },
             "endPoint": {
-              "x": 618,
-              "y": 823
+              "x": 723.2,
+              "y": 1063
             },
             "incomingShape": "server",
             "outgoingShape": "external"
           }
         ],
         "container": "root",
-        "path": "M 618 522 L 618 823"
+        "path": "M 723.2 542 L 723.2 1063"
       },
       {
         "id": "e-worker-ext",
@@ -4199,29 +4432,29 @@
             "text": "ingest · embeddings",
             "width": 164.2,
             "height": 30,
-            "x": 271.79999999999995,
-            "y": 743
+            "x": 347.0666666666667,
+            "y": 983
           }
         ],
         "sections": [
           {
             "id": "e-worker-ext_s0",
             "startPoint": {
-              "x": 438,
-              "y": 708
+              "x": 513.2666666666667,
+              "y": 948
             },
             "endPoint": {
-              "x": 541.3333333333333,
-              "y": 823
+              "x": 646.5333333333333,
+              "y": 1063
             },
             "bendPoints": [
               {
-                "x": 438,
-                "y": 798
+                "x": 513.2666666666667,
+                "y": 1038
               },
               {
-                "x": 541.3333333333333,
-                "y": 798
+                "x": 646.5333333333334,
+                "y": 1038
               }
             ],
             "incomingShape": "worker",
@@ -4229,7 +4462,7 @@
           }
         ],
         "container": "root",
-        "path": "M 438 708 L 438 798 L 541.3333333333333 798 L 541.3333333333333 823"
+        "path": "M 513.2666666666667 948 L 513.2666666666667 1038 L 646.5333333333334 1038 L 646.5333333333333 1063"
       }
     ]
   },

@@ -8,12 +8,15 @@ sidebar:
 import OverviewServeDiagram from '../../../components/diagrams/OverviewServeDiagram.astro';
 import OverviewDataDiagram from '../../../components/diagrams/OverviewDataDiagram.astro';
 
-Lumastra is a single SvelteKit full-stack application (SSR pages plus API routes)
-backed by PostgreSQL + pgvector and Valkey, with a separate worker process for
-background jobs. It aggregates media metadata from multiple sources, runs
-AI-powered recommendations, and serves a reactive UI built from server-driven
-page sections instead of hardcoded layouts. Here's how a request travels
-through it, what stores the data, and where the optional pieces plug in.
+Lumastra runs one or more SvelteKit web nodes and one dedicated background worker,
+backed by PostgreSQL + pgvector and two separate Valkey instances. The web nodes
+serve SSR pages and API routes; the lean Node/TypeScript worker runs existing
+TypeScript tasks and plugins, with a supervised Rust file watcher inside the same
+worker container. An optional stream proxy handles Live TV independently.
+
+Lumastra aggregates media metadata from multiple sources, runs AI-powered
+recommendations, and serves a reactive UI built from server-driven page sections.
+Here's how requests, background work and shared state fit together.
 
 The first diagram shows the **components and request flow**; the
 [data tier](#the-layers) they share is shown separately below.
@@ -27,20 +30,30 @@ The first diagram shows the **components and request flow**; the
   hardcoded: the server returns arrays of page sections that the client renders
   generically, so different users can see different layouts with no code
   changes.
-- **SvelteKit server**: API routes and SSR pages, authentication (forward auth
+- **Web node(s)**: API routes and SSR pages, authentication (forward auth
   headers for browsers; JWT/PAT tokens for `/api/v1`), an image proxy, and a
-  services layer (catalog, media, image proxy, task orchestration). A request
+  services layer (catalog, media and playback). Web nodes submit background jobs
+  and provide task administration. A request
   flows `hooks.server.ts → auth middleware → route handler → service layer →
   query module → database`; routes issuing SQL directly is a lint warning, not
   a hard rule, so a handful of routes (e.g. the migration-status health check)
   still do.
-- **Data & infrastructure**: PostgreSQL 18 + pgvector (catalog, users, sessions,
-  task history, embeddings, watch state), Valkey 9 (cache, task queues, locks,
-  pub/sub), a BullMQ **worker** for background jobs, and an optional stream proxy
-  for Live TV / HLS.
+- **Dedicated worker**: one lean Node/TypeScript host runs BullMQ consumers,
+  orchestration, scheduling and existing task/plugin code. Its supervised Rust
+  watcher reports filesystem changes immediately. The watcher is a child process
+  in the worker container; Docker and Kubernetes use the same arrangement. Web
+  nodes run no task consumers, scheduler or file watcher. Combined web/worker mode
+  is unsupported.
+- **Data & infrastructure**: PostgreSQL 18 + pgvector stores catalog, users,
+  sessions, task history, embeddings and watch state. A persistent task Valkey
+  provides BullMQ storage and shared coordination under `noeviction`. A separate
+  cache Valkey holds disposable cached data and pub/sub under `allkeys-lru`.
+- **Stream proxy**: an optional separate service owns Live TV streams and media
+  processes independently of worker restarts. TypeScript is the default runtime;
+  the Rust runtime is opt-in. See [Live TV architecture](/architecture/live-tv/).
 
-Both the web server and the worker share the same two stores, Postgres as the
-source of truth and Valkey as the cache and queue:
+Web nodes and the worker use PostgreSQL and both Valkeys. BullMQ runs against the
+**task Valkey**, while cache entries and pub/sub use the **cache Valkey**:
 
 <OverviewDataDiagram />
 
@@ -56,9 +69,12 @@ source of truth and Valkey as the cache and queue:
   three-tier split exists instead of an ORM. Similarity queries always use the
   `<=>` (cosine distance) operator; `<->` (L2) and `<#>` (inner product) are
   never used, so every kNN query stays HNSW-eligible.
-- **Task system**: a distributed, BullMQ-backed background system (orchestrator +
-  worker) handles metadata sync, image and frame extraction, and embedding
-  generation, with health and attention surfaces in the admin UI.
+- **Task system**: web nodes submit work through BullMQ; one dedicated worker
+  handles metadata sync, image and frame extraction, and embedding generation.
+  Existing TypeScript tasks/plugins keep their execution contracts. The Rust
+  watcher reports library changes to that worker for ingestion and dispatch.
+  Health and attention surfaces remain in the admin UI. See
+  [Task system](/architecture/task-system/) for execution and recovery details.
 - **Cluster**: multiple replicas coordinate via Valkey heartbeats (TTL keys for
   live state) with transitions recorded in Postgres. Give each replica a stable
   `INSTANCE_ID`.
@@ -67,14 +83,23 @@ source of truth and Valkey as the cache and queue:
 
 ### Valkey's roles
 
-Beyond caching hot media metadata and search results, Valkey backs the task
-queues (BullMQ job storage, split across resource classes), per-resource-class
-orchestrator leader locks, per-run log buffers streamed to the admin UI, and
-pub/sub for real-time admin updates. The shipped single-instance default runs
-Valkey under `noeviction` with no memory cap, so task-system keys are never
-evicted while cache entries expire on their own. If you need a hard memory limit,
-an optional second Valkey takes the cache under `allkeys-lru`, and the task
-keyspace stays on the `noeviction` one (`TASK_CACHE_URL`).
+The supported deployment uses two instances with different loss policies:
+
+| Instance | Endpoint | Responsibility | Policy |
+| --- | --- | --- | --- |
+| Task Valkey | `TASK_CACHE_URL` | BullMQ jobs, live task state, locks and shared auth/session/playback coordination | Persistent storage, `noeviction` |
+| Cache Valkey | `CACHE_URL` | Disposable cached metadata/search results and pub/sub notifications, including task cancellation and admin updates | Memory limit, `allkeys-lru` |
+
+PostgreSQL remains the source of truth for durable task history and domain data.
+BullMQ uses the task Valkey for job delivery. Per-run logs and heartbeats also use
+Valkey; these responsibilities span more than a disposable metadata cache.
+
+Configure distinct servers explicitly. Different database numbers or passwords
+on one Valkey do not separate eviction policy. `TASK_CACHE_URL` is required and
+never falls back to `CACHE_URL`; startup rejects equivalent normalized host/port
+endpoints. Different DNS aliases or proxies still need operator verification
+that they lead to separate instances. See
+[Deployment](/guides/deployment/) and [Configuration](/guides/configuration/).
 
 ### External integrations
 
