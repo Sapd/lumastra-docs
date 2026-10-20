@@ -76,7 +76,10 @@ Update it only when its version changes and expect an interruption.
 Update the singleton worker to the same image as the web tier in the same release.
 Its in-flight jobs pause and resume, but version skew can break schema or task
 contracts. On Docker, recreate it immediately after the web swap. PostgreSQL and
-Valkey updates are separate operations.
+Valkey updates are separate operations. Only one worker may hold the singleton lease, so
+start the replacement only after the old one has exited. A hard-killed worker delays its
+replacement by up to 30 s. The worker's readiness (`/api/health/ready`) is `503` while another
+worker holds the lease or an upgrade is prepared.
 
 ## On Kubernetes: mostly native
 

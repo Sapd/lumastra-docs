@@ -82,6 +82,8 @@ Mostly relevant for **very large libraries** or busy servers. See
 | `DISABLE_FILE_LIBRARY_SCAN` | `false` | `true` stops scheduled, manual and API-triggered library scans and file reconciliation. Leave it `false` if you trigger scans yourself. On inotify-less media (S3/Mountpoint), periodic scans ingest new files. |
 | `LUMASTRA_SCAN_STAT_BATCH_SIZE`    | `200`   | Files `stat()`-ed per triage batch. Lower only for very slow storage.   |
 | `LUMASTRA_DB_POOL_WEB_MAX`         | `8`     | Postgres pool size for user-facing web/API requests                     |
+| `TASK_RUNTIME_LIVENESS_STALL_SECONDS` | `600` | Worker liveness fails when the scheduler and consumer loops make no progress for this long |
+| `TASK_UPGRADE_PREPARED_TIMEOUT_MS` | `900000` | A worker prepared for an upgrade resumes by itself after this long without stop or resume |
 | `LUMASTRA_DB_POOL_TASK_MAX`        | `7`     | Postgres pool size for background tasks/scans (raise on a worker container) |
 | `LUMASTRA_DB_POOL_ADMIN_MAX`       | `4`     | Postgres pool size for admin polling                                    |
 | `UV_THREADPOOL_SIZE`               | `64`*   | libuv threads for async file/DNS/crypto ops (*image default; Node's is 4). Large so file I/O can't starve DNS/DB connects. |

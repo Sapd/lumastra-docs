@@ -306,6 +306,14 @@ docker exec "$VALKEY_CONTAINER" valkey-cli --no-auth-warning -a "$VPASS" DEL "bu
 
 Otherwise restart the worker. Boot recovery reconciles remaining state.
 
+Also check the worker's readiness: `curl -s http://127.0.0.1:3000/api/health/ready` inside the
+worker container returns `503` with the reasons. If the log shows
+`Another worker holds the singleton lease`, a second worker is running (an old container, a
+stray replica). Only one worker holds the lease (table `task_worker_lease`) and runs tasks;
+stop the extra one. After a hard kill the replacement waits up to 30 s for the lease to
+expire. A worker whose scheduler and consumer loops make no progress for
+`TASK_RUNTIME_LIVENESS_STALL_SECONDS` (default 600) fails liveness and is restarted.
+
 ---
 
 ## Recipe 6: Same task firing in a tight loop
@@ -680,13 +688,18 @@ policies or suspend a deployment controller.
    Readiness is deliberately unavailable while preparing or prepared. Claims and
    local scheduler dispatch stay paused until resume or shutdown. Accepted queued
    jobs, delays and existing administrator pauses are preserved.
-3. Copy the exact `instance` from that prepared receipt and request guarded stop:
+3. Copy the one-time `nonce` from the prepare response (status does not show it) and
+   request guarded stop. Use `-` instead of the nonce to read it from stdin, so it stays out
+   of the process list:
 
    ```bash
-   RECEIPT_INSTANCE=replace-with-the-prepared-instance
-   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --stop-upgrade "$UPGRADE_SOCKET" "$RECEIPT_INSTANCE"
+   PREPARE_NONCE=replace-with-the-nonce-from-prepare
+   docker exec "$WORKER_CONTAINER" node build/task-runtime.js --stop-upgrade "$UPGRADE_SOCKET" "$PREPARE_NONCE"
+   # or: printf %s "$PREPARE_NONCE" | docker exec -i "$WORKER_CONTAINER" node build/task-runtime.js --stop-upgrade "$UPGRADE_SOCKET" -
    docker wait "$WORKER_CONTAINER"
    ```
+
+   The instance id no longer works as a stop token. Lost the nonce? Resume and prepare again.
 
    Observe the old container's actual termination and check its exit result before
    starting the replacement through your deployment tooling. A `stopping` response
@@ -702,6 +715,11 @@ policies or suspend a deployment controller.
    Confirm readiness and task progress return, unless the task was already
    administratively paused. Do not terminate or start a replacement on
    `postponed`, `unknown` or a missing receipt.
+
+A prepared worker that gets neither stop nor resume resumes by itself after
+`TASK_UPGRADE_PREPARED_TIMEOUT_MS` (default 15 minutes), and its nonce stops working. A second
+prepare while prepared is refused (`already_prepared`, exit 2, no nonce). Resume first if you
+need a new one.
 
 Preparation has a 30-second work budget and a separate bounded restoration window.
 A long task or an active parent needing a queued child can postpone the upgrade;

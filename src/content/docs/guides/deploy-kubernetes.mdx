@@ -818,6 +818,16 @@ that may scrape `/metrics`. A NetworkPolicy cannot filter by path, so those peer
 all of port 3000. With forward auth they are as trusted as the router. Your cluster's
 CNI must enforce NetworkPolicy.
 
+`networkPolicy.internal` (default `true`) is separate and renders even while
+`networkPolicy.enabled` is `false`. It isolates the parts that never need outside traffic:
+the worker accepts ingress only from `networkPolicy.metricsFrom`, both bundled Valkeys accept
+only the web, worker and proxy pods, and the proxy and sonic accept only web and worker. The
+router and web entry policies stay opt-in. With `serviceMonitor.enabled`, set
+`networkPolicy.metricsFrom` to your Prometheus pods, because the chart refuses to render
+otherwise (the worker policy would block the scrape). Upgrading with a ServiceMonitor
+therefore needs that value first. Set `networkPolicy.internal: false` only if a mesh or CNI
+policy already does this job.
+
 **Compression.** Lumastra does not compress its dynamic responses. Enable compression at
 your Ingress controller, but never for `text/event-stream`, media or images. See
 [Compression](/guides/deploy-docker/#compression) for the reasoning and for nginx and
@@ -1271,12 +1281,18 @@ Health** for the cluster view. Keep the old install stopped but intact for a whi
 | Endpoint                  | Where             | Meaning                                                              |
 | ------------------------- | ----------------- | -------------------------------------------------------------------- |
 | `/api/health`             | web, worker       | Liveness. Always `200`, no dependency checks. Used for startup and liveness probes. |
-| `/api/health/ready`       | web, worker | Readiness. `200` or `503`; the worker drops readiness during startup, upgrade preparation and shutdown. |
+| `/api/health/ready`       | web, worker | Readiness. `200` or `503` with a JSON body listing the reasons. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, or without PostgreSQL or task Valkey. |
 | `/__router/healthz`       | router            | The router's own probes.                                             |
 | `/status`                 | proxy             | Reports `healthy` and `activeChannels`.                              |
 | `/health`                 | sonic             | Probes.                                                              |
 
 Worker readiness reports task-host capability even though it serves no application traffic.
+The chart gives the worker a readiness probe on `/api/health/ready`; the plain Kubernetes
+manifests and the Compose healthcheck use the same path. Worker liveness fails when the
+scheduler and consumer loops make no progress for `TASK_RUNTIME_LIVENESS_STALL_SECONDS`
+(default `600`). Run exactly one worker: a durable singleton lease (table `task_worker_lease`)
+enforces it. A second worker logs `Another worker holds the singleton lease` and stays
+unready. After a hard kill the replacement waits up to 30 s for the lease to expire.
 **System → Health → Cluster** shows pod CPU/memory usage and requests.
 
 For Prometheus, enable `serviceMonitor.enabled`, put `LUMASTRA_METRICS_BEARER_TOKEN`

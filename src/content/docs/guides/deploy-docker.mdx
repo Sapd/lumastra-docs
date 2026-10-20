@@ -34,7 +34,7 @@ only, for testing, not production).
 
 The same image runs separate web and worker services. `start.sh` serves HTTP/API
 requests with `WORKER_MODE=disabled`; `start-worker.sh` runs the dedicated lean
-TypeScript task host. Run exactly one worker. It preserves existing tasks/plugins
+TypeScript task host. Run exactly one worker: a durable singleton lease stops a second one from working. It logs `Another worker holds the singleton lease` and waits unready. After a hard kill, its replacement waits up to 30 s. It preserves existing tasks/plugins
 and supervises one credential-free Rust file-watcher child in its container.
 
 The web and worker containers must **share the `config` volume**: the worker writes
@@ -103,6 +103,15 @@ services:
     volumes:
       - config:/config # MUST be the same config volume as the web container
       - plugins:/app/plugins # the worker loads the installed task plugins
+    healthcheck:
+      # Readiness, not just liveness: unhealthy while another worker holds the singleton
+      # lease, during a prepared upgrade, or without PostgreSQL / task Valkey.
+      # `curl -s http://127.0.0.1:3000/api/health/ready` lists the reasons.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health/ready > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }

@@ -199,7 +199,8 @@ starts, then waits for the work it tracks to settle. Pending jobs keep their
 identities and delays; administrator pauses remain in force. The watcher stays
 alive during preparation.
 
-A `prepared` receipt permits the guarded stop step. `postponed`, `unknown`, a
+A `prepared` receipt permits the guarded stop step, which needs the one-time nonce from the
+prepare response. A prepared worker resumes on its own after 15 minutes. `postponed`, `unknown`, a
 missing response or a timeout means the upgrade must wait; do not start a second
 worker. An active parent waiting for a queued child can postpone preparation,
 then continue normally when claims are restored.
