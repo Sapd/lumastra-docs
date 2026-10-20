@@ -658,7 +658,9 @@ disposable cache. The example below uses `lumastra-valkey` for the existing one 
      them, the web container refuses to start) and set the two URLs. `TASK_CACHE_URL` is
      your existing Valkey, `CACHE_URL` is the new one. Keep the database number your
      old `CACHE_URL` used (usually `/0`) in `TASK_CACHE_URL`, so the queue is found.
-     Always write the number explicitly:
+     A `TASK_CACHE_URL` without a number selects database 0; the worker refuses to start
+     when the queue sits in another database and names the URL to use. Always write the
+     number explicitly:
 
      ```yaml
      CACHE_URL: "redis://default:${CACHE_PASSWORD}@lumastra-valkey-cache:6379/0"
@@ -693,7 +695,8 @@ What Lumastra checks at startup, so a wrong setup fails loudly instead of losing
 
 - It refuses to start when the task Valkey is empty but Postgres still shows task state that
   was in flight. This is what an AOF switch gone wrong looks like. Restore the Valkey data
-  (or the volume) instead of starting over.
+  (or the volume) instead of starting over. If the data is really gone, set
+  `LUMASTRA_ALLOW_EMPTY_TASK_VALKEY=true` once to start anyway; those runs are then lost.
 - It refuses to start when the task Valkey's eviction policy is not `noeviction`. Setting
   `LUMASTRA_ALLOW_EVICTING_TASK_VALKEY=true` overrides this; it is not recommended, because
   a full Valkey can then drop queued jobs and locks.
@@ -701,6 +704,12 @@ What Lumastra checks at startup, so a wrong setup fails loudly instead of losing
 - When the web container sees no worker heartbeat, it logs an error and admins see a banner.
   The worker is not running, or it cannot reach the task Valkey; check
   `docker compose logs lumastra-worker`.
+
+- It refuses to start when `CACHE_URL` and `TASK_CACHE_URL` reach the same Valkey server
+  under two names (for example `localhost` and `127.0.0.1`).
+- The cache Valkey is optional. When it is down, Lumastra keeps running without it (slower,
+  every lookup is a cache miss) and reconnects in the background; only the task Valkey
+  decides whether a container is ready.
 
 Never point `CACHE_URL` and `TASK_CACHE_URL` at the same Valkey, not even with
 different database numbers; startup rejects it. On Kubernetes the Helm chart creates both
