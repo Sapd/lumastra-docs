@@ -65,7 +65,7 @@ curl -X POST https://lumastra.example.com/oauth/device \
 |---|---|---|---|
 | `client_id` | string | Yes | A free-form identifier for your app (e.g. `"apple-tv-app"`). No registration needed. |
 | `device_name` | string | No | Human-readable device name shown to the user during approval. |
-| `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**. See [What your token can do](#what-your-token-can-do). Max 256 characters. |
+| `scope` | string | No | One of two recognized values. `"media"` grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback. See [What your token can do](#what-your-token-can-do). An absent or unknown value gets the full user grant. Max 256 characters. |
 
 **Response (200 OK):**
 
@@ -195,7 +195,7 @@ Use the access token as a standard bearer credential against the `/api/v1/*`
 token surface:
 
 ```bash
-curl https://lumastra.example.com/api/v1/sessions \
+curl https://lumastra.example.com/api/v1/user/profile \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -393,8 +393,8 @@ async function main() {
     await client.pollForToken(deviceAuth.device_code, deviceAuth.interval);
     console.log('Authorized!');
 
-    const sessions = await client.api('/sessions');
-    console.log('Active sessions:', sessions);
+    const playing = await client.api('/play-sessions?scope=mine');
+    console.log('Playing now:', playing);
 }
 ```
 
@@ -429,8 +429,9 @@ never off who approved it. Two closed-form grants exist:
 
 | Requested `scope` | Resulting grant |
 |---|---|
-| `"media"` (or omitted, or anything unrecognized) | Read **and** write |
-| `"media:read"` | Read **only** |
+| `"media"` | Read **and** write |
+| Omitted or unrecognized | The full user grant (see [API & tokens](/developers/api/)) |
+| `"media:read"` | Read **only**. Cannot start playback (`403 scope_required`) |
 
 A device-flow token from either grant carries:
 
@@ -473,11 +474,10 @@ Some endpoints are gated by a **per-user permission** that is independent of
 token scopes, so you cannot predict access from the scope list alone.
 
 Submitting media requests is the common case. `POST /api/v1/requests` and
-`POST /api/v1/requests/{id}/dismiss` require an authenticated user and are
+`POST /api/v1/requests/{id}/dismissal` require an authenticated user and are
 **not** scope-gated: there is no `requests:write` scope, and the `requests:read`
 in your grant is not what permits them. Request submission is gated by
-`hasRequestPermission`, derived from the user's group membership
-(`REQUEST_GROUPS`). A device token can submit requests whenever that user
+`canRequest` in the permissions object of `GET /api/v1/user/profile`. A device token can submit requests whenever that user
 could from the web UI.
 
 When it is denied you get:
@@ -531,9 +531,9 @@ session, or a token a user pastes in from Settings), you may see:
 | Device-flow access token | *(none, compact JWT)* | This flow. |
 | Personal Access Token | `pat_` | Created by a user in the Settings UI. |
 | Service token | `svc_` | Created by an admin for server-to-server automation. |
-| Stream token | `stream_` | Minted per playback session; short-lived, query-param only, used on HLS endpoints. |
+| Playback grant | `stream_` | Issued with each playback session by `POST /api/v1/play-sessions`. Accepted only on media delivery URLs (`?grant=`), never on JSON calls. |
 
-All non-JWT tokens (`pat_`, `svc_`, `stream_`) are shown to the user **once**
+All non-JWT tokens (`pat_`, `svc_`) are shown to the user **once**
 at creation time and stored server-side only as SHA-256 hashes. There's no
 way to retrieve the plaintext value later. See [API & tokens](/developers/api/)
 for the full breakdown of scopes and lifetimes for each kind.

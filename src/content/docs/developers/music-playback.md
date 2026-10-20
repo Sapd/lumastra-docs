@@ -104,12 +104,9 @@ gating this endpoint, unlike some other music subsystems (clustering or
 lyrics search, for example): this session/interaction surface is always on
 for accessible tracks.
 
-Before calling any of these endpoints, check `capabilities.features.music`
-from `GET /api/v1/server/capabilities`. It's `true` only when the server has
-at least one enabled music library. Don't confuse it with the neighboring
-`features.music_clustering`, which gates an unrelated recommendation feature
-(Quick Picks taste clustering) and says nothing about whether music exists on
-the server.
+Before calling any of these endpoints, check the server's music capabilities. `GET /api/v1/server`
+reports `capabilities.music.sonicMixes` and `capabilities.music.sonicSimilarity`. Sonic mixes and
+the sonic similarity routes answer `404` while their capability is off.
 
 Opening a new session for the same `(user, deviceId)` **automatically closes
 any prior session on that device** (`stop_reason: 'track_change'`). You don't
@@ -154,8 +151,7 @@ entirely: a `PAUSED` session gets a 30-minute reap grace period, while a
 session that just stops heartbeating without transitioning to `PAUSED` falls
 back to a 5-minute window before the server reaps it.
 
-On track end, send a final heartbeat with `status: "COMPLETED"`. This sets
-`stopped_at` and closes the session. There is no separate "stop" or "delete
+On track end, send a final heartbeat with `status: "COMPLETED"`. This closes the session. There is no separate "stop" or "delete
 session" endpoint.
 
 **Ownership is enforced**: the update is scoped to the session's owning
@@ -344,9 +340,9 @@ accepts music tracks as `mediaId` and is the call that starts a track (§1). Tra
 | Request fields | `trackId`, `deviceId` only | Full device/client/capability metadata |
 | Returns the stream URL and grant | No | Yes, in the `201` response (`delivery.url`, `grant`) |
 | Rate limit | 30/60s (PUT + beacon shared) | None enforced |
-| `event_seq` required on heartbeats | No | Yes; monotonic counter, server rejects non-increasing values |
+| `eventSeq` required on heartbeats | No | Yes; monotonic counter, a stale value is acknowledged and ignored |
 | Drives `play_count` | No | Indirectly, see below |
-| Writes durable watch-state (`wrote_to_durable`) | N/A | Always `false` for music (`media_type` `track`/`audio` is explicitly excluded from the durable watch-state write path) |
+| Writes durable watch-state (`progressSaved`) | N/A | Always `false` for music (`media_type` `track`/`audio` is explicitly excluded from the durable watch-state write path) |
 
 On the generic path, when a session for a music track ends, the server
 applies a **90%-of-duration completion threshold**

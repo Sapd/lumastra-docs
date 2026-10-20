@@ -24,9 +24,11 @@ The following tables list the major route groups on `/api/v1`. The interactive
 | `GET` | `/media/{id}/images/{role}` | public | Fetch an image by role (see [Images](#images)) |
 | `GET` | `/series/{id}` | user | Series detail with traversal links |
 | `GET` | `/series/{id}/seasons` | user | List seasons |
-| `GET` | `/series/{id}/seasons/{id}` | user | Season detail |
-| `GET` | `/series/{id}/episodes` | user | All episodes |
-| `GET` | `/series/{id}/next-episode` | user | Next unwatched episode; `?season=N&episode=M` fetches that position; `?afterPlayback=<episode UUID>` advances past its whole default file |
+| `GET` | `/series/{id}/seasons/{n}` | user | Season detail (`/seasons/{id}` takes a season handle) |
+| `GET` | `/series/{id}/seasons/{n}/episodes/{e}` | user | One episode, or `404` |
+| `GET` | `/series/{id}/watch-marker` | user | Resume target: episode, `positionMs` and state (`?from=` adds `relation`) |
+| `GET` | `/series/{id}/episodes` | user | Every episode, paged (`limit`, `offset`; `season`, `episode`, `absolute` and `specials` filters) |
+| `GET` | `/series/{id}/next-episode` | user | Next unwatched episode; `?afterPlayback=<episode UUID>` advances past that episode's whole default file (autoplay) |
 | `GET` | `/series/{id}/watch-status` | user | Aggregate watch status |
 | `GET` | `/people/{id}` | user | Person detail |
 | `GET` | `/people/{id}/images/{role}` | user | Person image (TMDB size vocabulary, see [Images](#images)) |
@@ -44,6 +46,8 @@ GET /api/v1/{entity}/{id}/images/{role}/{index}
 `entity ∈ media | people | users | libraries`
 `role ∈ poster | backdrop | logo | thumb | banner | still`
 `index`: for entities with multiple backdrops or logos.
+Item descriptors also use the `primary` role (square art: music, audiobooks, people, users,
+stations, libraries, playlists).
 
 These endpoints are reachable without a bearer credential. Payloads embed
 image `href`s directly and browsers load them without attaching an
@@ -55,19 +59,21 @@ one (there is no separate `/image/signed/*` tree).
 **Sizing and cache efficiency.** `?size=` is the canonical, cache-friendly way
 to request a derivative:
 
-| `?size=` | Pixel width | `Cache-Control` |
+| `?size=` | Pixel width | Where offered |
 |---|---|---|
-| `thumb` | 250px | `public, max-age=…, stale-while-revalidate=…, immutable` |
-| `medium` | 350px | same, `immutable` |
-| `card` | 480px | same, `immutable` |
-| `hd` | 1280px | same, `immutable` |
-| `wide` | 1920px | same, `immutable` |
-| `full` | original (no resize) | same, `immutable` |
+| `thumb` | 250px (library mosaics 256, avatars 96) | poster, thumb, primary, still |
+| `card` | 480px | most roles |
+| `hd` | 1280px | backdrop |
+| `wide` | 1920px | backdrop |
+| `full` | original (no resize) | all |
+
+A response is `immutable` only when the URL carries `v=<revision>` and a bounded size.
+Everything else gets `max-age=3600` with an ETag. `full` is never `immutable`.
 
 - **`?width=N`** snaps onto the smallest preset that is at least as wide and
   within ±20% of it (covering, not nearest), so a request never comes back
   with fewer pixels than it asked for (e.g. `?width=460` → `card`,
-  `?width=300` → `medium`). Widths outside every ±20% band render as custom,
+  `?width=240` → `thumb`). Widths outside every ±20% band render as custom,
   non-`immutable` derivatives, clamped to `[1, 3840]`.
 - **`?quality=Q`** snaps to the nearest canonical tier (`50, 70, 85, 95`),
   within ±20%.
@@ -108,7 +114,7 @@ releases.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET/POST` | `/playback/{id}/info` | user | Describes the item, no playable URLs; POST takes typed `capabilities` (`?maxBitrate`, `?caps`, `?fileId`, `?variant=full`) |
+| `GET/POST` | `/playback/{id}/info` | user | **Deprecated** for third parties: the first-party player's internal record (snake_case). Use `POST /play-sessions` |
 | `GET` | `/playback/{id}/file` | user | Direct file download (`?grant=`) |
 | `GET` | `/playback/{id}/hls` | user | HLS master playlist (`?grant=`) |
 | `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (`?grant=`) |
@@ -119,7 +125,7 @@ releases.
 | `GET` | `/playback/{id}/subtitles/{id}` | user | Subtitle file by track id |
 | `GET` | `/playback/{id}/subtitles/{n}` | user | Subtitle file by index |
 | `GET` | `/playback/grants/{id}` | user (owner) | Grant state by its opaque `id` |
-| `POST` | `/playback/grants/{id}/renew` | user (owner) | Body `{ token }`; returns the same token with a later expiry |
+| `POST` | `/playback/grants/{id}/renew` | user (owner) | Body `{ token }`; returns the grant with the extended expiry (never shorter) |
 | `DELETE` | `/playback/grants/{id}` | user (owner) | Revoke a grant |
 | `POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
 | `POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
@@ -128,12 +134,13 @@ releases.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/sessions` | user / admin | Active sessions (`?scope=mine\|all&itemId=`; `scope=all` requires admin) |
+| `GET` | `/play-sessions` | user / admin | Playing now (`?scope=mine\|all&itemId=`; `scope=all` requires admin) |
 | `POST` | `/play-sessions` | user | Start playback for video, music and audiobooks (`media:write`): `201` with `{ playbackSessionId, mediaId, kind, delivery, grant, reporting }`; see [Play media from your own client](/developers/building-a-player/#play-media-from-your-own-client) |
-| `PUT` | `/play-sessions/{id}` | user (owner) | Report progress (heartbeat); `204` once the item reaches `COMPLETED` |
-| `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; no endpoint-level rate limit |
+| `PUT` | `/play-sessions/{id}` | user (owner) | Report progress (heartbeat). `status: COMPLETED` ends the session (`204`) |
+| `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; rate-limited |
 | `GET` | `/play-sessions/{id}/events` | user (owner) | SSE events for a session |
-| `POST` | `/sessions/{id}/cancel` | admin | Terminate a session (renamed from `kill`) |
+| `POST` | `/play-sessions/{id}/cancel` | owner or admin | Terminate a session and free its stream slot. Anyone else gets `404` |
+| `POST` | `/play-sessions/replay` | user | Replay finished plays that had no live session (offline music) |
 | `GET` | `/watch-state/{id}` | user | `{ watched, positionMs, resumeAnchor, favorite, rating }` |
 | `PUT` | `/watch-state/{id}` | user | Set watched / favorite / rating (partial) |
 
@@ -153,7 +160,7 @@ segments, trickplay). Follow the schema for each time field.
 | `POST` | `/library-groups` | `library:admin` | Create a library group |
 | `GET/PUT/DELETE` | `/library-groups/{id}` | `library:admin` | Manage one library group |
 | `GET/POST/DELETE` | `/access/groups` | `access:admin` | Library-group permission assignments |
-| `GET` | `/libraries/{id}/images/{role}` | public | Generated library mosaic image (see [Images](#images)) |
+| `GET` | `/libraries/{id}/images/{role}` | user | Generated library mosaic image (see [Images](#images)) |
 
 See [Library scan and delta ingest](#library-scan--delta-ingest) below for
 detailed scan and ingest documentation.
@@ -222,11 +229,11 @@ contains, redaction, retention, and how to review or disable it.
 | `POST` | `/notifications/read-all` | user | Mark all as read |
 | `POST` | `/notifications/{id}/read` | user | Mark one notification as read |
 | `DELETE` | `/notifications/{id}` | user | Delete one notification |
-| `GET` | `/series-notifications` | user | List series the caller explicitly follows for new-episode notifications |
-| `POST` | `/series-notifications` | user | Follow a series (body `{ seriesId }`) |
-| `DELETE` | `/series-notifications` | user | Unfollow a series (body `{ seriesId }`) |
+| `GET` | `/user/series-follows` | user | Series you follow for new-episode notifications |
+| `PUT` | `/user/series-follows/{seriesId}` | user | Follow a series (idempotent) |
+| `DELETE` | `/user/series-follows/{seriesId}` | user | Unfollow a series (idempotent) |
 
-`/series-notifications` is a separate, explicit per-series subscription for
+`/user/series-follows` is a separate, explicit per-series subscription for
 third-party clients. It's distinct from the end-user "New episode" toggle in the
 web UI's notification settings, which controls the same event for the account
 as a whole.
@@ -293,15 +300,30 @@ The commands and their arguments are described in
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/user/profile` | user | Own profile + preferences |
+| `GET` | `/user/profile` | user | Own profile: `{id, username, isAdmin, isAgeRestricted, permissions, groups}` |
 | `GET/PUT` | `/user/playback-preferences` | user | Client playback settings; `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
-| `GET/POST/DELETE` | `/user/tokens` | user | Manage own PATs |
+| `GET/POST` | `/user/pats` | user | Own PATs; `DELETE /user/pats/{id}` revokes (`204`) |
 | `GET` | `/user/links` | user | Linked third-party accounts |
-| `GET/DELETE` | `/user/links/{provider}` | user | One linked account |
-| `POST` | `/user/links/{provider}/authorize` | user | Initiate account linking |
+| `GET` | `/user/links/provider` | user | External provider identity |
+| `POST` | `/user/links/authorize` | user | Initiate OIDC account linking |
 | `GET` | `/users/{id}` | `users:read` | Read another user's profile |
 | `GET` | `/users/{id}/images/avatar` | public | User avatar (shown in social contexts without a session) |
 | `PUT/DELETE` | `/users/{id}/images/avatar` | user (self or admin) | Upload / remove an avatar (multipart) |
+
+### Permissions
+
+`GET /server` (`caller.permissions`) and `GET /user/profile` (`permissions`) return the same
+object:
+
+| Field | Meaning |
+|---|---|
+| `canRequest` | Submit media requests |
+| `canReview` | Write community reviews |
+| `canAnnotateMedia` | Player annotations |
+| `canWatchLiveTv` | Live TV. Without it every Live TV endpoint answers `403 forbidden` |
+| `canSeeAllPlayback` | The web app's Active streams view shows everyone's playback. `GET /play-sessions?scope=all` still requires an administrator |
+
+Media playback needs no permission flag, only library access.
 
 ### Social: playlists and lists
 
@@ -328,7 +350,8 @@ watchlist ownership, and every other user-scoped path in this API.
 | `POST` | `/requests` | user | Submit a request |
 | `GET` | `/requests/{id}` | user | One request |
 | `GET` | `/requests/quota` | user | Per-user quota |
-| `POST` | `/requests/{id}/dismiss` | user | Dismiss a request notification |
+| `POST` | `/requests/{id}/dismissal` | user | Dismiss a request notification (`204`) |
+| `POST` | `/requests/dismissals` | user | Dismiss a title that has no request: `{ externalIds, mediaType }` |
 
 Quota is per-user, per-rolling-period, with separate `movie` and `series` buckets.
 Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
@@ -344,22 +367,22 @@ Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/livetv/stations` | user | Stable stations with number, images, shown `feedId` and current program |
-| `GET` | `/livetv/stations/{stationId}` | user | One station with current and next program |
+| `GET` | `/livetv/stations` | user | Stable stations with number, images, shown `feedId` and `nowNext` |
+| `GET` | `/livetv/stations/{stationId}` | user | One station with `nowNext` (current and next airing) |
 | `GET` | `/livetv/stations/{stationId}/feeds` | user | Feed choices; pass a feed's `id` as `feedId` when starting playback |
-| `GET` | `/livetv/stations/{stationId}/programs` | user | EPG with required UTC `from` / `to`, at most 8 hours |
-| `GET` | `/livetv/stations/{stationId}/current-program` | user | Currently-airing program (`{ isLive, program? }`) |
-| `GET` | `/livetv/guide` | user | Required `from` / `to` (at most 8 hours), optional `stationIds`; programs keyed by station id |
+| `GET` | `/livetv/stations/{stationId}/programs` | user | Airings for a window (required UTC `from` / `to`, at most 24 hours) and `nowNext` |
+| `GET` | `/livetv/stations/{stationId}/current-program` | user | `nowNext` and `asOf` |
+| `GET` | `/livetv/guide` | user | Required `from` / `to` (at most 24 hours); `stationIds` (max 200) or `limit` + `cursor` paging; `stations[{stationId, airings, nowNext}]` |
 | `GET` | `/livetv/programs/search` | user | Program search; `channels[].id` identifies a station |
 | `GET` | `/livetv/availability` | user | Feed-keyed availability; join using the station's `feedId` |
 | `GET/PUT` | `/livetv/favorites` | user | Favorites use `stationIds`; PUT `{ stationId, favorite }` |
 | `PUT` | `/livetv/favorites/order` | user | Reorder favorites with `{ stationIds }` |
 | `GET/PATCH` | `/livetv/simple-mode` | user | Viewer settings use `stationIds`, `startStationId`, `clearStartStation` |
-| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with the same start envelope (`playbackSessionId`, `delivery.url`, `grant`, `reporting`) and output details |
-| `GET` | `/livetv/playback-sessions/{sessionId}` | user (owner) | State (`active` / `ended`), `endReason`, optional `adaptive` / `variant` |
-| `POST` | `/livetv/playback-sessions/{sessionId}/keepalive` | user (owner) | Every `heartbeatIntervalSeconds`; `204` or `410` with `reason: evicted\|superseded\|expired\|left` |
-| `DELETE` | `/livetv/playback-sessions/{sessionId}` | user (owner) | End session (`204`, idempotent) |
-| `POST` | `/livetv/playback-sessions/{sessionId}/leave` | user (owner) | Same cleanup for `sendBeacon` |
+| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with the shared envelope (`playbackSessionId`, `delivery.url`, `delivery.heartbeatIntervalMs`, `delivery.keepaliveHref`, `grant`) |
+| `GET` | `/livetv/playback-sessions/{playbackSessionId}` | user (owner) | `state` (`active` / `ended`), `endReason`, and `failure` (`code`, `retryable`, `retryAfterMs`, `at`) when the channel failed |
+| `POST` | `/livetv/playback-sessions/{playbackSessionId}/keepalive` | user (owner) | Every `delivery.heartbeatIntervalMs` (`delivery.keepaliveHref`); `204` or `410` with `reason: evicted\|superseded\|expired\|left\|failed` |
+| `DELETE` | `/livetv/playback-sessions/{playbackSessionId}` | user (owner) | Stop the session (`204`, idempotent). `POST .../leave` is the same for `sendBeacon` |
+| `POST` | `/livetv/playback-sessions/{playbackSessionId}/leave` | user (owner) | Same cleanup for `sendBeacon` |
 | `GET` | `/livetv/channels/{feedId}/stream/**` | user | Unchanged HLS manifests and segments; use the returned `delivery.url` |
 
 Station and playback-session routes replace the old channel viewer routes
@@ -379,6 +402,7 @@ and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 | `POST` | `/music/tracks/{id}/dislike` | user | Dislike feedback (204) |
 | `POST` | `/music/tracks/{id}/skip` | user | Skip feedback (204) |
 | `POST` | `/music/tracks/{id}/complete` | user | Completion feedback (204) |
+| `PUT`, `DELETE` | `/user/music/tracks/{id}/feedback` | user | Explicit like or dislike (`{ "feedback": "liked" }` or `"disliked"`). Skips and completions never change it |
 | `POST` | `/music/sessions` | user | Start a music session |
 | `GET` | `/music/sessions` | user | Active session (`?scope=mine\|current`) |
 | `GET/PUT` | `/music/sessions/{id}` | user | Session detail / progress |
@@ -457,8 +481,8 @@ standard `EventSource`:
 
 ```js
 const es = new EventSource('/api/v1/events', { withCredentials: true });
-// or with a bearer token in the query for header-less SSE clients:
-// const es = new EventSource('/api/v1/events?api_key=pat_…');
+// Clients that cannot send a session cookie read the stream with fetch() and an
+// Authorization header. Query-string tokens are not accepted.
 ```
 
 On connect, the server immediately sends a `connected` bootstrap frame:

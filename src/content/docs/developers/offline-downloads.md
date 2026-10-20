@@ -200,7 +200,7 @@ themselves. Self-hosters configure them in
 
 Renditions do **not** have subtitles burned in, and carry only the one audio
 track you asked for. Subtitles stay sidecar files: fetch them from
-`externalSubtitles[].deliveryUrl` or the subtitle endpoints in
+`delivery.subtitles[].hrefs` from the playback start response, or the subtitle endpoints in
 [Streaming a player](/developers/building-a-player-streaming/#4-audio--subtitle-tracks),
 store them next to the media, and render them client-side.
 

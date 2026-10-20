@@ -318,7 +318,7 @@ prefix:
 | Kind | Prefix | Issued by | Feature flag | Notes |
 | ---- | ------ | --------- | ------------ | ----- |
 | Device flow JWT | *(none: compact JWT)* | `POST /oauth/token` | `FEATURE_DEVICE_AUTH` | Short-lived (~1 h, HS256); carries `device_session_id`. Refresh token rotates on every use. |
-| Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/user/tokens` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
+| Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/user/pats` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
 | Service token | `svc_` | Admin: `POST /api/v1/service-tokens` | `FEATURE_DEVICE_AUTH` | Path/method-gated; optional act-as-user impersonation; IP allowlist. |
 | Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` | *(always on)* | Bound to one item and one playback session, expires (24 h for video and audiobooks, 6 h for music and Live TV), valid only on media URLs. Pinned to the requester's IP unless the client asked for a cast target (`castTarget`) and `STREAM_TOKEN_WILDCARD_IP` allows it (default: allowed). `STREAMING_SESSION_ENFORCE_IP=false` turns IP pinning off entirely. Replaces `stream_` tokens and `api_key` in media URLs. |
 
@@ -378,7 +378,7 @@ clients alike. See [Connecting third-party apps](/using/third-party-players/) an
 ### Personal Access Tokens
 
 Users create PATs in **Settings → Account → API tokens** (or via
-`POST /api/v1/user/tokens`) once an admin turns on **User PAT Creation** under
+`POST /api/v1/user/pats`) once an admin turns on **User PAT Creation** under
 **Admin → Settings → Access → Public API & Device Auth** (`FEATURE_USER_PATS`, off by
 default). The toggle appears only while the Public API (`FEATURE_DEVICE_AUTH`) is on;
 with it off, set `FEATURE_USER_PATS` through the environment. Token creation needs a
@@ -393,9 +393,9 @@ Manage PATs:
 
 | Method | Endpoint | Auth required |
 | ------ | -------- | ------------- |
-| `GET` | `/api/v1/user/tokens` | User session or bearer |
-| `POST` | `/api/v1/user/tokens` | User session or bearer |
-| `DELETE` | `/api/v1/user/tokens?id=<id>` | User session or bearer |
+| `GET` | `/api/v1/user/pats` | User session or bearer |
+| `POST` | `/api/v1/user/pats` | User session or bearer |
+| `DELETE` | `/api/v1/user/pats/{id}` | User session or bearer |
 
 ### Service tokens
 

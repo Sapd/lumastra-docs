@@ -56,11 +56,14 @@ no longer exists. AudiobookShelf ids never leave the server: you only see Lumast
     "book": { "title": "…", "author": "…", "narrator": "…" }
   },
   "grant": { "id": "uuid", "token": "…", "param": "grant", "expiresAt": "…" /* … */ },
-  "reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
-`delivery.tracks[]` carry ready URLs with the `grant` attached. Open them as given.
+`delivery.tracks[]` carry ready URLs with the `grant` attached. Open them as given. Media
+URLs always start at 0: the book's position is not a URL offset, so seek to
+`delivery.startPositionMs` yourself. When the server transcodes, `tracks[]` holds one
+HLS playlist (`mime: application/vnd.apple.mpegurl`) for the whole book.
 A grant for a book lasts 24 hours; renew it with `POST grant.renewHref` and
 `{ "token": grant.token }` if a listening session may run longer, or when a download
 needs more time. See [Play media from your own
@@ -78,7 +81,7 @@ pushed to it.
 Two units are in play at once, and mixing them up is the single most common
 "the position is wrong by a few hours" bug:
 
-- **Positions** (`startPositionMs`, and `position_ms` in reports) are
+- **Positions** (`startPositionMs`, and `positionMs` in reports) are
   **milliseconds of BOOK time**, measured from the start of the whole book.
 - **Files** are the entries of `delivery.tracks[]`. Each has its own audio URL,
   and `startMs` and `durationMs` place it on the book clock. Chapters
@@ -86,7 +89,7 @@ Two units are in play at once, and mixing them up is the single most common
 
 A book is a list of files. To find which file a book position falls in, walk
 `delivery.tracks` and compare against each `startMs`; never report a
-*file* offset as `position_ms`, which silently rewinds a multi-file book to
+*file* offset as `positionMs`, which silently rewinds a multi-file book to
 file one. `chapters` is server-normalised into contiguous spans covering the
 whole book. It may be empty: a meaningful minority of books carry no chapter
 data.
@@ -99,15 +102,15 @@ Report against the Lumastra `playbackSessionId`, as for video. `PUT` to
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "position_ms": 1461000, "listened_ms": 38000, "status": "ACTIVE",
-        "event_seq": 12, "session_elapsed_ms": 38000 }'
+  -d '{ "positionMs": 1461000, "listenedMs": 38000, "status": "ACTIVE",
+        "eventSeq": 12, "sessionElapsedMs": 38000 }'
 ```
 
-**`listened_ms` is audio actually heard since your last report, never a
+**`listenedMs` is audio actually heard since your last report, never a
 position delta.** Computing it by subtracting positions inflates listening
 statistics by however far a single scrub jumps. Accumulate wall-clock time
 while the element is actually playing, excluding pauses, buffering, and seeks,
-the same way you'd track a live video heartbeat's `session_elapsed_ms`.
+the same way you'd track a live video heartbeat's `sessionElapsedMs`.
 
 If a bookkeeping call fails, **keep playing.** Never interrupt the listener for it;
 retry, and carry on reporting at the current position.
@@ -136,16 +139,18 @@ the gap.
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "position_ms": 1461000, "listened_ms": 38000, "status": "COMPLETED",
-        "end_reason": "user", "event_seq": 13, "session_elapsed_ms": 76000 }'
+  -d '{ "positionMs": 1461000, "listenedMs": 38000, "status": "COMPLETED",
+        "endReason": "user", "eventSeq": 13, "sessionElapsedMs": 76000 }'
 ```
 
-Closing isn't optional bookkeeping. It ends the playback session, frees the
-stream slot, revokes the grant and stops the byte proxy serving further
+Closing isn't optional bookkeeping. `status: "COMPLETED"` ends the playback session
+(`204`), frees the stream slot, revokes the grant and stops the byte proxy serving further
 segments. The body is the same shape as a progress report, and the position you
 send is the listener's final word on where they stopped. Use
 `POST {reporting.href}/beacon` with the same body when you can't issue a normal
-`PUT`, such as on app teardown.
+`PUT`, such as on app teardown. To terminate a session at once, call
+`POST /api/v1/play-sessions/{playbackSessionId}/cancel`. There is no
+`DELETE /api/v1/play-sessions/{playbackSessionId}`.
 
 ## 5. Where the resume point actually lives
 

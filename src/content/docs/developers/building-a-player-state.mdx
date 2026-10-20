@@ -20,34 +20,40 @@ authoritative record of resume position. The start response names it in
 `reporting`:
 
 ```jsonc
-"reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+"reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 ```
 
 `playbackSessionId` is the one id for this play. It is also the `PlaySessionId` on
 the HLS URL, so the stream and the progress reports always belong together.
 Reporting uses your normal bearer token, never the `grant`.
 
-Heartbeat every `reporting.intervalMs` (about 10 seconds) with a `PUT` to `reporting.href`:
+Heartbeat every `reporting.intervalMs` (about 10 seconds), and on pause, resume and
+seek, with a `PUT` to `reporting.href`:
 
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "position_ms": 2760000, "status": "ACTIVE", "event_seq": 7, "session_elapsed_ms": 120000, "buffer_health_sec": 12 }'
+  -d '{ "positionMs": 2760000, "status": "ACTIVE", "eventSeq": 7, "sessionElapsedMs": 120000, "bufferHealthMs": 12000 }'
 ```
 
-- **`position_ms`** is the playback position in milliseconds.
-- **`session_elapsed_ms`** is required: cumulative milliseconds actually played
-  since the session started, excluding pauses, seeks and buffering.
-- **`event_seq`** is required: a per-session, monotonically increasing integer
-  starting at 1. The server rejects non-increasing values (it deduplicates
-  stale or out-of-order reports).
-- **`status`:** `ACTIVE` | `PAUSED` | `COMPLETED`. On `COMPLETED`, include
-  `end_reason`: `user` | `completion` | `unload` | `error` | `switch`.
+- **`positionMs`** is the playback position in milliseconds.
+- **`sessionElapsedMs`** is required: cumulative milliseconds actually played since the
+  session started, excluding pauses, seeks and buffering.
+- **`eventSeq`** is required: a per-session, monotonically increasing integer starting at
+  1. A stale sequence number is acknowledged and ignored, so retries are safe.
+- **`status`:** `ACTIVE` | `PAUSED` | `COMPLETED`. `COMPLETED` ends the session (`204`).
+  Add `endReason` to it: `completion` | `skip` | `user` | `unload` | `error` | `switch`.
+- Optional fields include `audioStreamIndex`, `subtitleStreamIndex`, `bitrateBps`,
+  `resolution`, `playMethod`, `audioLanguage`, `subtitleLanguage`, `subtitleMethod`,
+  `bufferHealthMs` and `adaptive`.
 
-Heartbeat responses carry signals to watch for: `action: "kill"` means the
-server terminated this session, so stop playback. `action: "superseded"` means
-another device's session now owns this item's watch state: playback continues,
-but progress no longer persists, so surface a one-time notice.
+A heartbeat answers `{ resumeAnchorAt, progressSaved }`, and may also carry `action`,
+`reason`, `superseded`, `sessionLost` or `transcode`. `resumeAnchorAt` is the server-clock
+timestamp (ISO 8601, or `null`) to advance your resume cache with. `superseded: true`
+means another device's session now owns this item's watch state: playback continues, but
+progress no longer persists, so surface a one-time notice. `action: "kill"` means the
+server terminated this session, so stop playback. Ignore `transcode` if you do not show
+progress.
 
 :::note[Multi-device ownership: newest session wins]
 If a user resumes on a second device while the first is still paused, the new
@@ -56,11 +62,19 @@ heartbeats can come back `superseded`. Starting a fresh session on the older
 device reclaims ownership.
 :::
 
+### Ending a session
+
+Send a `PUT` with `status: "COMPLETED"` and an `endReason` for a normal end (`204`).
+Use `POST /api/v1/play-sessions/{id}/cancel` to terminate a session at once and free its
+stream slot. There is no `DELETE /api/v1/play-sessions/{id}`.
+
+On page or app teardown, where you cannot issue a `PUT`, use
+`POST /api/v1/play-sessions/{id}/beacon`. It takes the same body and works with
+`navigator.sendBeacon`.
+
 Each play session has its own SSE channel (`GET /api/v1/play-sessions/{id}/events`,
-must own the session) for `kill`, `session_terminated`, `admin_message`, and
-maintenance frames. It's separate from the global stream in [§7](#7-live-event-stream).
-On teardown where you cannot issue a `PUT`, use
-`POST /api/v1/play-sessions/{id}/beacon` (works with `navigator.sendBeacon`).
+owner only) for `kill`, `session_terminated`, `admin_message`, and maintenance frames.
+It's separate from the global stream in [§7](#7-live-event-stream).
 
 :::danger[A reaped session isn't a dead end: an `ACTIVE` report revives it]
 A session that missed too many heartbeats is reaped to `CRASHED`, but the row
@@ -84,7 +98,7 @@ watched/unwatched, resume position, favorites, and rating in one call.
 
 ```bash
 curl https://lumastra.example.com/api/v1/watch-state/550e8400-… -H "Authorization: Bearer <token>"
-# → { "mediaId": "…", "watched": false, "positionMs": 2760000, "favorite": false, "rating": null }
+# → { "watched": false, "positionMs": 2760000, "resumeAnchor": "…", "favorite": false, "rating": null }
 
 curl -X PUT .../api/v1/watch-state/550e8400-… -d '{"watched": true, "rating": 8}'
 ```
@@ -105,12 +119,13 @@ Watching.
 
 **Quality telemetry** (`POST /api/v1/playback/telemetry`) reports client-side
 quality-of-experience metrics for the admin dashboard only; nothing here
-affects resume position. Batch events (`bandwidth_estimate`,
-`rebuffer_event`, `quality_switch`, `delivery_window`, …) and send them every
-10–30 s, max 100 per request, with `navigator.sendBeacon()` on unload.
+affects resume position. Include the `playbackSessionId`. Batch events
+(`bandwidth_estimate`, `rebuffer_event`, `quality_switch`, `delivery_window`, …) and send
+them every 10–30 s, max 100 per request, with `navigator.sendBeacon()` on unload.
 
-**Active sessions**: `GET /api/v1/sessions?scope=mine|all` lists currently
-active play sessions, useful for "already playing on another device" UX.
+**Active sessions**: `GET /api/v1/play-sessions?scope=mine|all` lists currently
+active play sessions, useful for "already playing on another device" UX. `scope=all`
+requires an administrator.
 
 **Incidents**: `POST /api/v1/playback/incidents` is a higher-detail,
 one-report-per-event surface (an error, a reconnect, a session ending
@@ -174,7 +189,9 @@ needed.
 Audiobooks work through this same endpoint. The server fans each record out to
 whichever store owns the resume point (AudiobookShelf, for a book) before the
 response returns. See [Audiobook playback](/developers/audiobook-playback/) for
-the audiobook-specific rules. Music isn't yet accepted on this endpoint.
+the audiobook-specific rules. Music isn't yet accepted on this endpoint: finished music
+plays go to `POST /api/v1/play-sessions/replay`, and music batches to
+`POST /api/v1/music/progress/end/batch`.
 
 ## 5. Network speed test
 
@@ -210,8 +227,8 @@ asking the viewer to run anything.
 ## 6. What to play next
 
 `GET /api/v1/series/{seriesId}/next-episode` returns the next unwatched episode,
-accounting for any in-progress session. Add `?season=N&episode=M` (both
-required) to fetch the episode at that position instead. Feed the Continue
+accounting for any in-progress session. To fetch one episode by position, use
+`GET /api/v1/series/{seriesId}/seasons/{n}/episodes/{e}`. Feed the Continue
 Watching rail from `GET /api/v1/continue-watching`.
 
 For autoplay after a file ends, use `?afterPlayback=<episode UUID>`. This
@@ -244,12 +261,17 @@ advances the party. A guest shows no card and waits for the host's `navigate`.
 `GET /api/v1/events` is the one global per-user SSE push channel. Open it
 after login; keep it open for the session.
 
+`EventSource` cannot set an `Authorization` header, and `api_key` query parameters are not
+accepted. Read the stream with `fetch()` and a bearer header, then parse the `event:` and
+`data:` lines yourself. A browser client whose session cookie is set can use
+`new EventSource('/api/v1/events', { withCredentials: true })` instead.
+
 ```javascript
-// EventSource cannot set an Authorization header — pass the token as a query param.
-const es = new EventSource(`/api/v1/events?api_key=${encodeURIComponent(accessToken)}`);
-es.addEventListener('connected', (e) => { const { serverTime } = JSON.parse(e.data); });
-es.addEventListener('device.command', (e) => handleDeviceCommand(JSON.parse(e.data)));
-es.addEventListener('admin', (e) => handleAdminFrame(JSON.parse(e.data)));
+const res = await fetch('/api/v1/events', {
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+// res.body is a stream of SSE frames: `event: <name>` plus a JSON `data:` line.
+// Dispatch on <name>: connected, device.command, admin, and the others below.
 ```
 
 Every frame is `event: <name>` plus a JSON `data:` line: subscribe to `name`
@@ -293,15 +315,15 @@ always is), or when one field matches this client; drop it otherwise. One
 account can have several clients connected (two Apple TVs, a phone, a
 browser), and honouring the target avoids one extra toast on the others.
 
-Notification-class frames carry an `id:` line; `EventSource` sends the last one
-back as `Last-Event-ID` on reconnect and the server replays what was missed.
-`event: admin` frames are the exception: no `id:`, never replayed (see above).
+Notification-class frames carry an `id:` line; the server replays what was missed after a
+reconnect that sends the last one back as `Last-Event-ID`. `event: admin` frames are the
+exception: no `id:`, never replayed (see above).
 
 ### Announce what you can render
 
 ```jsonc
 POST /api/v1/play-sessions
-{ "media_id": "…", "device_id": "…", "client_features": ["admin_message", "maintenance_notice", "watch_together"] }
+{ "mediaId": "…", "deviceId": "…", "clientFeatures": ["admin_message", "maintenance_notice", "watch_together"] }
 ```
 
 The admin UI hides actions a client would silently swallow, so a client that

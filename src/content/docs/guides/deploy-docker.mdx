@@ -467,7 +467,6 @@ Some clients can't send auth headers, so they put credentials in the **query str
 - Media URLs for native players, `<audio>`/`<video>` streams, and the iPhone, iPad and
   Apple TV apps (`/api/v1/`): `grant`, a credential bound to one item and one playback
   session that works until it expires (up to 24 hours)
-- Server-sent event streams from third-party clients: `api_key=pat_…`
 
 Most proxies' default access-log formats record the full request URI (nginx's
 `$request`, for example), so every one of those requests writes a live credential into

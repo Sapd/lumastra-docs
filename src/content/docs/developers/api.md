@@ -96,14 +96,15 @@ path changes.
 `/api/v1` is a **resource-oriented API** with a polymorphic catalog spine.
 
 Every object in every response carries a `type` field, a closed public enum:
-`movie | series | season | episode | track | album | artist`. `series` is the
+`movie | series | season | episode | track | album | artist | audiobook`. `series` is the
 canonical word for TV shows everywhere. The legacy values `tv` and `show` are
 retired and never appear in responses.
 
-Every entity response also carries `id` (the canonical internal UUID) and `ids`
-(an open map of external identifiers, e.g. `{ "imdb": "tt0903747", "tmdb":
-"1396" }`). Three input forms resolve to the same entity: the internal UUID, a
-composite key (`tmdb:1396:series`), or `?externalId=tmdb:1396:series`. The
+Every entity response also carries `id`, an opaque handle. Pass it back as `{id}` and
+never parse it. `catalogId` is the library row UUID, or `null` when the title is not in
+the library. `ids` is an open map of raw provider values (for example `{ "imdb":
+"tt0903747", "tmdb": "1396" }`) with no internal key. Every `{id}` also accepts an
+external handle such as `tmdb:1396:series`; URL-encode the colons. The
 canonical detail node for any single item is `GET /media/{id}`. `/movies` and
 `/series` are type-filtered aliases over `GET /media?type=…`, not their own
 detail routes.
@@ -113,11 +114,10 @@ catalog, images, and sizing contract.
 
 ## Errors: `application/problem+json`
 
-Resource API errors use `application/problem+json`. HLS startup errors can instead
-return JSON with an `error` string (`transcode_start_timeout`,
-`transcode_start_failed`, or `transcode_start_interrupted`) and a `message`. The
-`code` field is the machine-parseable contract; `error` text is human-readable
-and must not be parsed by clients.
+Every `/api/v1` error is `application/problem+json`, including authentication failures
+and unknown paths. The `code` field is the machine-parseable contract; `error` text is
+human-readable and must not be parsed by clients. `reason` refines some codes, such as
+`invalid_grant`.
 
 ```jsonc
 {
@@ -138,8 +138,10 @@ response header.
 | `code` | HTTP | Meaning |
 |---|---|---|
 | `unauthorized` | 401 | No credential or session |
-| `invalid_token` | 401 | Credential present but invalid or expired |
-| `forbidden` | 403 | Authenticated but lacking permission |
+| `invalid_token` | 401 | Bearer token present but invalid or expired |
+| `invalid_grant` | 401 | Playback grant invalid, expired or revoked, or its playback session ended. `reason`: `expired`, `revoked`, `session_ended` or `invalid` |
+| `forbidden` | 403 | Authenticated but lacking permission. A grant used on a URL that is not one of its media URLs answers with `reason: wrong_scope` |
+| `ip_mismatch` | 403 | An IP-pinned grant used from another network address. For a receiver on another network, start the session with `castTarget: true` |
 | `scope_required` | 403 | Token present but required scope not granted |
 | `not_found` | 404 | Resource does not exist, or feature is off |
 | `conflict` | 409 | Resource exists / operation already in-flight |
@@ -150,23 +152,19 @@ response header.
 | `rate_limited` | 429 | Too many requests |
 | `internal_error` | 500 | Unhandled server error |
 | `bad_gateway` | 502 | Upstream returned an unexpected error |
-| `dependency_unavailable` | 503 | Required dependency (DB, Valkey, external API) is down |
+| `dependency_unavailable` | 503 | Required dependency (DB, Valkey, external API, stream proxy) is down. Always sent with `Retry-After` |
 | `stream_limit` | 503 | Live-TV stream slot limit reached (capacity full) |
-| `cap_unavailable` | 503 | Requested Live TV bitrate ceiling could not be honored |
 
 **Feature-off is `404 not_found`**, not `403 forbidden`: a disabled feature
 does not exist from the client's perspective.
 
 **Dependency-down is always `503 dependency_unavailable`**, never a `200` with
-an empty array. The `details` field may name the failing component.
+an empty array. The `details` field may name the failing component. Grant failures also send an
+`X-Playback-Grant-Reason` header with the same `reason`.
 
-Image bytes, HLS manifests/segments, SSE channels, and byte-range responses
-follow a different error path once bytes have started flowing: a **pre-stream**
-error usually uses `application/problem+json` (HLS startup has the JSON exception
-above), but a **mid-stream** error is
-transport-native (an SSE `error` event frame, an HLS `410`/`503` on the next
-segment fetch, or the connection closing outright). Don't expect a problem+json
-body once a stream is already open.
+Once a byte or stream response has started, errors are transport-native: an SSE `error`
+event frame, an HLS `410` or `503` on the next segment fetch, or the connection closing.
+Before the stream starts, errors are `application/problem+json`.
 
 ## Pagination: `{ items, page }`
 
@@ -179,13 +177,16 @@ Every collection endpoint returns the same envelope:
     "limit": 20,
     "offset": 0,
     "hasMore": true,
-    "total": 142       // optional — only when cheap or ?count=true
+    "total": 142       // only with ?includeTotal=true
   }
 }
 ```
 
 `hasMore` is mandatory and uniform across all endpoints. It drives infinite
-scroll without requiring a `COUNT(*)` query. `total` is opt-in.
+scroll without requiring a `COUNT(*)` query. `total` is opt-in: add `?includeTotal=true`.
+Lists that take only `limit` return `truncated` instead of `hasMore`. Unpaged collections
+(seasons, groups, libraries, your tokens) return the whole set: `page.limit` equals the
+item count and `hasMore` is `false`.
 
 Endpoints with high churn (run history, event logs, feeds) use **cursor
 pagination** instead of offset: `"page": { "limit": 50, "cursor": "eyJpZCI6…",
@@ -200,7 +201,7 @@ to route validation:
 | Type | Prefix | Created by | Permissions | Expiry |
 |---|---|---|---|---|
 | JWT access token | *(none, compact JWT)* | OAuth device flow | User's groups | `JWT_ACCESS_TOKEN_TTL_SECONDS` (default 3 600 s) |
-| Personal Access Token | `pat_` | User (settings UI or `/api/v1/user/tokens`) | User's groups, scoped | User choice |
+| Personal Access Token | `pat_` | User (settings UI or `/api/v1/user/pats`) | User's groups, scoped | User choice |
 | Service token | `svc_` | Admin only (`/api/v1/service-tokens`) | Configurable scope, optional IP allowlist | Admin choice |
 
 All token values are SHA-256-hashed before storage; the plaintext is returned
@@ -215,9 +216,16 @@ and audiobook audio, Live TV HLS), never on JSON calls. It expires after 24 hour
 video and audiobooks and 6 hours for music and Live TV. It is pinned to the IP address
 that started the session unless the start asked for `castTarget` and the server's policy
 allows it; unpinned grants last at most 6 hours. Renew it with `POST
-/api/v1/playback/grants/{id}/renew` and `{ "token": "…" }` (same token, later expiry,
-at most 7 days after creation); `GET` and `DELETE` on `/api/v1/playback/grants/{id}`
-read and revoke it. Ending the playback session revokes its grant.
+/api/v1/playback/grants/{id}/renew` and `{ "token": "…" }`. The response is the
+grant object with the extended expiry. Renewal never shortens expiry, and no grant lives
+longer than 7 days after its first start. `GET` and `DELETE` on
+`/api/v1/playback/grants/{id}` read and revoke it.
+
+A grant ends with its playback session. Ending the session (a `COMPLETED` report on
+`PUT /api/v1/play-sessions/{id}`, or `POST /api/v1/play-sessions/{id}/cancel`), a newer start on
+the same device, or reaping makes every URL on that grant
+answer `401 invalid_grant` with `reason: session_ended`. Start a new session to play
+again.
 
 ### JWT access tokens
 
@@ -270,7 +278,7 @@ Creating a PAT:
 
 ```bash
 # Requires an active browser session on /api/* (forward auth, built-in, or OIDC)
-curl -X POST https://lumastra.example.com/api/v1/user/tokens \
+curl -X POST https://lumastra.example.com/api/v1/user/pats \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Home Assistant",
@@ -281,15 +289,16 @@ curl -X POST https://lumastra.example.com/api/v1/user/tokens \
 ```
 
 The response body includes the `token` field (shown once, store it
-immediately). Manage PATs at `GET/POST /api/v1/user/tokens` and `DELETE
-/api/v1/user/tokens?id=<id>`.
+immediately). Manage PATs at `GET/POST /api/v1/user/pats` and `DELETE
+/api/v1/user/pats/{id}` (`204`).
 
 ### Service tokens
 
 Format: `svc_` + 48 hex chars.
 
-- Admin-created only (`POST /api/v1/service-tokens`). Require `tokens:admin` scope.
-- Accepted scopes: `read`, `write`, and `admin`; fine-grained permissions come
+- Admin-created only (`POST /api/v1/service-tokens`). Creating one needs an administrator
+  or a token with the `admin` scope.
+- Accepted scopes: `read`, `write`, `admin` and `integrations:read`; fine-grained permissions come
   from alias expansion.
 - Support optional IP allowlist, path/method restrictions, and expiry.
 - Support user impersonation via the `actAsUser` field set at creation time.
@@ -352,15 +361,18 @@ deterministically at token-issuance time:
 - `admin` → every scope in the tree.
 - `write` → `read` + `media:read` + `media:write` + `sessions:read` +
   `requests:read`. It does **not** grant `tasks:run`, `webhooks:write`, or any
-  `*:admin` scope. Those require explicit fine-grained scopes.
+  `*:admin` scope. Those need `admin`.
 - `read` → `media:read` + `sessions:read` + `requests:read`. It does **not**
-  grant `tasks:read` or `runs:read`. Task/ops routes, run history included, need
-  an explicit fine-grained scope even for read access.
+  grant `tasks:read` or `runs:read`. Task/ops routes, run history included, need `admin` even for read access.
 
 Several fine-grained `*:admin` scopes also imply their `:read` counterpart:
 `users:admin`, `library:admin`, `providers:admin`, `media:admin` (implies both
 `media:read` and `media:write`), and `playback:admin` all include read. `tasks:admin`
 additionally implies `tasks:read`, `runs:read`, and `metrics:read`.
+
+Tokens can be minted only with `read`, `write` or `admin`, plus `integrations:read` on service
+tokens. The fine-grained names below are gates that `admin` covers; they cannot be minted on
+their own.
 
 | Scope | Grants access to |
 |---|---|
@@ -450,6 +462,10 @@ Content-Type: application/json
 
 `client_id` is a free-form label: there is no client registration or client
 secret. Security rests on the user's explicit approval in step 2.
+
+`"media"` is read and write: browse, play and report. `"media:read"` gives a read-only
+token that cannot start playback (`403 scope_required`). An absent or unknown scope gets
+the full user grant.
 
 An optional `device_id` (a stable UUID you generate and persist per physical
 device) lets the server reuse the same `device_session_id` across
@@ -560,7 +576,10 @@ from issuance), and reactively on any `401` from `/api/v1/*`.
 | `POST /oauth/device` | 10 requests / minute / IP |
 | `POST /oauth/token` (polling) | 5s minimum poll interval |
 | `PUT /music/sessions/{id}` + `POST /music/sessions/{id}/beacon` | Shared 30 requests / 60s per user |
-| Video play-session progress and beacon | No endpoint-level rate limit |
+| `PUT /play-sessions/{id}` | No endpoint-level rate limit |
+| `POST /play-sessions/{id}/beacon` | Rate-limited |
+| `POST /play-sessions` | 60 requests / minute / user |
+| `POST /playback/grants/{id}/renew` | 30 requests / minute / user |
 | Everything else | No explicit client-side limit (dependency limits may still apply) |
 
 ## Environment variables

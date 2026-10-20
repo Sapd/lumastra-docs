@@ -26,16 +26,14 @@ player needs; treat the spec as authoritative for the rest.
 
 ## The model in one paragraph
 
-**The server owns the playback decision.** Your client never inspects codecs and
-builds an HLS URL itself. Instead it advertises its device capabilities and starts
-playback with `POST /api/v1/play-sessions`. The response says what the server chose
-(`direct` / `remux` / `audio_transcode` / `full_transcode`) and carries **ready URLs**
-in `delivery`, each with a scoped `?grant=` already attached. You open `delivery.url`,
-report progress, and the server handles the transcoder's decisions.
-`GET /api/v1/playback/{id}/info` describes an item (tracks, versions, resume point)
-before you start, but returns no playable URLs. The same start call works for video,
-music and audiobooks; Live TV has its own start with the same response shape. IDs are **UUID-first**: every entity
-carries a canonical `id` (UUID) and an open `ids{}` map of external identifiers.
+**The server owns the playback decision.** Your client never builds an HLS or file
+URL itself. It starts playback with `POST /api/v1/play-sessions`, and sends its
+device capabilities in `capabilities` when the defaults do not fit. The response
+carries **ready URLs** in `delivery`, each with a scoped `?grant=` already attached.
+You open `delivery.url` and report progress. The same start call works for video,
+music and audiobooks; Live TV has its own start with the same response shape. IDs are
+**opaque handles**: pass `id` back as it is. `catalogId` is the library row UUID, or
+`null` when the title is not in your library.
 
 ## Authenticate
 
@@ -50,7 +48,7 @@ the keyboard-free TV flow. The full handshake is documented in
 4. Send `Authorization: Bearer <token>` on every `/api/v1/*` request.
 
 For headless or server integrations, use a **personal access token (PAT)**
-(`pat_…`) instead. Create it once in the Lumastra UI; it doesn't expire.
+(`pat_…`) instead. Create it in the Lumastra UI or with `POST /api/v1/user/pats`.
 
 Requires `FEATURE_DEVICE_AUTH` (on by default) and `JWT_SECRET` on the server; your reverse
 proxy must let `/oauth/*` and `/api/v1/*` bypass forward-auth middleware.
@@ -74,29 +72,27 @@ curl -X POST https://lumastra.example.com/oauth/token \
 ```
 
 :::caution[Refresh token rotation]
-Each successful refresh returns a **new** `refresh_token` and supersedes the
-presented one. It isn't revoked outright: the old token stays valid until its
-own successor is used, so a retry inside that window (for example a response
-your client never received) gets back the identical pair rather than an error.
-Persist the new token anyway and prefer it going forward. Don't rely on the old
-one continuing to work.
+Each successful refresh returns a **new** `refresh_token`. Store it before you make
+any other call. Presenting a refresh token that was already rotated is treated as a
+theft signal: the whole device session is revoked and the user must authorize again.
 :::
 
 ### Conventions that apply everywhere
 
 | Convention | Rule |
 |---|---|
-| IDs | `id` is the canonical UUID. Item routes also accept a composite key (`tmdb:603:movie`) or `?externalId=provider:id:type`. Use the UUID once you have it. |
+| IDs | `id` is an opaque handle: pass it back as `{id}` and never parse it. `catalogId` is the library row UUID, or `null` for titles outside your library. Every `{id}` also accepts an external handle such as `tmdb:653:movie`. |
 | Media type | Canonical discriminator is `type`, a closed enum: `movie \| series \| season \| episode \| track \| album \| artist \| audiobook`. Ignore or filter types your client does not render. Legacy `tv`/`show` are retired. |
-| Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. Cursor-based endpoints replace `offset` with `cursor`. |
-| Images | `images{}` hrefs follow `/api/v1/{entity}/{id}/images/{role}[/{index}]`; add `?width=600&format=webp` for sizing. |
-| Errors | Resource errors use `application/problem+json`; HLS startup has a JSON exception documented in [Streaming](/developers/building-a-player-streaming/). Switch on `code` for problem responses. |
-| Header-less players | Use the URLs from `POST /play-sessions`: they carry a `?grant=` for that one item and session. `api_key` and `stream_token` query parameters are not accepted on media routes (see [Streaming](/developers/building-a-player-streaming/)). |
-| Time units | Playback progress and `/api/v1/playback/{id}/timeline` (chapters, skip segments, trickplay) use **milliseconds**. Follow each field’s schema. |
+| Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. `total` is returned only with `?includeTotal=true`. Limit-only lists return `truncated` instead of `hasMore`. Cursor-based endpoints replace `offset` with `cursor`. |
+| Images | Read `images.<role>.href` from the item, or pick a size from `variants` (`thumb`, `card`, `hd`, `wide`, `full`). Never build an image URL. |
+| Errors | Every `/api/v1/*` error is `application/problem+json`. Switch on `code`. |
+| Header-less players | Use the `delivery` URLs from `POST /play-sessions`: each carries a `?grant=` for that one item and session. The server does not accept `api_key` or `stream_token` query parameters. |
+| Time units | Milliseconds everywhere: `positionMs`, `durationMs`, `startPositionMs`, and `/api/v1/playback/{id}/timeline`. |
 
 ## Errors
 
-Every error from `/api/v1/*` is `application/problem+json`:
+Every error from `/api/v1/*` is `application/problem+json`, including bearer and grant
+failures:
 
 ```jsonc
 // 422 response body
@@ -104,16 +100,26 @@ Every error from `/api/v1/*` is `application/problem+json`:
   "code": "validation_failed",
   "error": "Request body failed validation",
   "status": 422,
-  "details": [{ "field": "event_seq", "message": "must be a positive integer" }],
+  "details": [{ "field": "eventSeq", "message": "must be a positive integer" }],
   "requestId": "req_abc123",   // optional
-  "retryAfter": 30             // optional, seconds — also in Retry-After header
+  "retryAfter": 30             // optional, seconds — also in the Retry-After header
 }
 ```
 
-The `code`s a player actually branches on: `unauthorized`/`invalid_token` (401, sign in
-again), `not_found` (404, which is also what a disabled feature returns, not `403`), and
-`dependency_unavailable` (503, never a `200` with an empty array). See
-[API & tokens → Errors](/developers/api/#errors-applicationproblemjson) for the full
+The `code`s a player branches on:
+
+- `unauthorized` or `invalid_token` (401): sign in again.
+- `invalid_grant` (401): the playback grant cannot be used. `reason` says why.
+  `session_ended` means the session finished; start a new session.
+- `forbidden` (403): a grant used on a URL that is not one of its media URLs answers
+  `reason: wrong_scope`.
+- `ip_mismatch` (403): the grant is pinned to another network address. Start the
+  session with `castTarget: true` for a receiver on another network.
+- `not_found` (404): also what a disabled feature returns, not `403`.
+- `dependency_unavailable` (503): always sent with `Retry-After`. Never a `200` with an
+  empty array.
+
+See [API & tokens → Errors](/developers/api/#errors-applicationproblemjson) for the full
 closed taxonomy.
 
 :::note[`/oauth/*` errors use a different shape]
@@ -164,123 +170,56 @@ endpoints instead. Each returns a `{ items, page }` envelope of catalog items.
 | `GET /api/v1/browse?sort=az&type=movie&limit=50&offset=0` | Paginated A-Z browse |
 | `GET /api/v1/search?q=…&type=movie,series&limit=20` | Cross-type search |
 
-Fields a player cares about on a catalog row item: `id` (canonical UUID),
-`ids` (open map, e.g. `imdb`/`tmdb`), `type`, `title`, `images`, `year`. Add
+Fields a player cares about on a catalog row item: `id` (opaque handle), `catalogId`,
+`ids` (raw provider values, e.g. `imdb`/`tmdb`), `type`, `title`, `images`, `year`. Add
 `?include=user` to any detail call to attach per-user watch state and rating.
 
-:::caution[Gate "Play" on `hasFiles`]
-Catalog items with no local file (discovery-only) carry `hasFiles: false`. Show a
-**Request** affordance instead of a **Play** button. For episode lists the
-equivalent field is `hasFile` on each row.
+:::caution[Play only titles in your library]
+A title with `catalogId: null` is not in the library (discovery or requestable). Show a
+**Request** affordance instead of a **Play** button. Episode rows carry
+`availability.hasFile`; check it before you show Play on an episode.
 :::
 
 Series traversal:
 
 ```
-GET /api/v1/series/{id}/seasons          → { items, page } of seasons
-GET /api/v1/series/{id}/episodes         → all episodes, across seasons
-GET /api/v1/series/{id}/next-episode     → next unwatched episode (?season=N&episode=M: that episode)
-GET /api/v1/series/{id}/watch-status     → aggregate watched/total
+GET /api/v1/series/{id}/seasons                    → { ordering, items, page } of seasons
+GET /api/v1/series/{id}/episodes?limit=&offset=    → episodes, season then episode order
+GET /api/v1/series/{id}/seasons/{n}/episodes/{e}   → one episode, or 404
+GET /api/v1/series/{id}/next-episode               → next unwatched episode
+GET /api/v1/series/{id}/watch-status               → aggregate watched/total
 ```
 
 ## Item detail
 
-`GET /api/v1/media/{id}` is the canonical detail node for any playable item,
-type-discriminated by the `type` field. It accepts the internal UUID or a
-composite external key (`tmdb:603:movie`); add `?include=user,playback` for
-per-user watch state and a playback hint.
+`GET /api/v1/media/{id}` is the canonical detail node for any item,
+type-discriminated by the `type` field. It accepts the `id` handle or an external handle
+(`tmdb:653:movie`); add `?include=user,playback` for per-user watch state and a playback
+hint. Durations are in `durationMs`.
 
 ```jsonc
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
+  "catalogId": "550e8400-e29b-41d4-a716-446655440000",
   "type": "movie",
-  "ids": { "imdb": "tt0133093", "tmdb": "603" },
-  "title": "The Matrix",
-  "year": 1999,
-  "hasFiles": true,
+  "ids": { "tmdb": "653" },
+  "title": "Nosferatu",
+  "year": 1922,
+  "durationMs": 5640000,
   "images": { "poster": { "href": "/api/v1/media/550e8400-…/images/poster" } }
 }
 ```
 
-A series node additionally embeds traversal links (`seasons`, `episodes`,
-`nextEpisode`, `watchStatus` hrefs).
+A series node additionally embeds traversal links (`seasons`, `episodes`, `nextEpisode`,
+`watchStatus`), each with an `href`.
 
-## Describe an item
+## Describe an item (deprecated)
 
-Once you have an item with `hasFiles: true`, `GET /api/v1/playback/{itemId}/info`
-returns what the server knows about it: codec and track detail, versions, and the
-resume point. It is a description only. It carries no playable URL and no credential,
-so it's safe to call while browsing.
-
-```http
-GET /api/v1/playback/{itemId}/info?caps=v:h264,hevc,av1;a:aac,ac3,eac3,opus,flac;c:mp4,m4v,mov,ts,mkv;h:hdr10,hlg,dovi
-Authorization: Bearer <token>
-```
-
-`POST /api/v1/playback/{itemId}/info` takes the same capabilities as typed JSON:
-
-```json
-{ "capabilities": { "containers": ["mp4", "ts"], "videoCodecs": ["h264", "hevc"],
-                    "audioCodecs": ["aac", "ac3"], "subtitleFormats": ["vtt"],
-                    "hdr": ["hdr10"], "maxVideoBitrate": 20000000, "maxHeight": 2160,
-                    "maxAudioChannels": 6 } }
-```
-
-`containers`, `videoCodecs`, `audioCodecs`, `subtitleFormats` and `hdr` are lists;
-`maxVideoBitrate` (bits per second), `maxHeight` and `maxAudioChannels` are optional.
-The `caps` string on `GET` is four optional sections joined by `;`:
-
-| Prefix | What to list |
-|---|---|
-| `v:` | Video codecs your device can decode |
-| `a:` | Audio codecs |
-| `c:` | Container formats for direct play |
-| `h:` | HDR formats (`hdr10`, `hlg`, `dovi`) |
-
-Case-insensitive, max 500 chars. Omit the capabilities and the server falls back to
-conservative browser defaults; omit just the HDR list and it assumes the OS compositor
-tonemaps HDR. Advertising source codecs/containers is what enables **direct play**
-over a transcode.
-
-**The description, abridged:**
-
-```jsonc
-{
-  "recommended": "audio_transcode",
-  "output_hdr": "hdr10",
-  "resume_position_ms": 2760000,
-  "duration_ms": 7200000,
-  "tracks": { "video": { "codec": "hevc", "hdr": "hdr10" }, "audio": [ /* … */ ] },
-  "play_methods": {
-    "direct":          { "available": false },
-    "audio_transcode": { "available": true }
-  },
-  "versions": [ { "id": "uuid", "label": "4K Director's Cut", "size_bytes": 48318382080 } ],
-  "trickplay": { "width": 320, "height": 180, "interval": 10000 }
-}
-```
-
-Key fields:
-
-- **`recommended`**: the method the server would pick for these capabilities.
-- **`resume_position_ms`**: milliseconds, not ticks.
-- **`versions[].size_bytes`**: on-disk size of that version's file, for showing
-  *"Download (45 GB)"* before a user commits. Optional: absent means the file has
-  not been scanned yet ("unknown", not zero). See
-  [Offline downloads](/developers/offline-downloads/).
-
-:::caution[Check `play_methods[method].available`]
-Some methods may be unavailable: `audio_transcode`, for example, requires the
-transcoder to be configured on the server. The start call picks an available
-method for you; read `available` only to decide what to offer.
-:::
-
-`output_hdr` tells you what the recommended method will actually *emit*;
-`tracks.video.hdr` is the *source* format. Matching values mean HDR is preserved
-(even across a transcode); a mismatch means the server tonemapped. Dolby Vision
-**always** requires explicit `h:dovi` to avoid a transcode. Its metadata is
-complex enough that guessing produces corrupted colors, so the server never
-passes it through speculatively.
+`GET` and `POST /api/v1/playback/{itemId}/info` are **deprecated** for third parties.
+They return the first-party player's internal decision record, in snake_case, and no
+playable URL. Older app builds still use them. Start playback with
+`POST /api/v1/play-sessions` instead: the start response carries the tracks, the
+subtitles and the resume point.
 
 ## Play media from your own client
 
@@ -292,29 +231,69 @@ audiobooks and returns the same envelope each time:
 {
   "playbackSessionId": "uuid",
   "mediaId": "uuid",
-  "kind": "video | music | audiobook | live",
-  "delivery": { "kind": "file | hls | multipart-audio | live-hls", "url": "/api/v1/…?grant=…" },
-  "grant": { "id": "uuid", "token": "…", "param": "grant", "ipPinned": true,
+  "kind": "video | music | audiobook",
+  "delivery": { "kind": "file | hls | multipart-audio", "url": "/api/v1/…?grant=…", "startPositionMs": 0 },
+  "grant": { "id": "uuid", "token": "…", "param": "grant", "mediaId": "uuid",
+             "playbackSessionId": "uuid", "kind": "video", "ipPinned": true,
              "expiresAt": "…", "renewAfter": "…", "renewHref": "/api/v1/playback/grants/{id}/renew" },
-  "reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
-- Every URL in `delivery` (manifest, files, subtitles, previews, timeline) is ready to
+- Every URL in `delivery` (manifest, files, subtitles, timeline, previews) is ready to
   use and already carries `?grant=`. Never append your account token or build media
-  URLs yourself.
-- A **grant** belongs to one item and one playback session, expires, and works only
-  on media URLs. The first grant lasts 24 hours for video and audiobooks, 6 hours for
-  music and Live TV. Renewing is optional: `POST grant.renewHref` with your bearer token
-  and `{ "token": grant.token }` returns the same token with a later expiry.
+  URLs yourself. The server never puts your account credential into a URL.
+- A **grant** belongs to one item and one playback session, and works only on media URLs.
+  The first grant lasts 24 hours for video and audiobooks, and 6 hours for music and Live
+  TV. Renewing is optional: `POST grant.renewHref` with your bearer token and
+  `{ "token": grant.token }` returns the grant with the extended expiry. Renewal never
+  shortens expiry.
+- A grant ends with its playback session. Ending the session (a `COMPLETED` report, or a
+  cancel), a newer start on the same device, or reaping makes every URL on that grant
+  answer `401 invalid_grant` with `reason: session_ended`. Start a new session to play
+  again.
 - Positions and durations are milliseconds everywhere.
+
+### Ending a playback session
+
+End a video or audiobook session with `PUT /api/v1/play-sessions/{id}` and
+`status: "COMPLETED"` (a normal end, `204`). To terminate a session at once and free its
+stream slot, call `POST /api/v1/play-sessions/{id}/cancel`. There is no
+`DELETE /api/v1/play-sessions/{id}`. Live TV sessions are different: stop them with
+`DELETE /api/v1/livetv/playback-sessions/{playbackSessionId}`, or `POST …/leave` from
+`sendBeacon`.
+
+### Capabilities
+
+`capabilities` is optional, and every field inside it is optional too. An omitted list
+takes its default:
+
+| Field | Default |
+|---|---|
+| `containers` | `mp4`, `ts`, `mp3`, `m4a` |
+| `videoCodecs` | `h264` |
+| `audioCodecs` | `aac`, `mp3` |
+| `subtitleFormats` | `vtt` |
+| `hdr` | none (SDR) |
+
+Send a field when your player differs from the default:
+
+```json
+{ "containers": ["mp4", "ts", "mkv"], "videoCodecs": ["h264", "hevc"],
+  "audioCodecs": ["aac", "ac3", "eac3"], "subtitleFormats": ["vtt", "pgs"],
+  "hdr": ["hdr10", "dovi"], "maxAudioChannels": 6 }
+```
+
+Vocabularies are open lower-case tokens. Unknown tokens are ignored. Tracks you cannot
+render are burned in. `maxVideoBitrate` (bits per second), `maxHeight` (pixels) and
+`maxAudioChannels` are optional.
 
 ### Play a movie
 
-1. `POST /api/v1/play-sessions` with
-   `{ "mediaId": "<movie id>", "deviceId": "<stable id>", "capabilities": { … } }`.
-2. Give `delivery.url` to your player (`delivery.kind` is `hls` or `file`). Subtitles,
-   the timeline and previews are in `delivery` as ready URLs.
+1. `POST /api/v1/play-sessions` with `{ "mediaId": "<movie id>", "deviceId": "<stable id>", "capabilities": { … } }`.
+2. Give `delivery.url` to your player (`delivery.kind` is `hls` or `file`). Subtitles are
+   in `delivery.subtitles[]`, the timeline is at `delivery.timeline.href`, and
+   `delivery.recommended` names the suggested audio and subtitle tracks.
 3. Every `reporting.intervalMs`, `PUT` the position to `reporting.href`. Finish with
    `status: "COMPLETED"`. A player that can't report skips this step.
 
@@ -335,15 +314,17 @@ gapless playback. See [Music playback](/developers/music-playback/).
 ### Play an audiobook
 
 `POST /api/v1/play-sessions` with `{ "mediaId": "<book id>", "deviceId": "…" }`.
-`delivery.kind` is `multipart-audio`: `delivery.tracks[]` hold ready URLs with `startMs`
-and `durationMs` on the book clock, and `delivery.startPositionMs` is the resume point.
-Report progress against the Lumastra `playbackSessionId`, as for video. See
-[Audiobook playback](/developers/audiobook-playback/).
+`delivery.kind` is `multipart-audio`. `delivery.tracks[]` sit on the book clock
+(`startMs`, `durationMs`). Media URLs always start at 0, so seek to
+`delivery.startPositionMs` yourself. When the server transcodes, `tracks[]` holds one
+HLS playlist for the whole book. Report progress against the `playbackSessionId`, as for
+video. See [Audiobook playback](/developers/audiobook-playback/).
 
 ### Watch a channel
 
-`POST /api/v1/livetv/playback-sessions` with a station id returns the same envelope
-with `delivery.kind` `live-hls`. Play `delivery.url`. See
+`POST /api/v1/livetv/playback-sessions` with a station id returns the same envelope with
+`delivery.kind` `live-hls`, `delivery.heartbeatIntervalMs` and `delivery.keepaliveHref`.
+Play `delivery.url` and keep the session alive as described in
 [Live TV playback](/developers/live-tv-playback/).
 
 ### Play in an external player (VLC, Kodi, cast)
@@ -351,10 +332,11 @@ with `delivery.kind` `live-hls`. Play `delivery.url`. See
 One URL is enough. Start the session, then open `delivery.url` in the player, for
 example `vlc "https://lumastra.example.com<delivery.url>"`. VLC, Kodi, mpv, Infuse,
 AVPlayer given a URL, and cast and AirPlay receivers can't send headers, report or
-renew, and don't need to: media fetches count as activity, so the session isn't
-reaped while the stream is being read. The URL stays valid for the grant's lifetime.
-For a cast or AirPlay receiver on another network address, add `"castTarget": true`
-to the start request (the server may disable this by policy; check `grant.ipPinned`).
+renew, and don't need to: media fetches count as activity, so the session isn't reaped
+while the stream is being read. The URL stays valid until the session ends or the grant
+expires. For a cast or AirPlay receiver on another network address, add
+`"castTarget": true` to the start request (the server may disable this by policy; check
+`grant.ipPinned`).
 
 ## Putting it together
 
@@ -362,10 +344,10 @@ to the start request (the server may disable this by policy; check `grant.ipPinn
 on startup    → GET /server/capabilities, GET /server/notice
 authenticate  → OAuth device flow, open GET /api/v1/events (SSE)
 browse        → continue-watching, trending, search, GET /media/{id}
-describe      → GET /playback/{id}/info?caps=…   (optional, no URLs)
 start         → POST /play-sessions → delivery.url
 stream        → see Streaming a player  (§ next page)
 track         → see Progress & state    (§ next page)
+stop          → PUT status COMPLETED, or POST /play-sessions/{id}/cancel
 ```
 
 The two linked pages below cover the rest: grants, progress heartbeats,

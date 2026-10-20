@@ -24,9 +24,9 @@ curl -X POST https://lumastra.example.com/api/v1/play-sessions \
        "audioCodecs":["aac","ac3"],"subtitleFormats":["vtt"],"hdr":["hdr10"]}}'
 ```
 
-`mediaId` and `deviceId` are required. `capabilities` is typed:
-`containers`, `videoCodecs`, `audioCodecs`, `subtitleFormats`, `hdr`, and optionally
-`maxVideoBitrate`, `maxHeight` and `maxAudioChannels`. Starting needs the `media:write`
+`mediaId` and `deviceId` are required. `capabilities` and every field inside it are
+optional; an omitted list takes its default (see [Building a player](/developers/building-a-player/#capabilities)).
+`startPositionMs` overrides the saved resume point. Starting needs the `media:write`
 scope and is limited to 60 requests per minute per user.
 
 ```jsonc
@@ -35,10 +35,17 @@ scope and is limited to 60 requests per minute per user.
   "playbackSessionId": "uuid",
   "mediaId": "550e8400-…",
   "kind": "video",
-  "delivery": { "kind": "hls", "url": "/api/v1/playback/550e8400-…/hls?PlaySessionId=…&grant=…" /* plus subtitles, timeline, previews */ },
-  "grant": { "id": "uuid", "token": "…", "param": "grant", "ipPinned": true,
+  "delivery": {
+    "kind": "hls",
+    "url": "/api/v1/playback/550e8400-…/hls?PlaySessionId=…&grant=…",
+    "startPositionMs": 0,
+    "subtitles": [ /* see section 4 */ ],
+    "timeline": { "href": "/api/v1/playback/550e8400-…/timeline?grant=…" }
+  },
+  "grant": { "id": "uuid", "token": "…", "param": "grant", "mediaId": "550e8400-…",
+             "playbackSessionId": "uuid", "kind": "video", "ipPinned": true,
              "expiresAt": "…", "renewAfter": "…", "renewHref": "/api/v1/playback/grants/{id}/renew" },
-  "reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
@@ -46,11 +53,11 @@ Every URL in `delivery` (the HLS manifest or file, subtitles, timeline, previews
 ready to use and already carries `?grant=`. Don't append your account token or build
 media URLs yourself. The server never puts your account credential into a URL.
 
-A **grant** belongs to one item and one playback session, expires, and works only on
-media URLs, never on JSON API calls. The first grant lasts the full limit for its kind:
-24 hours for video and audiobooks, 6 hours for music and Live TV. The server also
-embeds it in every segment URL of the HLS master playlist, so AVPlayer fetches segments
-without setting headers.
+A **grant** belongs to one item and one playback session, and works only on media URLs,
+never on JSON API calls. The first grant lasts the full limit for its kind: 24 hours for
+video and audiobooks, 6 hours for music and Live TV. The server also embeds it in every
+segment URL of the HLS master playlist, so AVPlayer fetches segments without setting
+headers.
 
 By default a grant is pinned to the IP address that started the session
 (`grant.ipPinned`). To hand the URL to a cast or AirPlay receiver on another address,
@@ -66,18 +73,23 @@ curl -X POST https://lumastra.example.com{grant.renewHref} \
   -d '{"token":"<grant.token>"}'
 ```
 
-The response is the **same** token with a later expiry, so URLs already in the
-playlist keep working. Renewal rechecks the user's access to the item, allows 30
-requests per minute per user, and stops at 7 days after the grant was created.
-Ending the playback session revokes its grant. `GET` and `DELETE` on
-`/api/v1/playback/grants/{id}` read and revoke a grant by its `id`; the secret is
-never part of that path.
+The response is the grant object with the extended expiry. Renewal rechecks the user's
+access to the item, allows 30 requests per minute per user, and never shortens expiry.
+No grant lives longer than 7 days after its first start. `GET` and `DELETE` on
+`/api/v1/playback/grants/{id}` read and revoke a grant by its `id`; the secret is never
+part of that path.
+
+A grant ends with its playback session. Ending the session with `PUT` `status: "COMPLETED"`
+or `POST …/cancel`, a newer start on the same device, or reaping makes every URL on that
+grant answer `401 invalid_grant` with `reason: session_ended`. Start a new session to
+play again.
 
 :::note[Replaced `api_key`, `stream_token` and the stream-token endpoints]
-`api_key` and `stream_token` query parameters are no longer accepted on `/api` and
+`api_key` and `stream_token` query parameters are not accepted on `/api` and
 `/api/v1` media routes. `POST /playback/stream-tokens`, its `refresh` and `DELETE`
-routes, `POST /music/stream-token` and `/playback/{id}/stream-token` are gone. A script that built media
-URLs with an API key should start a playback session and open `delivery.url`.
+routes, `POST /music/stream-token` and `/playback/{id}/stream-token` are gone. A script
+that built media URLs with an API key should start a playback session and open
+`delivery.url`.
 :::
 
 ## 2. Open the stream
@@ -89,21 +101,22 @@ Open `delivery.url` as returned. For a file, `delivery.kind` is `file`; for HLS 
 ```
 GET /api/v1/playback/{id}/hls
     ?PlaySessionId=<playbackSessionId>&grant=…
-    [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>]
-    [&SubtitleStreamIndex=<index>&SubtitleMethod=Encode][&seek=<seconds>]
+    [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>][&seek=<seconds>]
 ```
+
+`maxBitrate`, `maxHeight` and `maxAudioChannels` are pre-filled by the start call; if you
+set them yourself, the last value wins.
 
 :::note[One session id]
 The `PlaySessionId` on the HLS URL is the `playbackSessionId` the start returned. Use
 that one id for the stream, for progress reports (`reporting.href`) and for telemetry.
-You no longer generate it yourself. Ending the session frees its stream slot.
+You never generate it yourself. Ending the session frees its stream slot.
 :::
 
 The `/hls` endpoint returns an HLS master playlist with per-audio-track
 `#EXT-X-MEDIA` renditions, video `#EXT-X-STREAM-INF` (with `VIDEO-RANGE=PQ` for
 HDR output), WebVTT subtitle tracks, an I-frame playlist for tvOS scrubbing, and
-a trickplay image stream for Roku. Every segment URL already carries the
-`grant`.
+a trickplay image stream for Roku. Every segment URL already carries the `grant`.
 
 ```javascript
 // HLS.js (browser)
@@ -127,12 +140,8 @@ new position. A segment that has aged out of the rewind window returns
 | Segment, normal sequential playback | 10 s |
 | Segment, immediately after a seek | 45 s |
 
-```jsonc
-// 503 — transcoder did not produce the manifest in time
-{ "error": "transcode_start_timeout", "message": "HLS transcode startup timed out" }
-// Other startup codes: transcode_start_failed, transcode_start_interrupted.
-// Retry the same request after a delay.
-```
+Startup failures are `application/problem+json` too. Switch on `code`. `retryAfter` and
+the `Retry-After` header say when to try again.
 
 :::caution[Stream-start can return 403 (admin kick)]
 An admin kick returns `403` with an `application/problem+json` body:
@@ -144,30 +153,48 @@ and wait until the cooldown elapses before retrying.
 ## 4. Audio & subtitle tracks
 
 **Audio: select by `absoluteIndex`**, the wire value on every API (`&hlsAudioTrack=`
-on the HLS URL, `audio_stream_index` on the heartbeat). Mixing it up with the
+on the HLS URL, `audioStreamIndex` on progress reports). Mixing it up with the
 display-only `index` is the classic "wrong audio language" bug.
 
-**Subtitles: select by `index`.** Text tracks arrive as WebVTT embedded in the
-HLS playlist; sidecar files appear in `externalSubtitles[]` with a ready
-`deliveryUrl`. Each `tracks.subtitles[]` entry carries a `method`:
+**Subtitles: select by `index`.** The start response lists every track in
+`delivery.subtitles[]`:
 
-| `method` | Action |
-|---|---|
-| `external_vtt` | Fetch the ready subtitle URL from `delivery` (it carries the `grant`) |
-| `burn_in` | Add `&SubtitleStreamIndex={index}&SubtitleMethod=Encode` to the HLS URL |
-| `client_render` | Draw it yourself: PGS/VobSub images, or ASS/SSA text |
+```jsonc
+{
+  "id": "uuid",
+  "index": 3,
+  "kind": "external",              // embedded | external
+  "codec": "srt",
+  "language": "eng",
+  "title": "English (SDH)",        // optional
+  "default": false,
+  "forced": false,
+  "format": "text",                // text | bitmap
+  "hrefs": {
+    "text": "/api/v1/playback/550e8400-…/subtitles/3?grant=…"
+  }
+}
+```
+
+- `hrefs.text` is WebVTT for text tracks. `hrefs.raw` is the original format.
+- `hrefs.rendered` exists only for bitmap tracks (PGS and VobSub embedded in the file).
+  Bitmap sidecar files have no hrefs.
+- Every href is an `/api/v1` URL that already carries `?grant=`, so it works for
+  header-less players and for bearer clients alike.
+- Pass `index` back as `subtitleStreamIndex` to select or burn in a track. Tracks you
+  cannot render are burned in.
+- `delivery.recommended` gives `audioStreamIndex` and `subtitleStreamIndex` from the
+  user's language preferences. It is absent when the server has no opinion. The
+  `default` and `forced` flags on each track are the file's own.
 
 ### Bitmap subtitles (PGS / VobSub)
 
-Blu-ray (PGS) and DVD (VobSub) subtitles are pictures, not text. In order of
-preference: **server-rendered images** (fetch a cue manifest at
-`GET /api/v1/playback/{itemId}/subtitles/{index}/rendered?fileId=…`, then each
-PNG by id, with no client decoder and no re-encode needed), **raw bitmap track** (fetch
-`format=pgssub`/`sub` and decode with something like `libpgs-js`), or **burn-in**
-(forces a full transcode). The first request for a track is slow (a minute or
-two on a two-hour remux, since nothing is pre-rendered); afterwards it is served
-in well under a second and kept long-term. DVBSub and XSUB have no rendered
-form; burn them in.
+Blu-ray (PGS) and DVD (VobSub) subtitles are pictures, not text. Use `hrefs.rendered`
+for pre-rendered images, which need no client decoder. Or fetch `hrefs.raw` and decode
+the bitmaps yourself, for example with `libpgs-js`. Burn-in forces a full transcode. The
+first request for a track is slow (a minute or two on a two-hour remux, since nothing is
+pre-rendered); afterwards it is served in well under a second and kept long-term. DVBSub
+and XSUB have no rendered form; burn them in.
 
 :::note[HLS subtitles are pre-sanitized]
 When delivered through `/hls`, the server already fixes fMP4 timestamp offsets,
@@ -259,19 +286,24 @@ since repeat mints reuse the cached artifact.
 
 ## 7. Trickplay, chapters & skip markers
 
-The plan's `trickplay` block gives `interval` (ms between thumbs) and tile
-dimensions; images are also in the master playlist as
-`#EXT-X-IMAGE-STREAM-INF` (Roku) and `#EXT-X-I-FRAME-STREAM-INF` (Apple TV), or
-fetched directly at `GET /api/v1/playback/{id}/trickplay/{width}`.
+Chapters, skip segments and trickplay come from `delivery.timeline.href`. The response
+carries:
 
-`GET /api/v1/playback/{id}/timeline?fileId=` returns everything for one file in one call:
-`chapters[]` (with `startMs`, `endMs` and a ready `image.href`), `segments[]`
-(`intro`, `outro`, `recap`, `preview` or `commercial`, with `startMs`/`endMs`) and
-`trickplay.variants[]` (`width`, `manifestHref`). All times are integer **milliseconds**
-on the selected file's clock, and the response echoes the resolved `fileId`. Show the skip
-button while the position is inside a segment and seek to its `endMs`. The trickplay
-manifest is JSON (`tileColumns`, `tileRows`, `intervalMs`, `thumbnailCount`, `sheets[]` with
-ready `href`s); fetch the sheets as given.
+- `durationMs`.
+- `chapters[]`: `startMs`, `endMs`, `name` and `image.href`.
+- `segments[]`: `type` is `intro`, `outro`, `recap`, `preview` or `commercial`, with
+  `startMs` and `endMs`.
+- `trickplay`: `state` and `variants[]` (`width`, `manifestHref`).
+
+All times are integer **milliseconds** on the selected file's clock. `trickplay.state` is
+`ready`, `pending` (`variants` is empty; ask again later), `unavailable` (retry later) or
+`unsupported` (never retry).
+
+Show the skip button while the position is inside a segment, and seek to its `endMs`.
+The trickplay manifest is JSON (`tileColumns`, `tileRows`, `intervalMs`, `thumbnailCount`,
+`sheets[]` with `href`s); fetch the sheets as given. The HLS master playlist also carries
+trickplay images as `#EXT-X-IMAGE-STREAM-INF` (Roku) and `#EXT-X-I-FRAME-STREAM-INF`
+(Apple TV), and `GET /api/v1/playback/{id}/trickplay/{width}` serves the image sheets directly.
 
 ## Next
 

@@ -11,21 +11,24 @@ stream is a **shared, capacity-limited** resource: start a playback session,
 keep it alive with periodic keepalives, and **release it** when you're done so
 the slot frees up for other viewers.
 
-All endpoints are on the `/api/v1` token surface and need a bearer token (and
-Live TV permission). Stations are the stable viewer identity; feeds identify
-individual upstream choices; `playbackSessionId` (the `{sessionId}` in the lifecycle paths) identifies one playback lifecycle.
-The station and playback-session routes replace the old channel viewer routes
-with no compatibility aliases. HLS protocol paths remain feed-addressed.
+All endpoints are on the `/api/v1` token surface and need a bearer token and the
+`canWatchLiveTv` permission. Without it, every Live TV endpoint answers `403 forbidden`
+with "Live TV access requires permission".
+
+Stations are the stable viewer identity. Feeds identify individual upstream choices.
+`playbackSessionId` identifies one playback lifecycle; it is the `{playbackSessionId}` in
+the lifecycle paths. HLS protocol paths remain feed-addressed.
 
 ## The flow
 
 ```text
-1. GET    /api/v1/livetv/stations                            → station list
-2. GET    /api/v1/livetv/guide?from=…&to=…                   → programs keyed by stationId
-3. POST   /api/v1/livetv/playback-sessions                   → playbackSessionId, delivery.url, grant, reporting
-4. play   delivery.url                                     → HLS player
-5. POST   /api/v1/livetv/playback-sessions/{sessionId}/keepalive → every reporting.intervalMs
-6. DELETE /api/v1/livetv/playback-sessions/{sessionId}         → on stop / station switch
+1. GET    /api/v1/livetv/stations                                  → station list
+2. GET    /api/v1/livetv/guide?from=…&to=…                         → airings and nowNext per station
+3. POST   /api/v1/livetv/playback-sessions                         → playbackSessionId, delivery, grant
+4. play   delivery.url                                             → HLS player
+5. POST   delivery.keepaliveHref   every delivery.heartbeatIntervalMs
+6. DELETE /api/v1/livetv/playback-sessions/{playbackSessionId}    → on stop or station switch
+                                                                   (or POST …/leave from sendBeacon)
 ```
 
 ## How Live TV differs from on-demand
@@ -69,15 +72,14 @@ Returns `{ items, page }` where each item is a station object:
 | `isVisible` | boolean | Whether the station is visible |
 | `qualityTier` | `uhd` \| `fhd` \| `hd` \| `sd` (optional) | Stream quality |
 | `sourceId` | string (optional) | Upstream source UUID |
-| `currentProgram` | object (optional) | Currently-airing program (see below) |
+| `nowNext` | object (optional) | Current and next airing |
 
 Use `id` as `stationId` for guide lookups, favorites, simple mode and session
 starts. A change to the shown feed does not change the station's identity.
 Sort a flat lineup by `channelNumber`; `sortOrder` only orders a category.
 
-`GET /api/v1/livetv/stations/{stationId}` returns the station object itself,
-useful for deep-link flows. It includes the list-item fields and optional
-`nextProgram`. Read the fields directly on the response object.
+`GET /api/v1/livetv/stations/{stationId}` returns the station object itself, with `nowNext`
+(current and next airing), useful for deep-link flows.
 
 Unknown stations return `404 not_found`; an unavailable Live TV provider
 returns `503 dependency_unavailable`.
@@ -85,42 +87,29 @@ returns `503 dependency_unavailable`.
 ## 2. Guide / EPG
 
 ```http
-GET /api/v1/livetv/guide?from=2026-10-17T18:00:00Z&to=2026-10-17T20:00:00Z
+GET /api/v1/livetv/guide?from=2026-10-17T18:00:00Z&to=2026-10-18T00:00:00Z&limit=50
 Authorization: Bearer <token>
 ```
 
-Listing stations, then fetching the guide takes two calls; no feed or backup
-group traversal is needed. Supply explicit ISO 8601 UTC `from` and `to` times.
-`to` must be after `from`, and the window must be **at most 8 hours**.
-Optional `stationIds` is a comma-separated list of up to 200 station ids;
-omit it for all visible stations.
+Listing stations, then fetching the guide takes two calls. Supply explicit ISO 8601 UTC
+`from` and `to` times. Both are required, and the window must be **at most 24 hours**.
+Pass `stationIds` (up to 200 station ids, comma-separated) for a chosen set, or `limit`
+with `cursor` paging for all visible stations. Follow `page.nextCursor` until
+`page.hasMore` is `false`.
 
-The guide returns a bare object `{ programs, windowStart, windowEnd }`, not a
-paginated collection. `programs` maps each **stationId** to its chronological
-program array.
+The guide returns `stations[{stationId, airings, nowNext}]`, ordered. Each airing carries
+its `stationId`, a title, and `start` and `end` (ISO 8601).
+`nowNext` is the current airing and the next one. Current is `start <= now < end`;
+next is the first airing that has not started. The same rule applies in every response.
 
 For one station, use
 `GET /api/v1/livetv/stations/{stationId}/programs?from=…&to=…` with the same
-explicit window rules. It returns `{ items, page }`. There is no `view=now-next`
-or `view=day` shortcut.
-`GET /api/v1/livetv/stations/{stationId}/current-program` returns
-`{ isLive, program? }` for a now-playing banner.
+window rules (required UTC, at most 24 hours). It returns `airings` and `nowNext`.
+`GET /api/v1/livetv/stations/{stationId}/current-program` returns `nowNext` and `asOf`
+(server time) for a now-playing banner.
 
-Each `LiveTvProgram` has `id`, `stationId`, `title`, `startTime` and `endTime`
-(ISO 8601), plus optional `description`, `genres`, `officialRating`, `epgId`
-(feed provenance, not a per-program id) and `sourceId`. Compute duration from
-`endTime - startTime`. Invalid windows return `422 validation_failed`; an
-unavailable provider returns `503 dependency_unavailable`.
-
-### Non-overlap guarantee
-
-Programs on a station are guaranteed **non-overlapping**: one ends at or
-before the next begins. You can lay them out on a timeline without collision
-handling; at most one program covers any instant. Gaps are possible.
-
-Lumastra deduplicates at import time and re-checks on read. **Do not write your
-own title-based deduplication**: genuine repeats at different times are
-preserved. Report overlapping entries rather than filtering them in a client.
+Invalid windows return `422 validation_failed`; an unavailable provider returns
+`503 dependency_unavailable`.
 
 ### Pick a feed
 
@@ -162,45 +151,49 @@ Omitting `hevc` preserves original-stream behavior. For an HEVC source, the
 server can select fMP4 packaging or an H.264 compatibility encode for the
 capability you declare.
 
-A successful start returns **`201`** with:
+A successful start returns **`201`** with the shared playback envelope:
 
-| Field | Type | Meaning |
-|---|---|---|
-| `playbackSessionId`, `stationId`, `feedId` | string | Session handle (the `{sessionId}` in the lifecycle paths), stable station, and selected feed |
-| `delivery` | object | `kind: "live-hls"` and `url`: the HLS URL, ready to hand to the player, already carrying a `?grant=` |
-| `grant` | object | `{ id, token, param: "grant", ipPinned, expiresAt, renewAfter, renewHref }`, as for every other media kind |
-| `reporting` | object | `intervalMs` is the interval between keepalives |
-| `requiresProxy` | boolean | Whether playback must go through the Live TV proxy |
-| `sourceId` | string (optional) | Upstream source id |
-| `maxStreams` | number (optional) | Concurrent-stream limit when enforced |
-| `rungId` | string \| null | Selected quality rung |
-| `requestedMaxBitrate`, `appliedMaxBitrate`, `appliedMaxHeight` | number \| null | Requested cap and applied output limits |
-| `reason` | string \| null | Quality decision: `source_within_cap`, `hdr_source`, `unprobeable`, `capacity`, `below_ladder` or `insufficient_ladder` |
-| `adaptive` | object (optional) | `{ rungs: [{ id, height, maxBitrate, codec: "h264" }], includesOriginal }` |
-| `variant` | `fmp4` \| `h264` (optional) | HEVC compatibility output selected for this player |
+| Field | Meaning |
+|---|---|
+| `playbackSessionId`, `stationId`, `feedId` | Session handle, stable station, and the selected feed |
+| `delivery` | `kind: "live-hls"`, `url` (the HLS URL, already carrying a `?grant=`), `heartbeatIntervalMs` (how often to send keepalives) and `keepaliveHref` |
+| `grant` | `{ id, token, param: "grant", ipPinned, expiresAt, renewAfter, renewHref }`, as for every other media kind. Valid for 6 hours |
 
 Use the returned output information to show the quality actually applied.
 Adaptive quality depends on server configuration and available capacity;
-don't assume the requested ladder or cap was applied. The successful response's
-`reason` describes quality selection; a `410` error's `reason` describes why
-playback ended.
+don't assume the requested ladder or cap was applied.
 
 Starting another session for the same viewer key **supersedes** its previous
 session, which becomes `ended` with `endReason: superseded`. Keep the returned
-`playbackSessionId` and use it for all subsequent lifecycle operations. Each accepted
-start records one watch-history entry; manifest fetches do not.
+`playbackSessionId` and use it for all subsequent lifecycle operations. One accepted
+start counts as one watch; manifest fetches do not.
 
-| Status | `code` | Meaning |
-|---|---|---|
-| `403` | `forbidden` | Live TV or feed access denied |
-| `404` | `not_found` | Unknown station or feed |
-| `409` | `conflict` | Another session change is in progress |
-| `410` | `gone` | Viewer eviction guard still active: stop, show the reason, don't auto-rejoin |
-| `422` | `validation_failed` | Invalid station, feed or quality options |
-| `502` | `bad_gateway` | Upstream failure |
-| `503` | `stream_limit` | Concurrent-stream cap reached; honor `retryAfter` when supplied |
-| `503` | `cap_unavailable` | Requested output cap cannot be produced |
-| `503` | `dependency_unavailable` | Session store, stream proxy or provider unavailable |
+Every failed start answers `application/problem+json`. Switch on `code`, never on `error`
+text. Each row below lists the `code`, its HTTP status, whether a retry can succeed, and
+what to show.
+
+| `code` | HTTP | `retryable` | `retryAfterMs` | What to show |
+|---|---|---|---|---|
+| `channel_offline` | 502 | no | - | This channel is offline right now |
+| `provider_auth_failed` | 502 | no | - | The provider rejected the account (expired or wrong credentials) |
+| `provider_connection_limit` | 503 | yes | 30000 | The provider has no free connection; try again shortly |
+| `provider_unreachable` | 504 | yes | 10000 | The provider cannot be reached |
+| `geo_blocked` | 502 | no | - | The provider blocks this channel in the server's region |
+| `no_video` | 502 | no | - | The channel carries no playable video or audio |
+| `encoder_failed` | 500 | yes | 5000 | The server could not encode the channel |
+| `all_feeds_failed` | 502 | if any feed's reason is retryable | the smallest of those | Every feed failed; offer another station |
+| `upstream_stalled` | 502 | yes | 3000 | The channel stopped delivering video |
+| `stream_limit` | 503 | yes | 30000 | Our own viewer slots are full (`details` has the limit) |
+| `dependency_unavailable` | 503 | yes | 5000 | The stream proxy is down |
+
+`retryable: false` means do not retry automatically; offer another station. When
+`retryAfterMs` is set, wait that long before one more try (the same value, rounded up to
+seconds, is the `Retry-After` header). A station tries all of its feeds before it fails,
+so one `all_feeds_failed` already covers every URL.
+
+Administrators also get `feedsTried` (`feedId`, `feedName`, `reason`, `upstreamStatus?`)
+to see which feed failed how. Viewers never receive it, and no response contains a stream
+URL.
 
 ## 4. HLS playback
 
@@ -238,18 +231,22 @@ player.play()
 ## 5. Keepalive and session state
 
 ```http
-POST /api/v1/livetv/playback-sessions/{sessionId}/keepalive
+POST /api/v1/livetv/playback-sessions/{playbackSessionId}/keepalive
 Authorization: Bearer <token>
 ```
 
-Send every **`reporting.intervalMs`** from the start response. Success is
-`204 No Content`. Without keepalives the session can expire and the proxy can
-release the slot.
+Send it every **`delivery.heartbeatIntervalMs`**, at `delivery.keepaliveHref`. Success is
+`204 No Content`. Without keepalives the session can expire and the proxy can release the
+slot. Players that cannot send keepalives stay alive through media fetches.
 
-`GET /api/v1/livetv/playback-sessions/{sessionId}` returns
-`{ sessionId, stationId, feedId, state, endReason?, adaptive?, variant? }`.
-`state` is `active` or `ended`; `endReason` uses the same four values below.
-Session state and lifecycle operations are restricted to the owning user.
+```http
+GET /api/v1/livetv/playback-sessions/{playbackSessionId}
+```
+
+returns `playbackSessionId`, `state` (`active` or `ended`), and `endReason` (the values in
+the table below, plus `failed`). For a failed session it also returns `failure`:
+`{ code, retryable, retryAfterMs?, at }`. Session state and lifecycle operations are
+restricted to the owning user.
 
 An ended session's keepalive returns `410` with `code: gone`,
 `error: playback_session_ended` and a typed `reason`:
@@ -260,6 +257,14 @@ An ended session's keepalive returns `410` with `code: gone`,
 | `superseded` | Another session replaced this viewer's session | Stop the old player and its keepalive timer |
 | `expired` | The session lifetime elapsed | Stop; start a new session only for a new playback attempt |
 | `left` | The session was explicitly ended | Stop and clear its handle |
+| `failed` | The channel stopped while playing | Stop; read `code`, `retryable` and `retryAfterMs` from the body and offer another station if needed |
+
+When the channel fails while playing, the next keepalive ends the session with `reason:
+failed` and the same `code`, `retryable` and `retryAfterMs`. Every later keepalive answers
+the same way. A player that only fetches media sees a `410` on the HLS routes with the same
+`code` in its body; read the session state for details. Once a keepalive or a stop has
+ended the session, its grant ends with it, and media URLs answer `401 invalid_grant` with
+`reason: session_ended`.
 
 Eviction is terminal for the affected session. A still-active eviction guard
 can also reject a new start with `410`; repeatedly starting sessions must not
@@ -275,15 +280,17 @@ attempt needs a new POST start, not a manifest reload. On
 ## 6. Stop: release the slot
 
 ```http
-DELETE /api/v1/livetv/playback-sessions/{sessionId}
+DELETE /api/v1/livetv/playback-sessions/{playbackSessionId}
 Authorization: Bearer <token>
 ```
 
 Stop the keepalive timer and release the session on stop or before switching
 stations. Success is `204 No Content`; ending an already-ended or unknown
-session is idempotent.
-`POST /api/v1/livetv/playback-sessions/{sessionId}/leave` provides the same
-operation for `navigator.sendBeacon` on unload, with a browser session cookie.
+session is idempotent. Live TV sessions are stopped with this `DELETE`, not with a
+`PUT` to the play-sessions path.
+
+`POST /api/v1/livetv/playback-sessions/{playbackSessionId}/leave` provides the same
+operation for `navigator.sendBeacon` on unload.
 
 :::caution[Always release the session]
 Skipping cleanup wastes a stream slot until expiry. During that window,
@@ -292,11 +299,11 @@ another viewer can be blocked by the stream limit.
 
 ## Checklist
 
-- List stations, then fetch the guide with explicit `from` and `to` times.
+- List stations, then fetch the guide with explicit `from` and `to` times (at most 24 hours apart).
 - Start with `POST …/playback-sessions`; retain `playbackSessionId` and play `delivery.url`.
-- Keepalive every `reporting.intervalMs`; delete the session on stop.
+- Keepalive every `delivery.heartbeatIntervalMs` at `delivery.keepaliveHref`; `DELETE` the session on stop.
 - Stop on `410` and inspect `reason`; never auto-rejoin after eviction.
-- Handle stream limits, unavailable quality caps and temporary dependencies.
+- Handle the start errors from the table: retry only when `retryable` is true, and wait `retryAfterMs`.
 
 ## Next
 
