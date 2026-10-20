@@ -1,89 +1,115 @@
 ---
 title: Streaming a player
 description: >
-  Mint a stream token, open the HLS URL from the playback plan, handle seeking
-  and errors, pick audio/subtitle tracks, and use the two preview lanes:
-  ambient hover previews and self-contained Top Shelf URLs.
+  Start a playback session, open the HLS or file URL it returns, renew its grant,
+  handle seeking and errors, pick audio/subtitle tracks, and use the two preview
+  lanes: ambient hover previews and self-contained Top Shelf URLs.
 ---
 
-This continues [Building a player](/developers/building-a-player/) once you have
-a playback plan from `GET /api/v1/playback/{id}/info`. It covers everything
-between "I know which URL to open" and "the video is on screen."
+This continues [Building a player](/developers/building-a-player/) once you know
+which item to play. It covers everything between "I want to play this" and "the
+video is on screen."
 
-## 1. Mint a stream token
+## 1. Start playback and get a grant
 
 A device JWT expires in ~1 h, and AVPlayer/ExoPlayer cannot inject headers into
-HLS segment requests. Solve both with a `stream_` token:
+HLS segment requests. Start playback with `POST /api/v1/play-sessions` instead. The
+response carries ready-to-open URLs, each with a scoped `grant` already attached:
 
 ```bash
-curl -X POST https://lumastra.example.com/api/v1/playback/stream-tokens \
+curl -X POST https://lumastra.example.com/api/v1/play-sessions \
   -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" \
-  -d '{"mediaId":"550e8400-e29b-41d4-a716-446655440000","expiryHours":24}'
+  -d '{"mediaId":"550e8400-e29b-41d4-a716-446655440000","deviceId":"my-tv-app-uuid",
+       "capabilities":{"containers":["mp4","ts"],"videoCodecs":["h264","hevc"],
+       "audioCodecs":["aac","ac3"],"subtitleFormats":["vtt"],"hdr":["hdr10"]}}'
 ```
 
-`mediaId` is required. `expiryHours` is optional, `1`–`72`, defaults to a
-server-configured value (typically 24). Rate-limited to 10 mints per minute per
-user.
+`mediaId` and `deviceId` are required. `capabilities` is typed:
+`containers`, `videoCodecs`, `audioCodecs`, `subtitleFormats`, `hdr`, and optionally
+`maxVideoBitrate`, `maxHeight` and `maxAudioChannels`. Starting needs the `media:write`
+scope and is limited to 60 requests per minute per user.
 
 ```jsonc
-// 201 Created
-{ "token": "stream_abc123…", "sessionId": "uuid", "expiresAt": "…", "maxDurationMinutes": 480 }
+// 201 Created (abridged)
+{
+  "playbackSessionId": "uuid",
+  "mediaId": "550e8400-…",
+  "kind": "video",
+  "delivery": { "kind": "hls", "url": "/api/v1/playback/550e8400-…/hls?PlaySessionId=…&grant=…" /* plus subtitles, timeline, previews */ },
+  "grant": { "id": "uuid", "token": "…", "param": "grant", "ipPinned": true,
+             "expiresAt": "…", "renewAfter": "…", "renewHref": "/api/v1/playback/grants/{id}/renew" },
+  "reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+}
 ```
 
-The token is item-scoped and accepts any IP by default so casting and handoff work.
-An operator can bind new tokens to the requester’s IP with
-`STREAM_TOKEN_WILDCARD_IP=false`. The server embeds it in every segment URL in the
-HLS master playlist, so AVPlayer fetches segments without setting headers.
+Every URL in `delivery` (the HLS manifest or file, subtitles, timeline, previews) is
+ready to use and already carries `?grant=`. Don't append your account token or build
+media URLs yourself. The server never puts your account credential into a URL.
 
-**Lifecycle:**
+A **grant** belongs to one item and one playback session, expires, and works only on
+media URLs, never on JSON API calls. The first grant lasts the full limit for its kind:
+24 hours for video and audiobooks, 6 hours for music and Live TV. The server also
+embeds it in every segment URL of the HLS master playlist, so AVPlayer fetches segments
+without setting headers.
+
+By default a grant is pinned to the IP address that started the session
+(`grant.ipPinned`). To hand the URL to a cast or AirPlay receiver on another address,
+send `"castTarget": true` in the start request. The server then mints an unpinned grant
+if the operator's policy allows it. Unpinned grants last at most 6 hours, renewals
+included.
+
+**Renewal is optional.** A client that can send headers renews before `grant.renewAfter`:
 
 ```bash
-GET    /api/v1/playback/stream-tokens/{id}            # → { valid, secondsUntilExpiry }
-POST   /api/v1/playback/stream-tokens/{id}/refresh     # → new token; old stays valid briefly
-DELETE /api/v1/playback/stream-tokens/{id}             # idempotent → 204
+curl -X POST https://lumastra.example.com{grant.renewHref} \
+  -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" \
+  -d '{"token":"<grant.token>"}'
 ```
 
-A known-but-dead token still returns `200` with `valid: false` and a `state` of
-`expired` | `inactive` | `ended` | `wrong_item` | `wrong_ip`. An **unknown**
-token id returns `404 not_found`. Dead tokens never `401`/`403`, so the endpoint
-can't be used to probe for token existence.
+The response is the **same** token with a later expiry, so URLs already in the
+playlist keep working. Renewal rechecks the user's access to the item, allows 30
+requests per minute per user, and stops at 7 days after the grant was created.
+Ending the playback session revokes its grant. `GET` and `DELETE` on
+`/api/v1/playback/grants/{id}` read and revoke a grant by its `id`; the secret is
+never part of that path.
+
+:::note[Replaced `api_key`, `stream_token` and the stream-token endpoints]
+`api_key` and `stream_token` query parameters are no longer accepted on `/api` and
+`/api/v1` media routes. `POST /playback/stream-tokens`, its `refresh` and `DELETE`
+routes, `POST /music/stream-token` and `/playback/{id}/stream-token` are gone. A script that built media
+URLs with an API key should start a playback session and open `delivery.url`.
+:::
 
 ## 2. Open the stream
 
-Use the pre-built URL from `play_methods[recommended].url`. For tvOS/AVPlayer,
-append the stream token:
+Open `delivery.url` as returned. For a file, `delivery.kind` is `file`; for HLS it is
+`hls`. The URL already holds the `PlaySessionId` (the `playbackSessionId`) and the
+`grant`:
 
 ```
 GET /api/v1/playback/{id}/hls
-    ?PlaySessionId=<session-uuid>&stream_token=stream_abc123…
+    ?PlaySessionId=<playbackSessionId>&grant=…
     [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>]
     [&SubtitleStreamIndex=<index>&SubtitleMethod=Encode][&seek=<seconds>]
 ```
 
-:::caution[Generate `PlaySessionId` yourself, then reuse it for `POST /play-sessions`]
-`PlaySessionId` is a **client-generated UUID**. Mint it *before* opening the
-stream, put it in the HLS URL above, and pass that **same** UUID as `session_id`
-in the `POST /play-sessions` body on
-[Progress & state](/developers/building-a-player-state/). If the two diverge,
-the HLS endpoint mints its own id server-side, that row never receives a
-heartbeat, and it lingers as a stuck "buffering" ghost until the stale-session
-reaper reaps it.
+:::note[One session id]
+The `PlaySessionId` on the HLS URL is the `playbackSessionId` the start returned. Use
+that one id for the stream, for progress reports (`reporting.href`) and for telemetry.
+You no longer generate it yourself. Ending the session frees its stream slot.
 :::
 
 The `/hls` endpoint returns an HLS master playlist with per-audio-track
 `#EXT-X-MEDIA` renditions, video `#EXT-X-STREAM-INF` (with `VIDEO-RANGE=PQ` for
 HDR output), WebVTT subtitle tracks, an I-frame playlist for tvOS scrubbing, and
 a trickplay image stream for Roku. Every segment URL already carries the
-`stream_token`.
+`grant`.
 
 ```javascript
 // HLS.js (browser)
-const hls = new Hls({
-  xhrSetup: (xhr) => xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`),
-});
-const streamUrl = new URL(playbackInfo.play_methods.audio_transcode.url, location.origin);
-streamUrl.searchParams.set('PlaySessionId', playSessionId); // same uuid as POST /play-sessions
-hls.loadSource(streamUrl.toString());
+const hls = new Hls(); // the grant in the URL authenticates manifest and segments
+// session = the JSON from POST /api/v1/play-sessions
+hls.loadSource(new URL(session.delivery.url, location.origin).toString());
 hls.attachMedia(videoElement);
 ```
 
@@ -127,7 +153,7 @@ HLS playlist; sidecar files appear in `externalSubtitles[]` with a ready
 
 | `method` | Action |
 |---|---|
-| `external_vtt` | Fetch `GET /api/v1/playback/subtitles/{itemId}/{index}?format=vtt` |
+| `external_vtt` | Fetch the ready subtitle URL from `delivery` (it carries the `grant`) |
 | `burn_in` | Add `&SubtitleStreamIndex={index}&SubtitleMethod=Encode` to the HLS URL |
 | `client_render` | Draw it yourself: PGS/VobSub images, or ASS/SSA text |
 
@@ -220,7 +246,7 @@ curl "https://lumastra.example.com/api/v1/media/{id}/topshelf-preview" -H "Autho
 | `pending` | 202 | Render is warming: use artwork this cycle, don't tight-poll |
 | `unavailable` | 200 | No renderable source, artwork only |
 
-The URLs are **path-relative, HMAC-signed**: no `api_key`/`Bearer`/`stream_token`
+The URLs are **path-relative, HMAC-signed**: no `Bearer` header or `grant`
 needed, valid until `expiresAt` (~48 h). Gate on
 `capabilities.features.top_shelf_previews`; re-mint on every snapshot rewrite,
 since repeat mints reuse the cached artifact.

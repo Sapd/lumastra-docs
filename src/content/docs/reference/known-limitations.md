@@ -110,8 +110,8 @@ more than one worker is unsupported.
 
 **Several web replicas need requests for one playback session to reach the same
 replica.** HLS transcode state lives on the replica that started a session. On
-Kubernetes the Helm chart ships a router that does this by hashing the stream token or
-playback session id. With any other setup, keep each client on one replica with cookie
+Kubernetes the Helm chart ships a router that does this by hashing the playback
+session id. With any other setup, keep each client on one replica with cookie
 or source-IP affinity. **Round-robin breaks playback.** A request that lands on the wrong
 replica gets a `503` until the session is taken over, about 15 seconds later.
 

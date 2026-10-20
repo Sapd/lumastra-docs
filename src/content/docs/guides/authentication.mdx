@@ -320,14 +320,14 @@ prefix:
 | Device flow JWT | *(none: compact JWT)* | `POST /oauth/token` | `FEATURE_DEVICE_AUTH` | Short-lived (~1 h, HS256); carries `device_session_id`. Refresh token rotates on every use. |
 | Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/user/tokens` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
 | Service token | `svc_` | Admin: `POST /api/v1/service-tokens` | `FEATURE_DEVICE_AUTH` | Path/method-gated; optional act-as-user impersonation; IP allowlist. |
-| Stream token | `stream_` | Playback session | *(always on)* | Short-lived; accepts any IP by default for casting. Set `STREAM_TOKEN_WILDCARD_IP=false` to bind new tokens to the requester’s IP. Accepted as a query parameter on HLS endpoints. |
+| Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` | *(always on)* | Bound to one item and one playback session, expires (24 h for video and audiobooks, 6 h for music and Live TV), valid only on media URLs. Pinned to the requester's IP unless the client asked for a cast target and the server allows it. Replaces `stream_` tokens and `api_key` in media URLs. |
 
 All token values are shown once at creation and stored only as SHA-256 hashes. A
-signing secret is required for device JWTs, PATs, and stream tokens. Set `JWT_SECRET`
+signing secret is required for device JWTs and PATs. Set `JWT_SECRET`
 explicitly, or leave it unset and Lumastra derives one deterministically from
 `LUMASTRA_MASTER_KEY` (stable across restarts and replicas, so tokens keep working
 without extra configuration). If you do set it explicitly, keep the value identical
-everywhere: changing it invalidates every outstanding device, PAT, and stream token.
+everywhere: changing it invalidates every outstanding device and PAT token.
 
 :::note[jellyfin_compat scopes]
 The `jellyfin_compat` and `jellyfin_compat_read` scopes are **exclusive** to the `/j`
@@ -418,5 +418,5 @@ Manage service tokens:
 | `POST` | `/api/v1/service-tokens` | `tokens:admin` scope |
 | `DELETE` | `/api/v1/service-tokens/{id}` | `tokens:admin` scope |
 
-For the full walkthrough (device flow code samples, HLS bearer usage, stream tokens,
+For the full walkthrough (device flow code samples, playback grants,
 and library automation), see [API & tokens](/developers/api/).

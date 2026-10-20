@@ -199,12 +199,11 @@ curl https://lumastra.example.com/api/v1/sessions \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-For player surfaces that can't set request headers (some native HLS players),
-pass the token as a query parameter instead:
-
-```
-/api/v1/playback/{id}/hls?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+Player surfaces that can't set request headers (some native HLS players) don't
+put the token in the URL. They start playback with `POST /api/v1/play-sessions` and
+open the returned `delivery.url`, which carries its own scoped `?grant=`. See
+[Play media from your own
+client](/developers/building-a-player/#play-media-from-your-own-client).
 
 The full route catalog (catalog browsing, playback, watch state, playlists,
 notifications, and more) lives in [API & tokens](/developers/api/) and the

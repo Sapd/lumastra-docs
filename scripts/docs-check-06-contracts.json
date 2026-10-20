@@ -192,7 +192,7 @@
         {
           "path": "src/content/docs/guides/authentication.mdx",
           "op": "contains",
-          "text": "Short-lived; accepts any IP by default for casting. Set `STREAM_TOKEN_WILDCARD_IP=false` to bind new tokens to the requester\u2019s IP. Accepted as a query parameter on HLS endpoints."
+          "text": "| Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` |"
         }
       ]
     },
@@ -202,7 +202,7 @@
         {
           "path": "src/content/docs/developers/building-a-player-streaming.mdx",
           "op": "contains",
-          "text": "The token is item-scoped and accepts any IP by default so casting and handoff work. An operator can bind new tokens to the requester\u2019s IP with `STREAM_TOKEN_WILDCARD_IP=false`. The server embeds it in every segment URL in the HLS master playlist, so AVPlayer fetches segments without setting headers."
+          "text": "A **grant** belongs to one item and one playback session, expires, and works only on media URLs, never on JSON API calls."
         }
       ]
     },
@@ -582,7 +582,7 @@
         {
           "path": "src/content/docs/developers/building-a-player.md",
           "op": "contains",
-          "text": "Playback progress and `/api/v1/playback/{id}/timeline` (chapters, skip segments, trickplay) use **milliseconds**. Follow each field’s schema."
+          "text": "Playback progress and `/api/v1/playback/{id}/timeline` (chapters, skip segments, trickplay) use **milliseconds**. Follow each field\u2019s schema."
         },
         {
           "path": "src/content/docs/developers/api-routes.md",
@@ -642,7 +642,7 @@
         {
           "path": "src/content/docs/developers/audiobook-playback.mdx",
           "op": "contains",
-          "text": "/heartbeat { \"mediaId\": \"<book-uuid>\", \"status\": \"PAUSED\" }"
+          "text": "Keep the session alive while paused by sending one `status: \"PAUSED\"` report."
         }
       ]
     },
@@ -712,7 +712,7 @@
         {
           "path": "src/content/docs/developers/api-routes.md",
           "op": "contains",
-          "text": "| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` \u2192 `201` with `sessionId`, `streamUrl`, `heartbeatIntervalSeconds` and output details |"
+          "text": "| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` \u2192 `201` with the same start envelope (`playbackSessionId`, `delivery.url`, `grant`, `reporting`) and output details |"
         },
         {
           "path": "src/content/docs/developers/api-routes.md",
@@ -752,7 +752,7 @@
         {
           "path": "src/content/docs/developers/api-routes.md",
           "op": "contains",
-          "text": "| `DELETE` | `/playback/stream-tokens/{id}`"
+          "text": "| `DELETE` | `/playback/grants/{id}`"
         }
       ]
     },
@@ -1167,7 +1167,7 @@
         {
           "path": "src/content/docs/developers/live-tv-playback.md",
           "op": "contains",
-          "text": "Send every **`heartbeatIntervalSeconds`** from the start response. Success is `204 No Content`."
+          "text": "Send every **`reporting.intervalMs`** from the start response. Success is `204 No Content`."
         },
         {
           "path": "src/content/docs/developers/live-tv-playback.md",

@@ -39,21 +39,33 @@ you decide which calls your client needs.
 
 Fetch track detail the same way as any catalog item:
 `GET /api/v1/media/{id}` (type-discriminated, returns `type: "track"`) or the
-music-specific `GET /api/v1/music/tracks/{id}`. Then open the audio stream:
+music-specific `GET /api/v1/music/tracks/{id}`. Then start playback and open the
+audio stream:
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/play-sessions \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "mediaId": "550e8400-e29b-41d4-a716-446655440000", "deviceId": "my-player-uuid",
+        "audio": { "format": "opus", "bitrate": 160 } }'
+```
+
+The response is the same envelope as for video (see [Play media from your own
+client](/developers/building-a-player/#play-media-from-your-own-client)):
+`delivery.kind` is `file`, and `delivery.url` is the ready audio URL, already
+carrying a `?grant=` for this one track and session. Music grants last 6 hours.
+Each track gets its own playback session and grant, so for gapless playback
+start the next track a little before the current one ends.
 
 ```http
-GET /api/v1/music/tracks/{id}/stream
-Authorization: Bearer <token>
+GET <delivery.url>
 ```
 
 This is a **Class R (raw)** endpoint, same rules as HLS segments and images:
 pre-stream errors (auth, not-found) are `application/problem+json`, but the
 body itself is raw audio with standard HTTP `Range` support for seeking.
-Header-less clients can authenticate via query parameter instead:
-`?api_key=<token>` or `?stream_token=<token>`. Mint one via
-`POST /api/v1/playback/stream-tokens`; see [Building a player: Streaming
-§1](/developers/building-a-player-streaming/#1-mint-a-stream-token). The same
-stream-token endpoint works for any media type, tracks included.
+Header-less clients (and any player you hand the URL to) need nothing else.
+`api_key` and `stream_token` query parameters are not accepted. With a bearer
+token you can still call `GET /api/v1/music/tracks/{id}/stream` directly.
 
 Optional query parameters:
 
@@ -66,6 +78,12 @@ Optional query parameters:
 ---
 
 ## 2. Open a music session
+
+:::note[Starting a track already opened a playback session]
+The `POST /api/v1/play-sessions` call in §1 creates the playback session and returns
+`reporting.href` for progress. The music-specific session endpoints in this section
+and §3 are the lighter alternative described in §5.
+:::
 
 ```bash
 curl -X POST https://lumastra.example.com/api/v1/music/sessions \
@@ -222,7 +240,7 @@ Reserve `like`/`dislike` for an explicit thumbs-up/down UI action; a string
 of skips won't silently "dislike" a track the user never actually rejected.
 
 :::caution[`complete`/`skip` don't check how much was actually played]
-Unlike the generic play-sessions path below (which applies a 90%-of-duration
+Unlike the generic play-sessions path (§5, which applies a 90%-of-duration
 completion threshold), `/music/tracks/{id}/complete` takes your client's word
 for it. Call it only when the track has actually finished, not on every
 heartbeat or every few seconds of playback.
@@ -318,13 +336,13 @@ endpoint is the music equivalent.
 The endpoints above are music-specific, but Lumastra's shared,
 media-type-agnostic session API, documented in full in [Building a player:
 State §1](/developers/building-a-player-state/#1-report-progress), also
-accepts music tracks as `media_id`. Trade-offs versus `/music/sessions`:
+accepts music tracks as `mediaId` and is the call that starts a track (§1). Trade-offs versus `/music/sessions`:
 
 | | `/api/v1/music/sessions` | `/api/v1/play-sessions` |
 |---|---|---|
 | Auth | Any authenticated principal | Bearer scope `media:write` required |
 | Request fields | `trackId`, `deviceId` only | Full device/client/capability metadata |
-| Returns `stream_token` | No; mint separately if needed | Yes, in the `201` response |
+| Returns the stream URL and grant | No | Yes, in the `201` response (`delivery.url`, `grant`) |
 | Rate limit | 30/60s (PUT + beacon shared) | None enforced |
 | `event_seq` required on heartbeats | No | Yes; monotonic counter, server rejects non-increasing values |
 | Drives `play_count` | No | Indirectly, see below |
@@ -340,8 +358,8 @@ already-existing `(user, track)` row: only a first-ever end-event with no
 prior recorded start can seed it, which means `play_count` primarily still
 comes from a start-side call (Lumastra's own player, or Subsonic below).
 
-Use this path if you want `stream_token` minting bundled into session start,
-richer device/capability reporting, or you're already sharing session code
+Use this path if you want the ready stream URL and its grant bundled into session
+start, richer device/capability reporting, or you're already sharing session code
 with a video-playing client. Use `/music/sessions` if you want the simplest
 possible integration and don't need those extras.
 

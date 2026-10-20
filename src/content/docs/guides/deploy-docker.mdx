@@ -446,9 +446,9 @@ Some clients can't send auth headers, so they put credentials in the **query str
 - Jellyfin-compatible apps (`/j/`): `api_key`, `ApiKey`, `token`
 - Subsonic apps (`/subsonic/`): `t` + `s`, `apiKey`, and `p`, which is the user's
   **password**
-- Native players and `<audio>`/`<video>` streams: `stream_token`
-- HLS playlists for the iPhone, iPad and Apple TV apps (`/api/v1/`): `api_key`, a
-  short-lived access token
+- Media URLs for native players, `<audio>`/`<video>` streams, and the iPhone, iPad and
+  Apple TV apps (`/api/v1/`): `grant`, a credential bound to one item and one playback
+  session that works until it expires (up to 24 hours)
 - Server-sent event streams from third-party clients: `api_key=pat_…`
 
 Most proxies' default access-log formats record the full request URI (nginx's
@@ -485,6 +485,7 @@ lumastra.example.com {
                 delete ApiKey
                 delete token
                 delete apiKey
+                delete grant
                 delete stream_token
                 delete p
                 delete t

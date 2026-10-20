@@ -13,7 +13,7 @@ the slot frees up for other viewers.
 
 All endpoints are on the `/api/v1` token surface and need a bearer token (and
 Live TV permission). Stations are the stable viewer identity; feeds identify
-individual upstream choices; `sessionId` identifies one playback lifecycle.
+individual upstream choices; `playbackSessionId` (the `{sessionId}` in the lifecycle paths) identifies one playback lifecycle.
 The station and playback-session routes replace the old channel viewer routes
 with no compatibility aliases. HLS protocol paths remain feed-addressed.
 
@@ -22,9 +22,9 @@ with no compatibility aliases. HLS protocol paths remain feed-addressed.
 ```text
 1. GET    /api/v1/livetv/stations                            → station list
 2. GET    /api/v1/livetv/guide?from=…&to=…                   → programs keyed by stationId
-3. POST   /api/v1/livetv/playback-sessions                   → sessionId, streamUrl, heartbeatIntervalSeconds
-4. play   streamUrl                                        → HLS player
-5. POST   /api/v1/livetv/playback-sessions/{sessionId}/keepalive → every heartbeatIntervalSeconds
+3. POST   /api/v1/livetv/playback-sessions                   → playbackSessionId, delivery.url, grant, reporting
+4. play   delivery.url                                     → HLS player
+5. POST   /api/v1/livetv/playback-sessions/{sessionId}/keepalive → every reporting.intervalMs
 6. DELETE /api/v1/livetv/playback-sessions/{sessionId}         → on stop / station switch
 ```
 
@@ -166,10 +166,11 @@ A successful start returns **`201`** with:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `sessionId`, `stationId`, `feedId` | string | Session handle, stable station, and selected feed |
-| `streamUrl` | string | HLS URL, ready to hand to the player |
+| `playbackSessionId`, `stationId`, `feedId` | string | Session handle (the `{sessionId}` in the lifecycle paths), stable station, and selected feed |
+| `delivery` | object | `kind: "live-hls"` and `url`: the HLS URL, ready to hand to the player, already carrying a `?grant=` |
+| `grant` | object | `{ id, token, param: "grant", ipPinned, expiresAt, renewAfter, renewHref }`, as for every other media kind |
+| `reporting` | object | `intervalMs` is the interval between keepalives |
 | `requiresProxy` | boolean | Whether playback must go through the Live TV proxy |
-| `heartbeatIntervalSeconds` | positive number | Interval between keepalives |
 | `sourceId` | string (optional) | Upstream source id |
 | `maxStreams` | number (optional) | Concurrent-stream limit when enforced |
 | `rungId` | string \| null | Selected quality rung |
@@ -186,7 +187,7 @@ playback ended.
 
 Starting another session for the same viewer key **supersedes** its previous
 session, which becomes `ended` with `endReason: superseded`. Keep the returned
-`sessionId` and use it for all subsequent lifecycle operations. Each accepted
+`playbackSessionId` and use it for all subsequent lifecycle operations. Each accepted
 start records one watch-history entry; manifest fetches do not.
 
 | Status | `code` | Meaning |
@@ -204,30 +205,33 @@ start records one watch-history entry; manifest fetches do not.
 ## 4. HLS playback
 
 :::caution[Don't hand-build this URL]
-Play `streamUrl` as returned. HLS manifests and segments still live under
+Play `delivery.url` as returned. HLS manifests and segments still live under
 `/api/v1/livetv/channels/{feedId}/stream/**`; these protocol paths are unchanged.
 Do not replace `channels` with `stations` or substitute a station id into them.
 Fetching a manifest does not start a playback session.
 :::
 
-The start response does not mint a `stream_` token. Use the normal playback
-credential: a browser session cookie, or a separately minted `stream_` token
-as `?stream_token=…` for header-less players (see
-[API routes](/developers/api-routes/#playback)). The server propagates the
-credential into segment URLs in the manifest.
+The start response carries a **grant**, the same model as for video, music and
+audiobooks: a `?grant=` already attached to `delivery.url`, bound to this one
+station and playback session. A grant is valid only while the session is `active`
+and only for the feed named in the path, and it lasts 6 hours. The server
+propagates it into every segment URL in the manifest, so header-less players need
+nothing else. `api_key` and `stream_token` query parameters are not accepted. If
+you can send headers, renew with `POST grant.renewHref` and `{ "token": grant.token }`.
+Media fetches count as activity, but keep sending keepalives (§5) so the slot stays
+yours.
 
 ```js
-// HLS.js in a browser with a session cookie
+// HLS.js in a browser: the grant in the URL authenticates manifest and segments
 const hls = new Hls();
-hls.loadSource(session.streamUrl);
+hls.loadSource(session.delivery.url);
 hls.attachMedia(videoElement);
 ```
 
 ```swift
-// AVPlayer (tvOS/iOS), using a separately minted stream token
-var components = URLComponents(url: URL(string: session.streamUrl, relativeTo: serverBaseURL)!, resolvingAgainstBaseURL: true)!
-components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "stream_token", value: streamToken)]
-player.replaceCurrentItem(with: AVPlayerItem(url: components.url!))
+// AVPlayer (tvOS/iOS): open the URL as returned
+let url = URL(string: session.delivery.url, relativeTo: serverBaseURL)!
+player.replaceCurrentItem(with: AVPlayerItem(url: url))
 player.play()
 ```
 
@@ -238,7 +242,7 @@ POST /api/v1/livetv/playback-sessions/{sessionId}/keepalive
 Authorization: Bearer <token>
 ```
 
-Send every **`heartbeatIntervalSeconds`** from the start response. Success is
+Send every **`reporting.intervalMs`** from the start response. Success is
 `204 No Content`. Without keepalives the session can expire and the proxy can
 release the slot.
 
@@ -289,8 +293,8 @@ another viewer can be blocked by the stream limit.
 ## Checklist
 
 - List stations, then fetch the guide with explicit `from` and `to` times.
-- Start with `POST …/playback-sessions`; retain `sessionId` and play `streamUrl`.
-- Keepalive every `heartbeatIntervalSeconds`; delete the session on stop.
+- Start with `POST …/playback-sessions`; retain `playbackSessionId` and play `delivery.url`.
+- Keepalive every `reporting.intervalMs`; delete the session on stop.
 - Stop on `410` and inspect `reason`; never auto-rejoin after eviction.
 - Handle stream limits, unavailable quality caps and temporary dependencies.
 

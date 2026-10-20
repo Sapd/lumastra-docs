@@ -108,19 +108,19 @@ releases.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET/POST` | `/playback/{id}/info` | user | Playback info + device profile (`?maxBitrate`, `?caps`, `?fileId`, `?variant=full`) |
-| `GET` | `/playback/{id}/file` | user | Direct file download (accepts `api_key`) |
-| `GET` | `/playback/{id}/hls` | user | HLS master playlist |
-| `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (accepts `api_key`) |
+| `GET/POST` | `/playback/{id}/info` | user | Describes the item, no playable URLs; POST takes typed `capabilities` (`?maxBitrate`, `?caps`, `?fileId`, `?variant=full`) |
+| `GET` | `/playback/{id}/file` | user | Direct file download (`?grant=`) |
+| `GET` | `/playback/{id}/hls` | user | HLS master playlist (`?grant=`) |
+| `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (`?grant=`) |
 | `GET` | `/playback/{id}/timeline` | user | Chapters, skip segments and trickplay variants for the selected file (ms) |
 | `GET` | `/playback/{id}/probe-status` | user | Transcode probe status |
 | `GET` | `/playback/{id}/trickplay/{width}` | user | Trickplay sprite |
 | `GET` | `/playback/{id}/trickplay/{width}/manifest` | user | Trickplay manifest (JSON, sheet hrefs) |
 | `GET` | `/playback/{id}/subtitles/{id}` | user | Subtitle file by track id |
 | `GET` | `/playback/{id}/subtitles/{n}` | user | Subtitle file by index |
-| `POST` | `/playback/stream-tokens` | user | Mint a `stream_` playback token |
-| `DELETE` | `/playback/stream-tokens/{id}` | user | Revoke a `stream_` token |
-| `POST` | `/playback/stream-tokens/{id}/refresh` | user | Rotate a `stream_` token before it expires |
+| `GET` | `/playback/grants/{id}` | user (owner) | Grant state by its opaque `id` |
+| `POST` | `/playback/grants/{id}/renew` | user (owner) | Body `{ token }`; returns the same token with a later expiry |
+| `DELETE` | `/playback/grants/{id}` | user (owner) | Revoke a grant |
 | `POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
 | `POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
 
@@ -129,7 +129,7 @@ releases.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/sessions` | user / admin | Active sessions (`?scope=mine\|all&itemId=`; `scope=all` requires admin) |
-| `POST` | `/play-sessions` | user | Start a play session: `201` + `Location`, body `{ session_id, stream_token }` |
+| `POST` | `/play-sessions` | user | Start playback for video, music and audiobooks (`media:write`): `201` with `{ playbackSessionId, mediaId, kind, delivery, grant, reporting }`; see [Play media from your own client](/developers/building-a-player/#play-media-from-your-own-client) |
 | `PUT` | `/play-sessions/{id}` | user (owner) | Report progress (heartbeat); `204` once the item reaches `COMPLETED` |
 | `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; no endpoint-level rate limit |
 | `GET` | `/play-sessions/{id}/events` | user (owner) | SSE events for a session |
@@ -355,12 +355,12 @@ Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
 | `GET/PUT` | `/livetv/favorites` | user | Favorites use `stationIds`; PUT `{ stationId, favorite }` |
 | `PUT` | `/livetv/favorites/order` | user | Reorder favorites with `{ stationIds }` |
 | `GET/PATCH` | `/livetv/simple-mode` | user | Viewer settings use `stationIds`, `startStationId`, `clearStartStation` |
-| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with `sessionId`, `streamUrl`, `heartbeatIntervalSeconds` and output details |
+| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with the same start envelope (`playbackSessionId`, `delivery.url`, `grant`, `reporting`) and output details |
 | `GET` | `/livetv/playback-sessions/{sessionId}` | user (owner) | State (`active` / `ended`), `endReason`, optional `adaptive` / `variant` |
 | `POST` | `/livetv/playback-sessions/{sessionId}/keepalive` | user (owner) | Every `heartbeatIntervalSeconds`; `204` or `410` with `reason: evicted\|superseded\|expired\|left` |
 | `DELETE` | `/livetv/playback-sessions/{sessionId}` | user (owner) | End session (`204`, idempotent) |
 | `POST` | `/livetv/playback-sessions/{sessionId}/leave` | user (owner) | Same cleanup for `sendBeacon` |
-| `GET` | `/livetv/channels/{feedId}/stream/**` | user | Unchanged HLS manifests and segments; use the returned `streamUrl` |
+| `GET` | `/livetv/channels/{feedId}/stream/**` | user | Unchanged HLS manifests and segments; use the returned `delivery.url` |
 
 Station and playback-session routes replace the old channel viewer routes
 without aliases. For the complete lifecycle, feed selection, quality options

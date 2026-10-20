@@ -13,25 +13,24 @@ sync, and the push-event channel.
 
 ## 1. Report progress
 
-Open a play session before or shortly after starting the stream. The session is
-the authoritative record of resume position. Send the same `session_id` you
-already used as `PlaySessionId` on the HLS URL: `session_id` is optional here
-(the server generates one if omitted), but omitting it leaves the HLS endpoint's
-own row disconnected from this one.
+Starting playback (`POST /api/v1/play-sessions`, see
+[Streaming a player §1](/developers/building-a-player-streaming/#1-start-playback-and-get-a-grant))
+creates the play session, so there is nothing separate to open. The session is the
+authoritative record of resume position. The start response names it in
+`reporting`:
 
-```bash
-curl -X POST https://lumastra.example.com/api/v1/play-sessions \
-  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "session_id": "<same-uuid-as-PlaySessionId>", "media_id": "550e8400-…",
-        "device_id": "my-tv-app-uuid", "client_name": "tvOS",
-        "requested": { "play_method": "audio_transcode" } }'
-# → 201 { "session_id": "uuid", "stream_token": "stream_abc123…" }
+```jsonc
+"reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 ```
 
-Heartbeat about every 10 seconds:
+`playbackSessionId` is the one id for this play. It is also the `PlaySessionId` on
+the HLS URL, so the stream and the progress reports always belong together.
+Reporting uses your normal bearer token, never the `grant`.
+
+Heartbeat every `reporting.intervalMs` (about 10 seconds) with a `PUT` to `reporting.href`:
 
 ```bash
-curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{session_id} \
+curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{ "position_ms": 2760000, "status": "ACTIVE", "event_seq": 7, "session_elapsed_ms": 120000, "buffer_health_sec": 12 }'
 ```

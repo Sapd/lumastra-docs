@@ -86,7 +86,7 @@ Every proxy below is set up for this list. If you use another one, check each li
       in [Request body size](/guides/deploy-docker/#request-body-size).
 - [ ] Don't compress media or streams. If you enable compression, pick content types
       explicitly. See [Compression](/guides/deploy-docker/#compression).
-- [ ] Keep stream tokens and API keys out of the access log. Some apps send them in the
+- [ ] Keep playback grants and API keys out of the access log. Some apps send them in the
       query string. See
       [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
@@ -124,7 +124,7 @@ things:
 
 With an empty list, most per-IP rate limits trust the first `X-Forwarded-For` entry
 from any peer. A client can change that header to bypass those limits. Sign-in limits,
-personal-access-token IP allowlists and IP-bound stream tokens use the direct peer
+personal-access-token IP allowlists and IP-pinned playback grants use the direct peer
 instead, so they see the proxy's address. Set `TRUSTED_PROXY_IPS` when two things are true:
 
 - Your proxy removes the sign-in headers, as every setup on this page does.
@@ -143,7 +143,7 @@ When a request passes through more than one proxy, for example Cloudflare, then 
 then Lumastra, every hop that adds an address to `X-Forwarded-For` has to be in the
 list. Lumastra takes the rightmost address in `X-Forwarded-For` that isn't a listed
 proxy. If the outer proxy is missing, its address counts as the client: everyone shares
-one budget for failed sign-ins, and stream tokens bound to an IP address stop working
+one budget for failed sign-ins, and playback grants pinned to an IP address stop working
 when the outer proxy's address changes. The simpler way is to let the inner proxy restore
 the real client address and pass on only that address. Then only the inner proxy belongs
 in the list. For Cloudflare in front of nginx, see the nginx setup under [Setups](#setups).

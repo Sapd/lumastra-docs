@@ -12,7 +12,7 @@
 	];
 
 	const edges: Edge[] = [
-		{ id: 'e-client-proxy', source: 'client', target: 'proxy', label: 'stream_token' },
+		{ id: 'e-client-proxy', source: 'client', target: 'proxy', label: 'PlaySessionId' },
 		{ id: 'e-proxy-webA', source: 'proxy', target: 'webA', label: 'draining' },
 		{ id: 'e-proxy-webB', source: 'proxy', target: 'webB', label: 'fails over here' },
 		{ id: 'e-webA-cache', source: 'webA', target: 'cache' },

@@ -16,7 +16,7 @@ changed since my cursor?" and get a short list.
 :::note[Stability]
 These endpoints are `x-stability: stable` in the [API reference](/reference/) (tag
 **Library sync**). You need a bearer token (OAuth device flow or a personal access token),
-as for the rest of `/api/v1`. A token in the URL (`?api_key=`) is refused on these routes.
+as for the rest of `/api/v1`. A token in the URL is refused on these routes.
 :::
 
 ## The model in one paragraph

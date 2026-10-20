@@ -1,9 +1,8 @@
 ---
 title: Audiobook playback
 description: >
-  Play audiobooks from a third-party client: open an AudiobookShelf-backed
-  session, book time vs file time, report listening progress, close cleanly,
-  and sync listening that happened offline.
+  Play audiobooks from a third-party client: start a playback
+  session, book time vs file time, report listening progress, close cleanly, and sync listening that happened offline.
 ---
 
 import AudiobookSyncDiagram from '../../../components/diagrams/AudiobookSyncDiagram.astro';
@@ -29,47 +28,45 @@ answer comes from AudiobookShelf's saved progress, not from Lumastra's watch
 state. Most audiobook bugs come from forgetting that; see
 [§5](#5-where-the-resume-point-actually-lives).
 
-## 1. Open a session
+## 1. Start a session
 
 ```bash
-curl -X POST https://lumastra.example.com/api/v1/audiobooks/session \
+curl -X POST https://lumastra.example.com/api/v1/play-sessions \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{ "mediaId": "550e8400-e29b-41d4-a716-446655440000",
-        "deviceId": "apple-tv-livingroom-1", "supportedMimeTypes": ["audio/mpeg", "audio/mp4"] }'
+        "deviceId": "apple-tv-livingroom-1" }'
 ```
+
+This is the same start call as for video and music; `POST /api/v1/audiobooks/session`
+no longer exists. AudiobookShelf ids never leave the server: you only see Lumastra ids.
 
 | Field | Required | Notes |
 |---|---|---|
 | `mediaId` | yes | Lumastra media id for the book. |
 | `deviceId` | yes | Stable per-install id. AudiobookShelf closes any *other* open session for the same (user, device), so a hardcoded shared value makes one device kill another's session. |
-| `supportedMimeTypes` | no | From the platform's `canPlayType()`. Omitting it is safe; an empty array is not (see below). |
-| `positionMs` | no | Omit to resume (see below). |
-| `purpose` | no | `playback` (default) or `download` (see below). |
+| `startPositionMs` | no | Omit to resume (see below). |
 
 ```jsonc
 {
-  "absSessionId": "play_abc…", "mediaId": "550e8400-…", "playMethod": "direct",
-  "streamToken": "stream_…", "startPositionMs": 1423000, "durationMs": 5400000,
-  "tracks": [ /* audio files, ABS units — SECONDS */ ], "chapters": [ /* may be empty */ ],
-  "book": { "title": "…", "author": "…", "narrator": "…" }
+  "playbackSessionId": "uuid", "mediaId": "550e8400-…", "kind": "audiobook",
+  "delivery": {
+    "kind": "multipart-audio", "startPositionMs": 1423000, "durationMs": 5400000,
+    "tracks": [ { "index": 0, "url": "/api/v1/…?grant=…", "startMs": 0, "durationMs": 1800000 /* … */ } ],
+    "chapters": [ /* may be empty */ ],
+    "book": { "title": "…", "author": "…", "narrator": "…" }
+  },
+  "grant": { "id": "uuid", "token": "…", "param": "grant", "expiresAt": "…" /* … */ },
+  "reporting": { "playbackSessionId": "uuid", "href": "/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
-:::caution[Never send an empty `supportedMimeTypes` array]
-AudiobookShelf negotiates on container MIME type alone and cannot see the codec
-inside. An empty list makes it transcode everything. Omit the field entirely if
-you don't have a reliable answer.
-:::
+`delivery.tracks[]` carry ready URLs with the `grant` attached. Open them as given.
+A grant for a book lasts 24 hours; renew it with `POST grant.renewHref` and
+`{ "token": grant.token }` if a listening session may run longer, or when a download
+needs more time. See [Play media from your own
+client](/developers/building-a-player/#play-media-from-your-own-client).
 
-**Downloads must send `purpose: "download"`.** Opening a session normally ends
-any session the same listener left paused on the same book elsewhere: that's
-correct when they're moving devices, wrong when you're only opening a session
-to read the track list and mint a stream token for offline use. A long
-download refreshes its stream token more than once, so an unmarked download
-session would evict the device the listener is actually using on every
-refresh.
-
-**Omit `positionMs` unless the listener chose a position.** Leaving it out
+**Omit `startPositionMs` unless the listener chose a position.** Leaving it out
 returns AudiobookShelf's own saved progress. Supplying it doesn't write
 anything upstream. It only changes the `startPositionMs` you're told to start
 at, because AudiobookShelf's progress row is last-write-wins with no history.
@@ -81,54 +78,55 @@ pushed to it.
 Two units are in play at once, and mixing them up is the single most common
 "the position is wrong by a few hours" bug:
 
-- **Positions** (`startPositionMs`, `bookPositionMs`) are **milliseconds of BOOK
-  time**, measured from the start of the whole book.
-- **Tracks and chapters** (`startOffset`, `duration`, `start`, `end`) are
-  **seconds**, straight from AudiobookShelf.
+- **Positions** (`startPositionMs`, and `position_ms` in reports) are
+  **milliseconds of BOOK time**, measured from the start of the whole book.
+- **Files** are the entries of `delivery.tracks[]`. Each has its own audio URL,
+  and `startMs` and `durationMs` place it on the book clock. Chapters
+  (`startMs`, `endMs`) use the book clock too.
 
 A book is a list of files. To find which file a book position falls in, walk
-`tracks` and compare against the accumulated `startOffset`; never report a
-*file* offset as `bookPositionMs`, which silently rewinds a multi-file book to
+`delivery.tracks` and compare against each `startMs`; never report a
+*file* offset as `position_ms`, which silently rewinds a multi-file book to
 file one. `chapters` is server-normalised into contiguous spans covering the
 whole book. It may be empty: a meaningful minority of books carry no chapter
 data.
 
 ## 3. Report progress
 
+Report against the Lumastra `playbackSessionId`, as for video. `PUT` to
+`reporting.href` every `reporting.intervalMs`, with your bearer token (never the grant):
+
 ```bash
-curl -X POST https://lumastra.example.com/api/v1/audiobooks/session/play_abc… \
+curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "mediaId": "550e8400-…", "bookPositionMs": 1461000, "listenedMs": 38000 }'
-# → { "synced": true, "sessionLost": false }
+  -d '{ "position_ms": 1461000, "listened_ms": 38000, "status": "ACTIVE",
+        "event_seq": 12, "session_elapsed_ms": 38000 }'
 ```
 
-**`listenedMs` is audio actually heard since your last report, never a
+**`listened_ms` is audio actually heard since your last report, never a
 position delta.** Computing it by subtracting positions inflates listening
 statistics by however far a single scrub jumps. Accumulate wall-clock time
 while the element is actually playing, excluding pauses, buffering, and seeks,
 the same way you'd track a live video heartbeat's `session_elapsed_ms`.
 
-`sessionLost: true` means AudiobookShelf no longer knows this session (it dies
-on an AudiobookShelf restart, or when the same device id opens a book
-elsewhere). **Keep playing.** Never interrupt for a bookkeeping failure:
-reopen a session at the current position and carry on syncing.
+If a bookkeeping call fails, **keep playing.** Never interrupt the listener for it;
+retry, and carry on reporting at the current position.
 
-Keep the session alive while paused with
-`POST /api/v1/audiobooks/session/{sessionId}/heartbeat { "mediaId": "<book-uuid>", "status": "PAUSED" }`.
-A paused session holds a concurrent-stream slot, so release it (stop
-heartbeating, close) when the listener actually leaves, or a forgotten tab can
-exhaust the stream budget and block their next book.
+Keep the session alive while paused by sending one `status: "PAUSED"` report.
+A paused session holds a concurrent-stream slot, so release it (stop reporting
+and close) when the listener actually leaves, or a forgotten tab can exhaust the
+stream budget and block their next book.
 
 :::danger[A reaped session answers `404` forever]
 If the deck stops reporting for long enough, the server reaps the session, and
-every further progress report or heartbeat against that `absSessionId` returns
+every further progress report against that `playbackSessionId` returns
 `404`; retrying cannot help. Treat it as a distinct outcome from a network
 failure: stop reporting against the dead id, keep playing (a downloaded book's
-audio is local and unaffected), and open a fresh session once the listener
+audio is local and unaffected), and start a fresh session once the listener
 starts playing again. A generated OpenAPI client may hand you a *typed
 response case* for this `404` rather than a thrown exception: match it
-explicitly. Do not reopen from a paused deck on its own; wait for play, since
-opening a session supersedes decks paused elsewhere. Record locally in the
+explicitly. Do not restart from a paused deck on its own; wait for play, since
+starting a session supersedes decks paused elsewhere. Record locally in the
 meantime and let [offline sync](#6-sync-listening-that-happened-offline) carry
 the gap.
 :::
@@ -136,15 +134,18 @@ the gap.
 ## 4. Close the session
 
 ```bash
-curl -X DELETE https://lumastra.example.com/api/v1/audiobooks/session/{sessionId} \
-  -H "Content-Type: application/json" \
-  -d '{ "mediaId": "550e8400-…", "bookPositionMs": 1461000, "listenedMs": 38000 }'
+curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "position_ms": 1461000, "listened_ms": 38000, "status": "COMPLETED",
+        "end_reason": "user", "event_seq": 13, "session_elapsed_ms": 76000 }'
 ```
 
-Closing isn't optional bookkeeping. It ends the AudiobookShelf session, frees
-the stream slot, and stops the byte proxy serving further segments. The body
-is the same shape as a progress report, and the position you send is the
-listener's final word on where they stopped.
+Closing isn't optional bookkeeping. It ends the playback session, frees the
+stream slot, revokes the grant and stops the byte proxy serving further
+segments. The body is the same shape as a progress report, and the position you
+send is the listener's final word on where they stopped. Use
+`POST {reporting.href}/beacon` with the same body when you can't issue a normal
+`PUT`, such as on app teardown.
 
 ## 5. Where the resume point actually lives
 
@@ -210,7 +211,7 @@ Lumastra on the next sync. A Lumastra-side completion would outrank it, and
 the two would disagree permanently: the book pinned as finished at position
 zero, every later listen discarded. That's why the offline endpoint never
 derives a completion for an audiobook, whatever `endReason` you send.
-`isFinished` **is** available on a live progress report
+`finished: true` **is** available on a live progress report
 ([§3](#3-report-progress)) for a listener's explicit "I'm done with this
 book."
 

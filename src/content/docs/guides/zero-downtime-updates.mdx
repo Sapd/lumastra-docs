@@ -33,8 +33,8 @@ The proxy in front of the web tier **must**:
   briefly down during its replacement, requests routed to it land on a healthy peer
   instead of returning `502`.
 
-On Kubernetes, the Helm chart's router does this for you: it hashes the stream token,
-then the playback session id, then the client IP, over one upstream line per web pod.
+On Kubernetes, the Helm chart's router does this for you: it hashes the playback session id,
+then the client IP, over one upstream line per web pod.
 See [Deploy on Kubernetes → Why there is a router](/guides/deploy-kubernetes/#why-there-is-a-router).
 With your own load balancer, use cookie affinity or a source-IP hash at the layer that
 fans out across the web instances, not at the Kubernetes Service behind an Ingress.
@@ -122,15 +122,11 @@ on different ports, front them with your reverse proxy, and replace them one at 
 2. **A reverse proxy over both**, sticky + failover. An nginx sketch:
 
    ```nginx
-   # Prefer stream_token: it exists before PlaySessionId and stays constant
-   # throughout the session. Fall back to PlaySessionId, then the sticky cookie.
-   map $arg_stream_token $lumastra_key {
-       ""      $arg_PlaySessionId;
-       default $arg_stream_token;
-   }
-   map $lumastra_key $lumastra_route {
+   # Key on PlaySessionId: every media URL carries it, and it stays constant
+   # throughout the session. Fall back to the sticky cookie.
+   map $arg_PlaySessionId $lumastra_route {
        ""      $cookie_lumastra_sticky;
-       default $lumastra_key;
+       default $arg_PlaySessionId;
    }
    upstream lumastra {
        hash $lumastra_route consistent;
@@ -145,7 +141,7 @@ on different ports, front them with your reverse proxy, and replace them one at 
    ```
 
    Caddy (`lb_policy` + `lb_try_duration`) and Traefik (sticky service + `HealthCheck`)
-   provide equivalent routing. Key stickiness on `stream_token`.
+   provide equivalent routing. Key stickiness on `PlaySessionId`.
 
 3. Pull the image, then run `docker compose up -d --no-deps --wait <service>` for each
    web service in turn. Its healthcheck must use `/api/health/ready`. Update the worker

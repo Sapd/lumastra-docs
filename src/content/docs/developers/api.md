@@ -168,17 +168,18 @@ to route validation:
 All token values are SHA-256-hashed before storage; the plaintext is returned
 only at creation time and cannot be retrieved afterwards.
 
-Playback sessions additionally use short-lived `stream_` tokens (see [Building a
-player](/developers/building-a-player/) for the client walkthrough). A
-`stream_` token is only ever valid on playback/streaming endpoints. Properties:
-normally item-scoped (bound to the one piece of media it was minted for), though
-music playback can mint a wildcard session not tied to a single item; IP-locked
-to the creating address by default (skippable for AirPlay/Chromecast targets, or
-disabled cluster-wide via `STREAMING_SESSION_ENFORCE_IP`); invalidated after 2
-hours without a segment read by default (`STREAMING_SESSION_INACTIVITY_MINUTES`);
-and expires after 24 hours by default, configurable up to a hard ceiling of 72
-hours (`STREAMING_SESSION_EXPIRY_HOURS`) regardless of activity. Expired sessions
-are swept by a background job.
+Media URLs use a fourth credential, the playback **grant** (see [Play media from
+your own client](/developers/building-a-player/#play-media-from-your-own-client)).
+`POST /api/v1/play-sessions` mints it and puts it in every URL it returns as
+`?grant=`. A grant is opaque and bound to one item and one playback session. It works
+only on media delivery URLs (manifests, segments, files, subtitles, previews, music
+and audiobook audio, Live TV HLS), never on JSON calls. It expires after 24 hours for
+video and audiobooks and 6 hours for music and Live TV. It is pinned to the IP address
+that started the session unless the start asked for `castTarget` and the server's policy
+allows it; unpinned grants last at most 6 hours. Renew it with `POST
+/api/v1/playback/grants/{id}/renew` and `{ "token": "…" }` (same token, later expiry,
+at most 7 days after creation); `GET` and `DELETE` on `/api/v1/playback/grants/{id}`
+read and revoke it. Ending the playback session revokes its grant.
 
 ### JWT access tokens
 
@@ -366,16 +367,19 @@ curl -H "Authorization: Bearer pat_your_token_here" \
   https://lumastra.example.com/api/v1/media/550e8400-e29b-41d4-a716-446655440000
 ```
 
-For HLS/streaming clients that cannot set request headers (e.g., Apple AVPlayer),
-pass the token as a query parameter instead:
+Never put your account token in a media URL. Players that cannot set request headers
+(Apple AVPlayer, VLC, Kodi, cast receivers) use the URLs that
+`POST /api/v1/play-sessions` returns. Each one already carries a `?grant=` credential
+that is bound to one item and one playback session, expires, and works only on media
+URLs, never on JSON calls:
 
 ```
-/api/v1/playback/{id}/hls?api_key=pat_your_token_here
+/api/v1/playback/{id}/hls?PlaySessionId=<playbackSessionId>&grant=<opaque grant>
 ```
 
-A `stream_token` query parameter naming a `stream_` token is also accepted on
-the same playback/HLS endpoints. Prefer it over a long-lived JWT/PAT in the
-URL for anything that outlives the JWT's 1-hour lifetime (movies, live TV).
+`api_key` and `stream_token` query parameters are no longer accepted on `/api` and
+`/api/v1` media routes. See [Play media from your own
+client](/developers/building-a-player/#play-media-from-your-own-client).
 
 ## OAuth 2.0 Device Authorization flow
 
@@ -533,9 +537,6 @@ from issuance), and reactively on any `401` from `/api/v1/*`.
 | `DEVICE_CODE_TTL_SECONDS` | `600` | Device code expiry |
 | `DEVICE_CODE_POLL_INTERVAL_SECONDS` | `5` | Minimum client polling interval |
 | `DEVICE_VERIFICATION_BASE_URL` | *(request origin)* | Canonical base URL for `verification_uri`. Set this when the endpoint is reachable directly to prevent host-header injection. |
-
-`JWT_SECRET` is also required for `stream_` HLS tokens regardless of whether
-device auth is enabled.
 
 ## Reverse-proxy auth bypass
 

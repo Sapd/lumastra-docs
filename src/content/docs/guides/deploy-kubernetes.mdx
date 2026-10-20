@@ -59,12 +59,13 @@ session must reach one pod.
 
 The router is nginx (1.27.3 or newer) and hashes each request on a key:
 
-1. the `stream_token` query argument, if present
+1. the `stream_token` query argument, if present (current Lumastra media URLs no longer
+   carry one)
 2. otherwise `PlaySessionId`, except `preview-*` ids
 3. otherwise the client IP
 
-The app adds `stream_token` (or `api_key`) and `PlaySessionId` to every playlist,
-segment and init URL it emits, so a whole session hashes to the same pod.
+The app adds `grant` and `PlaySessionId` to every playlist, segment and init URL it
+emits, so a whole session hashes to the same pod by its `PlaySessionId`.
 
 The router has one upstream `server` line per web pod, using the pod's own DNS name
 (`lumastra-web-0.lumastra-web-headless…`), re-resolved every `router.dnsValid`. That is
@@ -418,7 +419,7 @@ treats paths:
 - `/api/v1/` tries the identity provider first. On a `401` it passes the request through
   without an identity, so personal access tokens and device tokens work.
   `extraPassthroughPaths` adds more prefixes with this behaviour, for example
-  `/api/playback/` for cookieless players that fetch `stream_token` URLs.
+  `/api/playback/` for cookieless players that fetch media URLs carrying a `grant`.
 - `/oauth/links/` (the MyAnimeList account-linking callback) behaves like `/api/v1/` even
   though `/oauth/` bypasses the identity provider, because linking needs the signed-in
   user (`forwardAuth.oauthLinksPassthrough`, on by default). Don't add `/oauth/links/` to
@@ -1277,7 +1278,7 @@ kubectl -n lumastra logs -l app.kubernetes.io/component=router --prefix --tail=1
 ```
 
 The router logs one line per request to stdout. It logs the path only. Query strings
-carry stream tokens, so they stay out of the log. Fields:
+carry playback grants, so they stay out of the log. Fields:
 
 | Field               | Meaning                                                              |
 | ------------------- | -------------------------------------------------------------------- |

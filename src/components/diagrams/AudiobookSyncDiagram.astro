@@ -4,27 +4,27 @@
 
 	const nodes: Node[] = [
 		{ id: 'client', type: 'flow', position: { x: 0, y: 0 }, data: { title: 'Client', sub: 'native player', kind: 'viewer', hasSource: true } },
-		{ id: 'open', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'Open session', sub: 'POST /audiobooks/session', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'stream', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'Stream files', sub: 'byte proxy · streamToken', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'heartbeat', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Heartbeat', sub: 'while paused · liveness only', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'report', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'Report progress', sub: 'POST …/session/{id} every ~30s', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'open', type: 'flow', position: { x: 232, y: 0 }, data: { title: 'Open session', sub: 'POST /play-sessions', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'stream', type: 'flow', position: { x: 464, y: 0 }, data: { title: 'Stream files', sub: 'byte proxy · ?grant=', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'heartbeat', type: 'flow', position: { x: 0, y: 170 }, data: { title: 'Heartbeat', sub: 'while paused · status PAUSED', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'report', type: 'flow', position: { x: 464, y: 170 }, data: { title: 'Report progress', sub: 'PUT reporting.href every ~10s', kind: 'app', hasTarget: true, hasSource: true } },
 		{ id: 'offline', type: 'flow', position: { x: 0, y: 340 }, data: { title: 'Offline device', sub: 'no network — queues locally', kind: 'viewer', hasSource: true } },
-		{ id: 'close', type: 'flow', position: { x: 464, y: 340 }, data: { title: 'Close session', sub: 'DELETE …/session/{id}', kind: 'app', hasTarget: true, hasSource: true } },
+		{ id: 'close', type: 'flow', position: { x: 464, y: 340 }, data: { title: 'Close session', sub: 'PUT status COMPLETED', kind: 'app', hasTarget: true, hasSource: true } },
 		{ id: 'sync', type: 'flow', position: { x: 0, y: 510 }, data: { title: 'Offline sync', sub: 'POST /offline-playback-sessions', kind: 'app', hasTarget: true, hasSource: true } },
-		{ id: 'lost', type: 'flow', position: { x: 464, y: 510 }, data: { title: 'sessionLost: true', sub: 'ABS forgot the session — keep playing, reopen', kind: 'default', hasTarget: true } },
+		{ id: 'lost', type: 'flow', position: { x: 464, y: 510 }, data: { title: 'Session reaped (404)', sub: 'stop reporting — keep playing, start again', kind: 'default', hasTarget: true } },
 		{ id: 'abs', type: 'flow', position: { x: 232, y: 680 }, data: { title: 'AudiobookShelf', sub: 'owns the resume point', kind: 'ext', hasTarget: true } },
 	];
 
 	const edges: Edge[] = [
 		{ id: 'e-client-open', source: 'client', target: 'open', label: 'mediaId, deviceId' },
 		{ id: 'e-open-stream', source: 'open', target: 'stream', label: 'startPositionMs' },
-		{ id: 'e-stream-report', source: 'stream', target: 'report', label: 'listenedMs' },
+		{ id: 'e-stream-report', source: 'stream', target: 'report', label: 'listened_ms' },
 		{ id: 'e-stream-heartbeat', source: 'stream', target: 'heartbeat', label: 'paused' },
 		{ id: 'e-report-close', source: 'report', target: 'close', label: 'on teardown' },
-		{ id: 'e-report-abs', source: 'report', target: 'abs', label: 'bookPositionMs' },
+		{ id: 'e-report-abs', source: 'report', target: 'abs', label: 'position_ms' },
 		{ id: 'e-open-abs', source: 'open', target: 'abs', label: 'saved progress' },
 		{ id: 'e-close-abs', source: 'close', target: 'abs', label: 'final position' },
-		{ id: 'e-report-lost', source: 'report', target: 'lost', label: 'sessionLost' },
+		{ id: 'e-report-lost', source: 'report', target: 'lost', label: '404' },
 		{ id: 'e-offline-sync', source: 'offline', target: 'sync', label: 'knownAsOf, endedAt' },
 		{ id: 'e-sync-abs', source: 'sync', target: 'abs', label: 'fans out before response' },
 	];
