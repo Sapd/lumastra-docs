@@ -177,7 +177,7 @@ kubectl -n lumastra create secret generic lumastra \
 | Key                   | Used for                                                                                        |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | `LUMASTRA_MASTER_KEY` | Encrypts stored secrets. 64 hex characters.                                                     |
-| `CACHE_PASSWORD`      | The bundled Valkey password. It goes into `redis://` URLs, so use hex only.                     |
+| `CACHE_PASSWORD`      | The bundled Valkey password. It goes into `redis://` URLs, so use hex only (letters, digits, `-._~`). |
 | `DATABASE_URL`        | The connection string. URL-encode special characters in the password.                           |
 
 :::caution[Back up the master key now]
@@ -573,13 +573,18 @@ is unsupported.
 Coming from a chart release or values file with one Valkey: with `bundled` nothing else
 changes, but the new tasks instance starts empty. To keep queued jobs, import the old
 snapshot with `valkey.tasks.rdbImport` (see the chart README). With `external`, add
-`TASK_CACHE_URL` to the Secret, pointing at your existing Valkey run with `noeviction`
-and AOF, and point `CACHE_URL` at a second, disposable Valkey. Pods refuse to start until
-both are set; the Compose steps are in
+`TASK_CACHE_URL` to the Secret, pointing at your existing Valkey, and point `CACHE_URL` at a
+second, disposable Valkey. If that Valkey has only ever saved RDB snapshots, switch AOF on
+in the running server first (`CONFIG SET appendonly yes`, wait for the rewrite to finish);
+restarting it with `--appendonly yes` would start it empty. The steps, in order, are in
 [Upgrading to the dedicated worker and two Valkeys](/guides/deploy-docker/#upgrading-to-the-dedicated-worker-and-two-valkeys).
+Pods refuse to start until both URLs are set.
 
-The bundled password comes from `valkey.auth` and is embedded into `redis://` URLs at
-runtime, so it must be URL-safe. Use hex.
+The bundled password comes from `valkey.auth.passwordKey` and is embedded into `redis://`
+URLs at pod start, where the chart cannot percent-encode it, so use only letters, digits and
+`-._~` (hex). To give the tasks Valkey its own password, add a second key to the Secret (for
+example `TASK_CACHE_PASSWORD`) and set `valkey.auth.taskPasswordKey` to it. The Live TV proxy
+also receives `TASK_CACHE_URL`, for its cluster heartbeat.
 
 ### Storage and media libraries
 

@@ -61,7 +61,7 @@ services:
       BASE_PATH: /config
       DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
       CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-cache:6379/0"
-      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+      TASK_CACHE_URL: "redis://default:${TASK_CACHE_PASSWORD:-${CACHE_PASSWORD}}@valkey:6379/0"
       ORIGIN: "https://lumastra.example.com" # so the login cookie gets its Secure flag
     env_file: [.env]
     volumes:
@@ -90,6 +90,7 @@ services:
     image: ghcr.io/lumastra/lumastra:latest
     restart: unless-stopped
     command: ["./start-worker.sh"]
+    stop_grace_period: 90s # lets running jobs finish on stop/update (Docker's default is 10 s)
     cpu_shares: 512 # yield to web + Postgres under contention (idle = still uses everything)
     # cpus: 8       # hard ceiling — set to ~half your host's cores (8 on a 16-core box)
     environment:
@@ -97,7 +98,7 @@ services:
       BASE_PATH: /config
       DATABASE_URL: "postgresql://lumastra:${DATABASE_PASSWORD}@postgres:5432/lumastra"
       CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey-cache:6379/0"
-      TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@valkey:6379/0"
+      TASK_CACHE_URL: "redis://default:${TASK_CACHE_PASSWORD:-${CACHE_PASSWORD}}@valkey:6379/0"
     env_file: [.env]
     volumes:
       - config:/config # MUST be the same config volume as the web container
@@ -135,21 +136,16 @@ services:
   valkey:
     image: valkey/valkey:9-alpine
     restart: unless-stopped
+    environment:
+      # valkey-cli reads REDISCLI_AUTH, so the password is not on any command line
+      REDISCLI_AUTH: ${TASK_CACHE_PASSWORD:-${CACHE_PASSWORD}}
     command: >
-      valkey-server --requirepass ${CACHE_PASSWORD}
+      valkey-server --requirepass ${TASK_CACHE_PASSWORD:-${CACHE_PASSWORD}}
       --maxmemory-policy noeviction --appendonly yes --appendfsync everysec
     volumes:
       - valkey_data:/data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "valkey-cli",
-          "--no-auth-warning",
-          "-a",
-          "${CACHE_PASSWORD}",
-          "ping",
-        ]
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -158,12 +154,14 @@ services:
   valkey-cache:
     image: valkey/valkey:9-alpine
     restart: unless-stopped
+    environment:
+      REDISCLI_AUTH: ${CACHE_PASSWORD}
     command: >
       valkey-server --requirepass ${CACHE_PASSWORD}
       --save "" --appendonly no
       --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "valkey-cli", "--no-auth-warning", "-a", "${CACHE_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -197,6 +195,12 @@ In `.env`:
 | `DATABASE_PASSWORD`   | Postgres password (interpolated into `DATABASE_URL`) | `openssl rand -hex 24` |
 | `CACHE_PASSWORD`      | Valkey password (interpolated into `CACHE_URL`)      | `openssl rand -hex 24` |
 | `LUMASTRA_MASTER_KEY` | Encrypts stored integration/plugin secrets           | `openssl rand -hex 32` |
+
+Passwords are placed inside `redis://` and `postgresql://` URLs, and Compose cannot
+percent-encode them. Use only letters, digits and `-._~` (the `openssl rand -hex`
+values qualify), or percent-encode any other character yourself. To give the task Valkey
+its own password, also set `TASK_CACHE_PASSWORD` (same rules); when unset it uses
+`CACHE_PASSWORD`.
 
 That's the minimum. Two more you'll usually want:
 
@@ -614,22 +618,30 @@ disposable cache. The example below uses `lumastra-valkey` for the existing one 
 1. **Back up first.** Take a PostgreSQL dump and copy your `LUMASTRA_MASTER_KEY`; see
    [Backup & recovery](/guides/backup-recovery/).
 
-2. **Make the existing Valkey save to disk, while it is still running.** A Valkey that
-   saves only snapshots ignores its snapshot file once AOF is switched on in the
-   command line, which would drop the queue. Turn AOF on in the running server and wait
-   for the rewrite to finish:
+2. **Switch the existing Valkey to AOF while it is still running, and wait.** A Valkey
+   that has only saved snapshots (`dump.rdb`) and is restarted with `--appendonly yes`
+   starts **empty**: it ignores `dump.rdb`, and its next shutdown overwrites the
+   snapshot. Never add `--appendonly yes` to the command and restart first. Do it live,
+   in this order. Set the password for `valkey-cli` through `REDISCLI_AUTH` instead of
+   `-a`, so it does not show in the process list:
 
    ```bash
-   docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" CONFIG SET appendonly yes
-   docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" INFO persistence \
-     | grep -E 'aof_rewrite_in_progress|aof_last_bgrewrite_status'
-   # wait for aof_rewrite_in_progress:0 and aof_last_bgrewrite_status:ok
+   # bash; the password comes from .env, the service is your existing Valkey
+   set -a; . ./.env; set +a
+   VK="docker compose exec -e REDISCLI_AUTH=$CACHE_PASSWORD lumastra-valkey valkey-cli"
+   $VK CONFIG SET appendonly yes
+   $VK CONFIG SET maxmemory-policy noeviction
+   $VK INFO persistence | grep -E 'aof_enabled|aof_rewrite_in_progress|aof_last_bgrewrite_status'
    ```
 
+   Repeat the last command until it shows `aof_rewrite_in_progress:0` and
+   `aof_last_bgrewrite_status:ok`. Only then continue. (These settings are lost on a
+   restart; step 3 makes them permanent.)
+
 3. **Edit the compose file.**
-   - Existing Valkey: keep the service, its volume and its password. Start it with
-     `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec` (remove any
-     `--maxmemory` limit).
+   - Existing Valkey: keep the service, its volume and its password. Only now add
+     `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec` to its
+     command (remove any `--maxmemory` limit). It loads the AOF you just wrote.
    - Add the cache Valkey as a new service, with its own command and no volume:
 
      ```yaml
@@ -645,7 +657,8 @@ disposable cache. The example below uses `lumastra-valkey` for the existing one 
    - On the web container, remove `WORKER_MODE` and `DEDICATED_WORKER` (if you set
      them, the web container refuses to start) and set the two URLs. `TASK_CACHE_URL` is
      your existing Valkey, `CACHE_URL` is the new one. Keep the database number your
-     old `CACHE_URL` used (usually `/0`) in `TASK_CACHE_URL`, so the queue is found:
+     old `CACHE_URL` used (usually `/0`) in `TASK_CACHE_URL`, so the queue is found.
+     Always write the number explicitly:
 
      ```yaml
      CACHE_URL: "redis://default:${CACHE_PASSWORD}@lumastra-valkey-cache:6379/0"
@@ -653,9 +666,9 @@ disposable cache. The example below uses `lumastra-valkey` for the existing one 
      ```
 
    - Add one worker service from the same image with `command: ["./start-worker.sh"]`,
-     the same two URLs, `DATABASE_URL`, and the same `config` and `plugins` volumes and
-     media mounts as the web container. The [minimal compose file above](#minimal-docker-composeyml)
-     shows the full service.
+     `stop_grace_period: 90s`, the same two URLs, `DATABASE_URL`, and the same `config`
+     and `plugins` volumes and media mounts as the web container. The
+     [minimal compose file above](#minimal-docker-composeyml) shows the full service.
    - Make web and worker `depends_on` both Valkeys.
 
 4. **Apply in one go.** `docker compose pull && docker compose up -d`. Compose recreates
@@ -663,11 +676,31 @@ disposable cache. The example below uses `lumastra-valkey` for the existing one 
    then the web and worker containers. Migrations run on boot as before.
 
 5. **Check.** `docker compose logs lumastra-worker` shows the workers starting. Run
-   `docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" CONFIG GET maxmemory-policy`
-   (expect `noeviction`) and `CONFIG GET appendonly` (expect `yes`). In **Admin → Tasks**
-   the queued jobs from before the upgrade are listed and start running.
+   `$VK CONFIG GET maxmemory-policy` (expect `noeviction`) and `$VK CONFIG GET appendonly`
+   (expect `yes`). In **Admin → Tasks** the queued jobs from before the upgrade are listed
+   and start running.
 
 </Steps>
+
+**Alternative for a one-time move (Docker):** instead of steps 2 and 3 for the Valkey, copy
+the old `dump.rdb` into a new, empty volume, start a Valkey on that volume **without**
+`--appendonly` once, run the three commands from step 2 against it (`CONFIG SET appendonly
+yes`, `CONFIG SET maxmemory-policy noeviction`, wait for the rewrite to finish), then stop it
+and start it with the flags from step 3. Do not start a fresh volume with `--appendonly yes`
+and a copied `dump.rdb`: it would be ignored.
+
+What Lumastra checks at startup, so a wrong setup fails loudly instead of losing work:
+
+- It refuses to start when the task Valkey is empty but Postgres still shows task state that
+  was in flight. This is what an AOF switch gone wrong looks like. Restore the Valkey data
+  (or the volume) instead of starting over.
+- It refuses to start when the task Valkey's eviction policy is not `noeviction`. Setting
+  `LUMASTRA_ALLOW_EVICTING_TASK_VALKEY=true` overrides this; it is not recommended, because
+  a full Valkey can then drop queued jobs and locks.
+- It logs a warning when the task Valkey has AOF off.
+- When the web container sees no worker heartbeat, it logs an error and admins see a banner.
+  The worker is not running, or it cannot reach the task Valkey; check
+  `docker compose logs lumastra-worker`.
 
 Never point `CACHE_URL` and `TASK_CACHE_URL` at the same Valkey, not even with
 different database numbers; startup rejects it. On Kubernetes the Helm chart creates both
@@ -686,8 +719,12 @@ proxy:
   environment:
     STREAM_PROXY_SECRET: ${STREAM_PROXY_SECRET}
     PORT: "3000"
+    # the proxy writes its cluster heartbeat to the task Valkey
+    TASK_CACHE_URL: "redis://default:${TASK_CACHE_PASSWORD:-${CACHE_PASSWORD}}@valkey:6379/0"
   volumes:
     - ffmpeg-cache:/config/bin:ro
+  depends_on:
+    valkey: { condition: service_healthy }
 ```
 
 Declare `ffmpeg-cache:` in the compose file's top-level `volumes:` and mount
