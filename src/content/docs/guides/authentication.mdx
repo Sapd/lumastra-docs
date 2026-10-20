@@ -337,10 +337,11 @@ accepted on `/api/v1/*` endpoints.
 
 ### Scope taxonomy
 
-PATs and service tokens accept the coarse aliases `read`, `write`, and `admin`.
-PATs also accept either exclusive Jellyfin-compatibility scope. Fine-grained scopes
-such as `media:read` describe the expanded permissions; they cannot be minted
-independently. Coarse aliases expand as follows:
+PATs and service tokens accept the grants `read`, `write`, and `admin`. Service tokens
+also accept `integrations:read` (see below); PATs also accept either exclusive
+Jellyfin-compatibility scope. Fine-grained scopes such as `media:read` or `tokens:admin`
+are internal gate names; they cannot be minted. Every operation in the API reference
+names the grant it needs (`x-required-grant`). The grants expand as follows:
 
 - `read`: `media:read`, `sessions:read`, and `requests:read`. Other read scopes are not granted by `read`.
 - `write`: read plus writable scopes; excludes `tasks:run`, `webhooks:write`, and
@@ -401,22 +402,31 @@ Manage PATs:
 Admins create service tokens (`POST /api/v1/service-tokens`) for automation and IaC.
 Service tokens support:
 
-- Explicit scope list (for documentation; the `tokens:admin` scope gates creation).
-- Optional **IP allowlist** (`allowedIps`).
+- A grant list (`scopes`): `read`, `write`, `admin`, or `integrations:read`.
+- Optional **IP allowlist** (`allowedIps`): exact IPv4 or IPv6 addresses, no CIDR ranges.
 - Optional **path/method gate** (`allowedPathPrefixes`, `allowedMethods`).
-- Optional **act-as-user impersonation** (`actAsUser`, set at creation; the
+- Optional **act-as-user impersonation** (`actAsUserId`, a user id set at creation; the
   `X-Act-As-User` header is ignored).
-- Minting by another service token: an `admin`-scoped service token can mint
+- An owner: the admin who created it. The token follows that account by id, so renaming
+  the owner keeps it working, and disabling or deleting the owner stops it.
+- Minting by another service token: an `admin` service token can mint
   tokens. They belong to that token's owner and can never exceed the minting
   token. See [Tokens minted by a service token](/developers/api/#tokens-minted-by-a-service-token).
+
+**Integration tokens.** Dashboards and other read-only integrations use a service token
+with the single grant `integrations:read`. It works only on
+`GET /api/v1/integrations/homepage`, `/watch-history` and `/upcoming`, only while the admin
+who created it is still an admin, and it cannot act as a user. Admin sessions and `admin`
+tokens cannot read watch history or upcoming episodes. Upgrading converts existing
+admin tokens that were limited to those endpoints (GET only) into integration tokens.
 
 Manage service tokens:
 
 | Method | Endpoint | Auth required |
 | ------ | -------- | ------------- |
-| `GET` | `/api/v1/service-tokens` | `tokens:admin` scope |
-| `POST` | `/api/v1/service-tokens` | `tokens:admin` scope |
-| `DELETE` | `/api/v1/service-tokens/{id}` | `tokens:admin` scope |
+| `GET` | `/api/v1/service-tokens` | `admin` grant |
+| `POST` | `/api/v1/service-tokens` | `admin` grant |
+| `DELETE` | `/api/v1/service-tokens/{id}` | `admin` grant |
 
 For the full walkthrough (device flow code samples, playback grants,
 and library automation), see [API & tokens](/developers/api/).

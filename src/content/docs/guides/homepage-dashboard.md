@@ -35,16 +35,18 @@ change before 1.0. Any change will be listed in the changelog.
 Before you start, turn on the `FEATURE_DEVICE_AUTH` feature flag. Service tokens
 require it (see [Authentication](/guides/authentication/#service-tokens)).
 
-The summary needs an admin token. Create a dedicated service token and lock it to this
-one endpoint, so a leaked Homepage configuration can read the summary and nothing else:
+Create a dedicated integration token. It can read the integration endpoints and nothing
+else, so a leaked Homepage configuration exposes only the summary:
 
 1. Open **Admin → Users → API tokens** (`/admin/users/api-tokens`), and create a
    **service token**.
-2. **Scopes:** `admin`
-3. **Allowed path prefixes:** `/api/v1/integrations/homepage`
-4. **Allowed methods:** `GET`
-5. Optionally, restrict **Allowed IPs** to the address Homepage connects from.
-6. Copy the `svc_…` value. Lumastra shows it only once.
+2. **Scope:** `Integrations (read-only)` (`integrations:read`).
+3. Optionally, tick only `/api/v1/integrations/homepage` under **Endpoints**.
+4. Optionally, restrict **Allowed IPs** to the address Homepage connects from (exact
+   addresses, no ranges).
+5. Copy the `svc_…` value. Lumastra shows it only once.
+
+The token works only while the admin who created it is still an admin.
 
 You can revoke the token at any time without affecting anything else.
 
