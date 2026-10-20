@@ -53,6 +53,44 @@ requirement is breaking and is handled separately. Clients should still treat
 known-field type mismatches and required-field omissions as errors, and should
 handle unknown discriminator or enum values defensively.
 
+### Stability labels and deprecation
+
+Every operation in the reference carries `x-stability`:
+
+| Label | What it promises |
+|---|---|
+| `stable` | No breaking change without the deprecation process below. New optional fields, documented-open enum values and new operations can appear at any time. |
+| `beta` | Supported, but its shape may still change in a minor release. Changes are listed in the changelog. |
+| `experimental` | May change or disappear in any release. |
+| `protocol` | A byte or streaming endpoint (media files, HLS playlists and segments, images, OAuth). Its format follows the media or OAuth protocol; use the URL a JSON response gives you. |
+| `deprecated` | Still works, names its replacement and a removal date. Move off it. |
+
+From 0.1 on, `stable` operations and their documented fields keep working through the 0.x
+series unless they go through deprecation: an operation stays marked deprecated for at least two
+minor releases or 90 days, whichever is longer, and is removed only in a release whose changelog
+says so.
+
+A client notices a deprecation two ways. The spec marks the operation `deprecated: true` with
+`x-deprecation: { since, sunset, replacement }`. At runtime every response of a deprecated
+operation carries `Deprecation: @<unix-seconds>` (RFC 9745), `Sunset: <HTTP-date>` (RFC 8594) once
+a removal date is set, and `Link: <replacement URL>; rel="successor-version"`. Log a warning when
+you see `Deprecation`.
+
+### Finding your way in the reference
+
+The [API reference](/reference/) groups its tags into sections in the order a client needs them:
+**Getting started** (Server, Authentication, Me, Live updates), **Library** (Media, Browse,
+Series, People, Search, Discovery, Requests, Library sync, Images), **Playback** (Playback
+sessions, Streaming, Timeline, Downloads, Network), **Music** (Music library, Music discovery &
+radio), **Audiobooks**, **Live TV**, **Your data** (Watch state, Ratings, Watchlist, Your music,
+Playlists), **Social** (Watch together, Community, Notifications), **Devices** (Devices, Remote
+control, Client diagnostics), **Integrations** (Webhooks, Service feeds) and
+**Administration**. Every operation sits in exactly one tag.
+
+Each operation has a hand-picked `operationId` such as `getMediaItem`, `startPlaybackSession` or
+`listLiveTvStations`. Generated clients use it as the method name, and it does not change when a
+path changes.
+
 ## Resource model
 
 `/api/v1` is a **resource-oriented API** with a polymorphic catalog spine.
@@ -603,7 +641,8 @@ public API is disabled.
 The full interactive reference on this site, [/reference/](/reference/), is
 built from a vendored copy of the same spec and covers every `/api/v1/*`
 endpoint, parameters, schemas, and responses. Third-party integrations should
-target endpoints marked `x-stability: stable` in the spec.
+target endpoints marked `x-stability: stable` in the spec (see [Stability labels and
+deprecation](#stability-labels-and-deprecation)).
 
 ## Next
 

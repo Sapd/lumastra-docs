@@ -590,6 +590,16 @@ choosing a language in Settings → Display still writes the cookie, which takes
 precedence over the header for both negotiations going forward.
 :::
 
+
+### Choosing a language as a client
+
+Send `Accept-Language` with the device language on every request, for example
+`Accept-Language: de-DE, de;q=0.9, en;q=0.5`. To let a user pick a metadata language that differs
+from the device, store it once with `PUT /api/v1/user/playback-preferences` (`metadataLanguage`
+for overviews and taglines, `metadataTitleLanguage` for titles); the stored preference then wins
+over the header on every client. Operations whose responses carry translated titles or overviews
+list the `Accept-Language` header parameter in the [API reference](/reference/).
+
 ## Library scan & delta ingest
 
 Trigger a full library scan:
