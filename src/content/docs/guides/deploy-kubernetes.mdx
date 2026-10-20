@@ -570,6 +570,14 @@ Keep the two stores separate. `valkey.mode: external` requires `CACHE_URL` and
 `noeviction` task/shared-coordination instances respectively. Single-store mode
 is unsupported.
 
+Coming from a chart release or values file with one Valkey: with `bundled` nothing else
+changes, but the new tasks instance starts empty. To keep queued jobs, import the old
+snapshot with `valkey.tasks.rdbImport` (see the chart README). With `external`, add
+`TASK_CACHE_URL` to the Secret, pointing at your existing Valkey run with `noeviction`
+and AOF, and point `CACHE_URL` at a second, disposable Valkey. Pods refuse to start until
+both are set; the Compose steps are in
+[Upgrading to the dedicated worker and two Valkeys](/guides/deploy-docker/#upgrading-to-the-dedicated-worker-and-two-valkeys).
+
 The bundled password comes from `valkey.auth` and is embedded into `redis://` URLs at
 runtime, so it must be URL-safe. Use hex.
 

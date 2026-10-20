@@ -58,17 +58,21 @@ Everything else works the same. See
 [Known limitations](/reference/known-limitations/#what-is-unavailable-on-arm64).
 :::
 
-## The stack
+## What each container does
 
-The example compose file starts **five containers**:
+The example compose file starts **five containers**. You only set the secrets; compose
+builds every connection URL from them.
 
-| Service | Role |
-| --- | --- |
-| `postgres` | PostgreSQL 18 + pgvector (catalog, users, vectors) |
-| `valkey` | Persistent noeviction BullMQ/task/shared coordination |
-| `valkey-cache` | Disposable evictable application cache |
-| `lumastra` | Web UI and API on port 3000; submits background work |
-| `worker` | Exactly one lean TypeScript task host, existing tasks/plugins and one supervised Rust watcher child in its container |
+| Service | What it does | Idle RAM |
+| --- | --- | --- |
+| `lumastra` (web) | Serves the web UI, the API and playback on port 3000, and queues background work. | a few hundred MB |
+| `worker` | Runs the background jobs (library scans, metadata, trickplay, music analysis) and the Rust library watcher as a child process. Run exactly one. | up to about 1.6 GB while scanning |
+| `postgres` | Stores the catalog, users, settings and search vectors (PostgreSQL 18 + pgvector). | grows with the library |
+| `valkey` (task Valkey) | Holds the durable job queue and locks. It never evicts data and saves to disk, so queued jobs survive a restart. | about 10 MB |
+| `valkey-cache` (cache Valkey) | Holds a disposable cache that Lumastra can rebuild. It is capped and not saved to disk. | about 10 MB |
+
+The optional Live TV `proxy` and the sonic music sidecar run only when you enable their
+compose profiles.
 
 Web and worker use the same application image (Node 24), share the `config` volume
 and connect to the same PostgreSQL and two Valkeys. For more web replicas or worker

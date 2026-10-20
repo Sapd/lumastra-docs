@@ -51,6 +51,7 @@ A single-host setup with separate web and worker services and two Valkeys. Put p
 
 ```yaml
 services:
+  # Web app: UI, API and playback; queues background work.
   lumastra:
     image: ghcr.io/lumastra/lumastra:latest
     restart: unless-stopped
@@ -84,6 +85,7 @@ services:
       retries: 3
       start_period: 60s # time for first-boot migrations
 
+  # Background jobs and the library watcher. Run exactly one.
   worker:
     image: ghcr.io/lumastra/lumastra:latest
     restart: unless-stopped
@@ -105,6 +107,7 @@ services:
       valkey: { condition: service_healthy }
       valkey-cache: { condition: service_healthy }
 
+  # Database: catalog, users and search vectors.
   postgres:
     image: pgvector/pgvector:pg18
     restart: unless-stopped
@@ -128,6 +131,7 @@ services:
       retries: 10
       start_period: 60s
 
+  # Task Valkey (TASK_CACHE_URL): durable job queue and locks; never evicts, saved to disk.
   valkey:
     image: valkey/valkey:9-alpine
     restart: unless-stopped
@@ -150,6 +154,7 @@ services:
       timeout: 5s
       retries: 3
 
+  # Cache Valkey (CACHE_URL): disposable cache, safe to lose.
   valkey-cache:
     image: valkey/valkey:9-alpine
     restart: unless-stopped
@@ -591,6 +596,83 @@ day and shows admins a newer version in the bell and on Admin → System → Ins
 release shows in red until you have installed it. `:edge` builds get the quiet notice only,
 because a fix usually reaches main before it is released.
 
+## Upgrading to the dedicated worker and two Valkeys
+
+Older installs run one `lumastra` container that serves the web and runs the background
+jobs, with one Valkey. Current versions need three changes, made once in your compose
+file: a separate **worker** container, a second **Valkey**, and a `TASK_CACHE_URL`. An
+install that was not changed refuses to start and the log says so (for example
+`TASK_CACHE_URL is required` or `The web server requires WORKER_MODE=disabled`).
+
+Your existing Valkey keeps its volume and becomes the **task Valkey**. Jobs that are
+queued when you upgrade are still there afterwards. The new Valkey only holds a
+disposable cache. The example below uses `lumastra-valkey` for the existing one and
+`lumastra-valkey-cache` for the new one; use your own service names.
+
+<Steps>
+
+1. **Back up first.** Take a PostgreSQL dump and copy your `LUMASTRA_MASTER_KEY`; see
+   [Backup & recovery](/guides/backup-recovery/).
+
+2. **Make the existing Valkey save to disk, while it is still running.** A Valkey that
+   saves only snapshots ignores its snapshot file once AOF is switched on in the
+   command line, which would drop the queue. Turn AOF on in the running server and wait
+   for the rewrite to finish:
+
+   ```bash
+   docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" CONFIG SET appendonly yes
+   docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" INFO persistence \
+     | grep -E 'aof_rewrite_in_progress|aof_last_bgrewrite_status'
+   # wait for aof_rewrite_in_progress:0 and aof_last_bgrewrite_status:ok
+   ```
+
+3. **Edit the compose file.**
+   - Existing Valkey: keep the service, its volume and its password. Start it with
+     `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec` (remove any
+     `--maxmemory` limit).
+   - Add the cache Valkey as a new service, with its own command and no volume:
+
+     ```yaml
+     lumastra-valkey-cache:
+       image: valkey/valkey:9-alpine
+       restart: unless-stopped
+       command: >
+         valkey-server --requirepass ${CACHE_PASSWORD}
+         --maxmemory 1024mb --maxmemory-policy allkeys-lru
+         --save "" --appendonly no
+     ```
+
+   - On the web container, remove `WORKER_MODE` and `DEDICATED_WORKER` (if you set
+     them, the web container refuses to start) and set the two URLs. `TASK_CACHE_URL` is
+     your existing Valkey, `CACHE_URL` is the new one. Keep the database number your
+     old `CACHE_URL` used (usually `/0`) in `TASK_CACHE_URL`, so the queue is found:
+
+     ```yaml
+     CACHE_URL: "redis://default:${CACHE_PASSWORD}@lumastra-valkey-cache:6379/0"
+     TASK_CACHE_URL: "redis://default:${CACHE_PASSWORD}@lumastra-valkey:6379/0"
+     ```
+
+   - Add one worker service from the same image with `command: ["./start-worker.sh"]`,
+     the same two URLs, `DATABASE_URL`, and the same `config` and `plugins` volumes and
+     media mounts as the web container. The [minimal compose file above](#minimal-docker-composeyml)
+     shows the full service.
+   - Make web and worker `depends_on` both Valkeys.
+
+4. **Apply in one go.** `docker compose pull && docker compose up -d`. Compose recreates
+   the existing Valkey with the new flags (it loads its AOF), starts the cache Valkey,
+   then the web and worker containers. Migrations run on boot as before.
+
+5. **Check.** `docker compose logs lumastra-worker` shows the workers starting. Run
+   `docker compose exec lumastra-valkey valkey-cli -a "$CACHE_PASSWORD" CONFIG GET maxmemory-policy`
+   (expect `noeviction`) and `CONFIG GET appendonly` (expect `yes`). In **Admin → Tasks**
+   the queued jobs from before the upgrade are listed and start running.
+
+</Steps>
+
+Never point `CACHE_URL` and `TASK_CACHE_URL` at the same Valkey, not even with
+different database numbers; startup rejects it. On Kubernetes the Helm chart creates both
+Valkeys for you; see [Valkey](/guides/deploy-kubernetes/#valkey).
+
 ## Live TV stream proxy
 
 Only needed when `LIVETV_SOURCE=standalone` (you bring your own M3U/EPG). Add a `proxy`
@@ -857,7 +939,7 @@ retention; Docker rotates logs independently on each host.
 | ------------ | -------- | ------------ | -------------------------------------- |
 | App / worker | 1 GB     | 2–4 GB       | Embeddings and ffmpeg peak above 1 GB |
 | PostgreSQL   | 256 MB   | 512 MB–1 GB  | Grows with the pgvector index         |
-| Valkey       | 256 MB   | 512 MB–1 GB  | No cap in the example; cache expires  |
+| Valkey       | 256 MB   | 512 MB–1 GB  | Idle use is about 10 MB per instance; the cache is capped  |
 | **Total**    | **4 GB** | **8 GB**     | 4 GB only for a small library in low-RAM mode; the background tasks need the headroom |
 
 For a hard Valkey memory cap, use the separate cache/task layout under
