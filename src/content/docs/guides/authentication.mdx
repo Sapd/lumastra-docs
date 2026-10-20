@@ -320,7 +320,7 @@ prefix:
 | Device flow JWT | *(none: compact JWT)* | `POST /oauth/token` | `FEATURE_DEVICE_AUTH` | Short-lived (~1 h, HS256); carries `device_session_id`. Refresh token rotates on every use. |
 | Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/user/tokens` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
 | Service token | `svc_` | Admin: `POST /api/v1/service-tokens` | `FEATURE_DEVICE_AUTH` | Path/method-gated; optional act-as-user impersonation; IP allowlist. |
-| Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` | *(always on)* | Bound to one item and one playback session, expires (24 h for video and audiobooks, 6 h for music and Live TV), valid only on media URLs. Pinned to the requester's IP unless the client asked for a cast target and the server allows it. Replaces `stream_` tokens and `api_key` in media URLs. |
+| Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` | *(always on)* | Bound to one item and one playback session, expires (24 h for video and audiobooks, 6 h for music and Live TV), valid only on media URLs. Pinned to the requester's IP unless the client asked for a cast target (`castTarget`) and `STREAM_TOKEN_WILDCARD_IP` allows it (default: allowed). `STREAMING_SESSION_ENFORCE_IP=false` turns IP pinning off entirely. Replaces `stream_` tokens and `api_key` in media URLs. |
 
 All token values are shown once at creation and stored only as SHA-256 hashes. A
 signing secret is required for device JWTs and PATs. Set `JWT_SECRET`
