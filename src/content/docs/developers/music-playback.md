@@ -477,3 +477,29 @@ GET /rest/reportPlayback.view?mediaId=…&positionMs=…&state=stopped
   device flow
 - [API reference](/reference/): interactive per-endpoint reference from the
   vendored OpenAPI spec
+
+## Radio, autoplay and the music home
+
+Recommendations are stateless: you say what is playing and what was played, the server answers what
+to play next.
+
+**Start a radio from a song.** Start the track (`POST /api/v1/play-sessions`), then call
+`POST /api/v1/music/recommendations` with `{ "context": { "currentTrackId": "<id>", "startedBy": "user" } }`.
+Queue `next` and offer `alternatives` (up to three) as "up next" choices; `next` is absent when nothing
+fits. Each time a track starts, call again with `currentTrackId` set to it, `startedBy: "autoplay"`,
+`history` (played ids, newest first), `skipped` and `exclude` (already queued). Lists hold up to 200 ids.
+Send `crossfade: false` if your player hard-cuts.
+
+An optional `seed` biases the radio: `{ "type": "mood", "mood": "chill" }` (keys from
+`GET /api/v1/music/moods`), or a genre, artist or album seed. A mood seed without a playing track is a
+cold start: `next` is the first track of that mood radio. Explicit likes go to
+`PUT /api/v1/user/music/tracks/{id}/feedback`; skips never change them.
+
+**Show a music home.** Every row is one call and every item carries `images.primary.href`:
+recently played (`GET /api/v1/user/music/recently-played`), top artists
+(`GET /api/v1/user/music/top-artists`), taste stations (`GET /api/v1/user/music/taste-stations`, then
+`…/{id}/tracks`; a station id may be stored and answers `410` once it expired), sonic mixes
+(`GET /api/v1/music/clusters`, then `…/{id}/tracks`, when `/server` reports
+`capabilities.music.sonicMixes`), and "more like this" on any track, album or artist
+(`GET /api/v1/music/{tracks|albums|artists}/{id}/similar`).
+

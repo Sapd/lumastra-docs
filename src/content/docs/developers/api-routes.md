@@ -373,7 +373,7 @@ and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 | `GET` | `/music/tracks`, `/music/albums`, `/music/artists`, `/music/genres` | user | List endpoints |
 | `GET` | `/music/tracks/{id}` | user | Track detail |
 | `GET` | `/music/tracks/{id}/lyrics` | user | Lyrics, when available |
-| `GET` | `/music/tracks/{id}/similar` | user | Similar tracks |
+| `GET` | `/music/tracks/{id}/similar` | user | Similar tracks; `?basis=auto|metadata|sonic`, `{ items, source, page }` |
 | `GET` | `/music/tracks/{id}/stream` | user | Audio playback (see [Music streaming and transcoding](#music-streaming-and-transcoding)) |
 | `POST` | `/music/tracks/{id}/like` | user | Like feedback (204) |
 | `POST` | `/music/tracks/{id}/dislike` | user | Dislike feedback (204) |
@@ -383,16 +383,15 @@ and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 | `GET` | `/music/sessions` | user | Active session (`?scope=mine\|current`) |
 | `GET/PUT` | `/music/sessions/{id}` | user | Session detail / progress |
 | `POST` | `/music/sessions/{id}/beacon` | user | `sendBeacon` alias of PUT; rate-limited |
-| `GET` | `/music/queue` | user | Generative sonic queue (smart-queue autoplay) |
-| `GET` | `/music/queue/bootstrap` | user | Cold-start seed for the smart queue |
-| `GET` | `/music/queue/playlist-suggestions` | user | End-of-playlist continuation (`?playlistId=`) |
-| `GET` | `/music/tracks/{id}/sonic-similar`, `/music/albums/{id}/sonic-similar`, `/music/artists/{id}/sonic-similar` | user | Embedding-based similarity, requires the `sonicEmbeddings` feature |
+| `POST` | `/music/recommendations` | user | What to play next: `{ seed?, context: { currentTrackId?, history?, skipped?, exclude?, upcoming?, crossfade?, startedBy? } }` → `{ next?, alternatives, source }`; a mood seed alone is a cold start |
+| `GET` | `/music/albums/{id}/similar`, `/music/artists/{id}/similar` | user | Sonic similarity, requires `sonicEmbeddings` (`/server` → `capabilities.music.sonicSimilarity`) |
 | `GET` | `/music/path` | user | Sonic bridge between two tracks, requires `sonicEmbeddings`; rate-limited |
-| `GET` | `/music/clusters` | user | Sonic clusters, requires the `musicClusters` feature |
-| `GET` | `/music/taste-stations`, `/music/taste-stations/{stationIndex}/tracks` | user | Session-scoped taste stations (indexes don't persist) |
+| `GET` | `/music/clusters`, `/music/clusters/{id}/tracks` | user | Sonic mixes, requires `musicClusters` (`capabilities.music.sonicMixes`) |
+| `GET` | `/user/music/taste-stations`, `/user/music/taste-stations/{id}/tracks` | user | Taste stations; the `id` may be stored, `410` once its clustering expired |
 | `GET` | `/music/mood-recommendations` | user | Requires the `sonicQueue` feature; rate-limited |
-| `GET/POST` | `/music/pinned-genres` | user | Pinned genres |
-| `DELETE` | `/music/pinned-genres/{genre}` | user | Unpin (percent-encode any `/` in the genre name) |
+| `GET/POST` | `/user/music/pinned-genres` | user | Pinned genres |
+| `DELETE` | `/user/music/pinned-genres/{genre}` | user | Unpin (percent-encode any `/` in the genre name) |
+| `GET` | `/user/music/recently-played`, `/user/music/top-tracks`, `/user/music/top-artists` | user | Listener rows for a music home; `{ items, page: { limit, truncated } }` |
 | `GET` | `/music/radio/stations` | user | Internet-radio station list |
 | `GET` | `/music/radio/stations/{id}/stream` | user | Radio stream |
 | `GET` | `/music/radio/stations/{id}/now-playing` | user | Current track on a station |
