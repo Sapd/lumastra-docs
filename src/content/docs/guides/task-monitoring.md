@@ -103,7 +103,7 @@ is never removed, however long it has gone unwatched.
 Children are removed before their parents. Lost episodes or extras of a movie or
 series that still has playable files are kept: they still describe that title.
 Catalog entries that never had local files, such as Trending or requestable titles,
-are never touched. A record whose loss date is unknown starts a fresh one-year grace
+are never touched by this task; the next section covers them. A record whose loss date is unknown starts a fresh one-year grace
 period once its absence can be confirmed; it is never back-dated.
 
 **Anything a person did to a record keeps it, together with its whole series or
@@ -143,6 +143,34 @@ Other cleanup keeps its own rules. Soft-deleted records that never had local med
 They are kept while anything above still references them, and an artist is kept
 while any track credits it. Accounts, sessions, logs and other operational data
 follow their own retention settings, not this policy.
+
+## Cleaning up titles that were never in your library
+
+Discovery (Trending, popular lists, requestable titles) adds movies and series to the
+catalog that you never had. The daily `never-owned-media-gc` task (*Remove Never-Owned
+Catalog Entries*) removes the ones nothing needs any more. A movie is removed with its
+extras, a series with every season, episode and extra. A title qualifies when:
+
+- it never had a file: no file now, and it was never added to a library, lost its files
+  or dismissed by a scan;
+- it is older than the minimum age (Admin → Settings → Tasks, *Never-Owned Entry Minimum
+  Age*, default 30 days, at least 7), and so is every season and episode in it;
+- discovery has not listed it for at least the minimum age, and never less than 28 days,
+  so a title that is still trending stays;
+- nothing references it. The same things that keep a record in the section above keep it
+  here, plus requests and grants in progress, Live TV, AI suggestions, assistant
+  conversations, and membership of a synced list.
+
+**Until you switch on *Delete Never-Owned Catalog Entries* (Admin → Settings → Tasks), every
+run, scheduled or manual, is a preview.** The run log shows one line such as "Preview only
+(cleanup is off in Settings): would delete 1,200 movies and 300 series (…); kept 40 units
+(user-data 35, …); 900 still listed by discovery". The run result has every count and up
+to 20 sample ids. Check a preview before you switch it on.
+
+Each title is deleted in its own short transaction. A title that someone rates, adds to a
+list or starts playing while the task runs is kept. The task never touches physical files.
+Library sync clients receive no delete for these titles, because they never had them. A
+deleted title that discovery lists again later comes back as a new catalog entry.
 
 ## Run access and cancellation
 
