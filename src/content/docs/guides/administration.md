@@ -173,8 +173,10 @@ The Admin toggle pins a user independently of their identity-provider groups.
 missing episodes, a wrong match, slow performance, subtitle issues, stale clients, or
 something stuck), and it links you to the page that fixes it.
 
-**Route:** `/admin/system/diagnostics`. Assembles a diagnostic report (system/version
-info, health status, recent errors) to copy or download for a bug report.
+**Route:** `/admin/system/diagnostics` (**Debug report**). A redacted report of the
+instance (version, health, cluster, tasks, library, client errors, settings) to copy or
+download for an AI assistant, an issue or a forum post. See
+[Debugging with an AI assistant](/guides/debugging-with-ai/).
 
 ---
 

@@ -81,6 +81,7 @@ export const sidebar = [
 					{ slug: 'guides/task-basics' },
 					{ slug: 'guides/task-monitoring' },
 					{ slug: 'guides/task-troubleshooting' },
+					{ slug: 'guides/debugging-with-ai' },
 					{ slug: 'guides/library-troubleshooting' },
 					{ slug: 'guides/homepage-dashboard' },
 					{ slug: 'guides/licensing' },
