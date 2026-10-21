@@ -116,10 +116,9 @@ catalog, images, and sizing contract.
 ## Errors: `application/problem+json`
 
 Resource API errors, including authentication failures and unknown paths, use
-`application/problem+json`. One exception: HLS startup errors from
-`GET /playback/{id}/hls` come back as JSON with an `error` string
-(`transcode_start_timeout`, `transcode_start_failed` or `transcode_start_interrupted`) and a
-`message`, not as problem+json. The `code` field is the machine-parseable contract; `error`
+`application/problem+json`. HLS manifest errors from `GET /playback/{id}/hls` do too: a
+startup failure is `503 dependency_unavailable` with `reason` `transcode_start_timeout`,
+`transcode_start_failed` or `transcode_start_interrupted`. The `code` field is the machine-parseable contract; `error`
 text is human-readable and must not be parsed by clients. `reason` refines some codes, such
 as `invalid_grant`.
 

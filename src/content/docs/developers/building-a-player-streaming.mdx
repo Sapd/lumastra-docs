@@ -147,11 +147,10 @@ new position. A segment that has aged out of the rewind window returns
 | Segment, immediately after a seek | 45 s |
 
 ```jsonc
-// 503 — transcoder did not produce the manifest in time
-{ "error": "transcode_start_timeout", "message": "HLS transcode startup timed out" }
-// Other startup codes: transcode_start_failed, transcode_start_interrupted.
-// Sent as application/json, not problem+json. Retry the same request after a delay;
-// when a Retry-After header is present, wait that long.
+// 503 — transcoder did not produce the manifest in time (application/problem+json)
+{ "code": "dependency_unavailable", "error": "HLS transcode startup timed out", "status": 503, "reason": "transcode_start_timeout" }
+// Other startup reasons: transcode_start_failed, transcode_start_interrupted.
+// Retry the same request after a delay; when a Retry-After header is present, wait that long.
 ```
 
 :::caution[Stream-start can return 403 (admin kick)]
