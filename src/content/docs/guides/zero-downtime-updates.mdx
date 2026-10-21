@@ -45,6 +45,21 @@ Replace one instance, wait for `GET /api/health/ready` to return `200`, then rep
 the next. This endpoint checks startup and dependencies (orchestrator, PostgreSQL,
 Valkey). `/api/health` checks process liveness only and must not gate replacements.
 
+### What a stopping instance does
+
+On SIGTERM a web instance drains before it stops. `/api/health/ready` turns `503` at once,
+the instance stops accepting connections, ends open event streams (the browser reconnects
+to another instance), and lets requests that are already running finish. A request that
+still reaches it gets `503` with `Retry-After: 2` and the code `shutting_down`, never a
+`500`; the Lumastra apps retry it. Only then does it save its running transcodes and close its database and Valkey
+connections.
+
+The drain lasts `SHUTDOWN_TIMEOUT` seconds when you set it (the Helm chart sets 30), and
+3 seconds otherwise, which leaves most of Docker's default stop timeout of 10 seconds for
+saving transcodes. If you raise
+it on Docker, raise the web service's `stop_grace_period` to at least
+`SHUTDOWN_TIMEOUT` plus 30 seconds.
+
 ## How an in-flight video stream survives
 
 Mount `FFMPEG_TRANSCODE_DIR` (`/tmp/lumastra-transcode` by default) on storage every web
@@ -98,9 +113,14 @@ spec:
       maxSurge: 1 # bring the new pod up before retiring an old one
   template:
     spec:
+      # preStop sleep + SHUTDOWN_TIMEOUT + 30 s for stopping transcodes and closing pools
+      terminationGracePeriodSeconds: 90
       containers:
         - name: web
-          # …image, env (incl. a unique INSTANCE_ID), config volume…
+          # …image, env (incl. a unique INSTANCE_ID and SHUTDOWN_TIMEOUT: "30"), config volume…
+          lifecycle:
+            preStop: # keep serving while the endpoints drop the pod
+              exec: { command: ['sleep', '15'] }
           readinessProbe:
             httpGet: { path: /api/health/ready, port: 3000 }
             periodSeconds: 5

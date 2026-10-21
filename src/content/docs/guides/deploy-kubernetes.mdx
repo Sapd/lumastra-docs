@@ -1075,18 +1075,26 @@ render needs no cluster access, so Argo CD can render it offline.
 1. The web StatefulSet updates one pod at a time, highest ordinal first. It waits
    `web.minReadySeconds` (10) between pods, with no surge. Capacity is N-1 during the
    roll. `pdb.minAvailable: 1` also serialises node drains.
-2. A session whose pod is being replaced moves to another pod. It waits there through
+2. A web pod that is being replaced first keeps serving for `web.preStopSleepSeconds`
+   (15) while the router and the endpoints drop it. Then it drains: its readiness turns
+   `503`, it stops accepting connections and ends open event streams (browsers
+   reconnect to another pod), and requests that are already running finish, for up to
+   `web.drainSeconds` (30). A request that still reaches it gets `503` with
+   `Retry-After: 2` and the code `shutting_down`, never a `500`. Only then does it stop
+   its transcodes and close its database and Valkey connections. The chart refuses a
+   `web.terminationGracePeriodSeconds` (90) below `preStopSleepSeconds + drainSeconds + 30`.
+3. A session whose pod is being replaced moves to another pod. It waits there through
    one 503 and retry cycle (at most 15 seconds, about 10 measured) and moves back once
    the pod returns, with no further 503s. The restarted pod keeps its name, so it
    reclaims its sessions without waiting.
-3. The worker is a Deployment with the Recreate strategy. The old pod is gone before the
+4. The worker is a Deployment with the Recreate strategy. The old pod is gone before the
    new one starts. Tasks pause and resume. Update the worker together with the web tier,
    so new web code never talks to an old worker. One `helm upgrade` does that.
-4. The router rolls with `maxSurge: 1` and `maxUnavailable: 0`. On shutdown nginx stops
+5. The router rolls with `maxSurge: 1` and `maxUnavailable: 0`. On shutdown nginx stops
    accepting and finishes in-flight requests for up to
    `router.terminationGracePeriodSeconds` (60). Long-lived streams still open then are
    cut.
-5. The Live TV proxy uses Recreate and waits for its channels to end. Leave it alone
+6. The Live TV proxy uses Recreate and waits for its channels to end. Leave it alone
    during app updates, so Live TV carries on. Change `proxy.image` only when the release
    notes say "Live TV proxy: update needed" or Admin → System health → Cluster asks for it,
    and do it when nobody is watching Live TV.
@@ -1288,7 +1296,7 @@ Health** for the cluster view. Keep the old install stopped but intact for a whi
 | Endpoint                  | Where             | Meaning                                                              |
 | ------------------------- | ----------------- | -------------------------------------------------------------------- |
 | `/api/health`             | web, worker       | Liveness. Always `200`, no dependency checks. Used for startup and liveness probes. |
-| `/api/health/ready`       | web, worker | Readiness. `200` or `503` with a JSON body listing the reasons. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, or without PostgreSQL or task Valkey. |
+| `/api/health/ready`       | web, worker | Readiness. `200` or `503` with a JSON body listing the reasons. A web pod is not ready without PostgreSQL or task Valkey, and from the moment it receives SIGTERM. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, or without PostgreSQL or task Valkey. |
 | `/__router/healthz`       | router            | The router's own probes.                                             |
 | `/status`                 | proxy             | Reports `healthy` and `activeChannels`.                              |
 | `/health`                 | sonic             | Probes.                                                              |
@@ -1446,11 +1454,11 @@ pod after fixing the values.
 
 ## Known limitations on Kubernetes
 
-- **No graceful HTTP drain on SIGTERM yet.** The app does not drain open connections when
-  it shuts down. Web pods sleep for `web.preStopSleepSeconds` (15 seconds) in a
-  `preStop` hook, which gives the endpoints and the router time to drop them. Set it to
-  at least `router.dnsValid` plus your DNS TTL. On SIGTERM the app saves its running
-  transcodes so another pod can take them over.
+- **Long downloads are cut after the drain.** A web pod lets running requests finish for
+  `web.drainSeconds` (30 seconds) after SIGTERM. A file download or direct-play stream
+  that runs longer is cut then, and the client resumes it with a new range request. Keep
+  `web.preStopSleepSeconds` at least `router.dnsValid` plus your DNS TTL, so the router
+  has dropped the pod before the drain starts.
 - **The Live TV proxy has no drain mode yet.** The chart's `preStop` hook polls the
   proxy's `/status` until no channels are active, for at most `proxy.drainSeconds`. A
   restart still drops channels that are open when that time runs out.

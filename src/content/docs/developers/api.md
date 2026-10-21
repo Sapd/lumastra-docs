@@ -156,6 +156,7 @@ response header.
 | `internal_error` | 500 | Unhandled server error |
 | `bad_gateway` | 502 | Upstream returned an unexpected error |
 | `dependency_unavailable` | 503 | Required dependency (DB, Valkey, external API, stream proxy) is down. Always sent with `Retry-After` |
+| `shutting_down` | 503 | The server instance is stopping (rolling update) and did not run the request, or its services stopped while the request ran. Sent with `Retry-After: 2` on any route and method except the `/api/health` and `/api/health/ready` probes. Retry idempotent requests; the router sends the retry to a running instance once it has dropped the stopping one |
 | `stream_limit` | 503 | Live-TV stream slot limit reached (capacity full) |
 | `cap_unavailable` | 503 | Requested Live TV bitrate ceiling could not be honored |
 | `server_id_unavailable` | 503 | The server's persistent identity is not available yet; retry after `Retry-After` |
