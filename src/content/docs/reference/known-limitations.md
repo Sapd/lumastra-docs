@@ -199,8 +199,8 @@ worse than "slow", such as timeouts.
 ## Diagnostics and error reporting
 
 **The apps report errors to your server, on by default.** The iOS, tvOS and web apps
-send crash reports, app hangs, JavaScript errors and counts of failed API calls to your
-own server. Playback problem reports are always recorded, whatever that setting is.
+send crash reports, app hangs, JavaScript errors, failed API calls and the error messages
+users saw to your own server. Playback problem reports are always recorded, whatever that setting is.
 Everything is redacted on the server before it's stored (auth headers, e-mail addresses
 and anything that looks like a credential are removed), and each user has a daily size
 and row limit. Admins review reports under Admin → Users → Client Diagnostics, filtered

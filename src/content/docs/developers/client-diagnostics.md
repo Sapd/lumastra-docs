@@ -30,6 +30,46 @@ from the daily byte budget below (bounded instead by its own rate limit and a
 `FEATURE_CLIENT_DIAGNOSTICS` off (default: on) drops them before they reach the
 database, and the response counts them as dropped rather than accepted.
 
+### What the web app reports
+
+The web app sends three things on its own, all as automatic kinds:
+
+- **Uncaught errors** (`js_error`): errors on a page that nothing caught, and
+  promises that failed with nobody waiting for them. Errors from browser
+  extensions and from scripts on other sites are ignored.
+- **Failed API calls** (`api_failures`): server errors (5xx), client errors
+  (4xx), timeouts and network failures, with the method, the route, the status,
+  the server's error code and its request id. An expired sign-in (401), a request
+  the page cancelled itself, and failures while the browser is offline, the tab
+  is hidden or the page is being left are not reported.
+- **Failures shown to the user** (`js_error` with source "Failure shown to the
+  user"): every error message the app displays, and a player that stops with an
+  error. The report holds the message key (for example
+  `audiobook_playback_failed`, or `untagged` for messages without one), the page,
+  the error behind it, and the API call that failed in the same tab just before.
+  It never holds the message text itself.
+
+What the web app keeps out of a report:
+
+- **Paths** are reduced to their route: every part of a URL path that is not a
+  fixed route name of Lumastra becomes `:id`, so a search term, a name, a share
+  code or a playback grant in a path never leaves the browser. Query strings are
+  always removed.
+- **Error text** (messages and stack traces) is cleaned in the browser before it
+  is sent: tokens, API keys, playback grants, query strings, `Authorization`
+  values and e-mail addresses are removed. The server cleans it again before
+  storing it. An error message can still contain what the app put into it, such
+  as a title.
+- **Volume** is limited in each browser tab: a repeated error is sent once, with
+  a count of how often it happened, and at most every five minutes after that.
+  A tab sends at most 20 API-failure reports and 20 error reports per ten
+  minutes.
+
+The web app sends nothing when `FEATURE_CLIENT_DIAGNOSTICS` is off or nobody is
+signed in. In Admin → Users → Client Diagnostics, filter by platform "Web" to see
+these reports. The detail view shows the page, the failed request with its
+status and error code, and the stack trace.
+
 Reporting is idempotent per event id: resending a batch after a timeout only
 inserts the events the server hasn't already seen, so a client can safely retry.
 A client also calls `PATCH /diagnostics/events/resolve` to mark a previously
@@ -134,7 +174,9 @@ Client diagnostics are part of a user's data export and erasure:
 ## Turning it off
 
 Set `FEATURE_CLIENT_DIAGNOSTICS=false` to stop the four automatic kinds, or
-`FEATURE_CLIENT_LOG_BUNDLES=false` to stop log-bundle uploads. Playback
+`FEATURE_CLIENT_LOG_BUNDLES=false` to stop log-bundle uploads. With automatic
+reports off, the web app also stops sending the reference id of its error page,
+so that id is then not in the server log either. Playback
 incident reporting has no FEATURE_* flag; it's part of the playback reliability
 pipeline, not optional telemetry. It never carries a log tail, media titles, or
 anything beyond what [What Lumastra sends
