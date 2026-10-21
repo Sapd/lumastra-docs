@@ -833,5 +833,6 @@ and recovery rules, see [Task system](/architecture/task-system/#reliability-mec
 
 - [Task system](/architecture/task-system/)
 - [Monitoring tasks and pipelines](/guides/task-monitoring/)
+- [Library problems on the admin home](/guides/library-troubleshooting/)
 - [Background tasks on day one](/guides/task-basics/)
 - [Environment variable reference](/reference/environment-variables/)
