@@ -750,6 +750,12 @@ populates the binary cache. The proxy gets only a read-only binary cache;
 the rest of `/config` contains `master.key` and must stay private to the app and worker.
 Using `command` preserves the image's tini supervisor, which reaps FFmpeg children.
 
+A proxy restart drops every live channel. With the same tag as the app, every
+`docker compose pull` restarts it. To avoid that, give the proxy its own release tag (for
+example `ghcr.io/lumastra/lumastra:0.1.0`) and change it only when the release notes say
+"Live TV proxy: update needed". Admin → System health → Cluster also warns when the running
+proxy is behind ("Update the Live TV proxy image to …").
+
 ```dotenv
 # .env
 LIVETV_SOURCE=standalone

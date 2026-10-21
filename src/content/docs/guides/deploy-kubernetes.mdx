@@ -874,6 +874,11 @@ The chart sets `STREAM_PROXY_URL` on the app pods for you.
   do not tie it to app releases. Release images are tagged `X.Y.Z`, for example `0.1.0`.
   A digest pins the exact build. Without `proxy.image`, it uses the app image and
   restarts whenever that changes.
+- **Update it when a release says so.** Each release's notes start with
+  "Live TV proxy: update needed (reason)" or "Live TV proxy: no update needed".
+  Admin → System health → Cluster also warns when the running proxy has changed since its
+  image ("Update the Live TV proxy image to …"), and the attention board raises an alert
+  when the proxy and the app no longer work together.
 - **The proxy mounts the shared FFmpeg cache read-only** (`persistence.ffmpegCache`) and
   re-checks for the binary every 5 seconds, so it starts working once a web or worker
   pod has downloaded FFmpeg. The chart refuses to render the proxy with
@@ -1082,7 +1087,9 @@ render needs no cluster access, so Argo CD can render it offline.
    `router.terminationGracePeriodSeconds` (60). Long-lived streams still open then are
    cut.
 5. The Live TV proxy uses Recreate and waits for its channels to end. Leave it alone
-   during app updates, so Live TV carries on.
+   during app updates, so Live TV carries on. Change `proxy.image` only when the release
+   notes say "Live TV proxy: update needed" or Admin → System health → Cluster asks for it,
+   and do it when nobody is watching Live TV.
 
 Migrations run at startup under a lock, and the first pod to start applies them. The old
 pods keep serving during the roll, so for a short time they run against the new schema.

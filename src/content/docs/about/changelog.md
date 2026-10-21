@@ -17,6 +17,13 @@ The full changelog is in the repository:
 
 ### Unreleased
 
+Live TV proxy: update needed (protocol 0 → 1, TypeScript proxy, Rust proxy, shared modules,
+build scripts, image build).
+
+- Each release now says whether the Live TV proxy needs an update, and Admin → System
+  health → Cluster warns when the running proxy is behind or no longer works with the app.
+  Update the proxy image to this release once, so later checks can tell. See
+  [Live TV proxy](/guides/deploy-kubernetes/#live-tv-proxy).
 - One remote control for every Lumastra device on your account. From the iPhone app or
   the web, start a title on another device, pause, seek, pick tracks, skip an intro, set a
   sleep timer, manage the music queue, tune Live TV, join a party or send a message.
