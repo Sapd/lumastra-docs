@@ -283,8 +283,8 @@ switching). Switch decisions from there:
 - The first **10 seconds** of playback are a stability period with no switching,
   except a critical drop below 30% bandwidth, which switches immediately.
 
-A quality switch rebuilds the HLS URL with the new bitrate parameter and reloads at
-the current playback position, rather than trying to swap levels within the
+A quality switch reloads the stream at the new bitrate ceiling and the current playback
+position, rather than trying to swap levels within the
 existing manifest.
 
 ## Next

@@ -94,24 +94,23 @@ that built media URLs with an API key should start a playback session and open
 
 ## 2. Open the stream
 
-Open `delivery.url` as returned. For a file, `delivery.kind` is `file`; for HLS it is
-`hls`. The URL already holds the `PlaySessionId` (the `playbackSessionId`) and the
-`grant`:
+Open `delivery.url` exactly as the start returned it. For a file, `delivery.kind` is
+`file`; for HLS it is `hls`. The URL already holds the `grant` and the `PlaySessionId`
+(the `playbackSessionId`) the server put into it.
 
-```
-GET /api/v1/playback/{id}/hls
-    ?PlaySessionId=<playbackSessionId>&grant=…
-    [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>]
-    [&SubtitleStreamIndex=<index>&SubtitleMethod=Encode][&seek=<seconds>]
-```
+Stream URLs are **opaque**: their shape depends on how the server serves the stream (a
+source copy, an adaptive ladder, a capped rung, a transcode job) and changes between
+releases without notice. Never build a stream URL from an id, never parse or rewrite
+one, and never rely on a path segment. The quality caps `maxBitrate`, `maxHeight` and
+`maxAudioChannels` are pre-filled into the returned URL by the start call.
 
-To start on a given audio or subtitle track, send `audioStreamIndex` (absolute index) and
-`subtitleStreamIndex` (a track's `index`) in the `POST /play-sessions` body; the returned
-`delivery.url` already carries `hlsAudioTrack` and, for a burn-in, `SubtitleStreamIndex` with
-`SubtitleMethod=Encode`. Change them on the URL to switch track mid-play.
-
-`maxBitrate`, `maxHeight` and `maxAudioChannels` are pre-filled by the start call; if you
-set them yourself, the last value wins.
+To start on a given audio or subtitle track, send `audioStreamIndex` (absolute index)
+and `subtitleStreamIndex` (a track's `index`) in the `POST /play-sessions` body; the
+returned `delivery.url` already reflects the choice. Mid-play audio switching uses the
+per-track audio renditions listed in the master playlist: in a `demux` session
+(`delivery.hlsAudioMode`) tracks switch without a restart. Declare
+`capabilities.hlsCopyReload` when your player can reload muxed copy HLS in place on an
+audio switch. Subtitles come from `delivery.subtitles[]` (§4).
 
 :::note[One session id]
 The `PlaySessionId` on the HLS URL is the `playbackSessionId` the start returned. Use
@@ -119,7 +118,7 @@ that one id for the stream, for progress reports (`reporting.href`) and for tele
 You never generate it yourself. Ending the session frees its stream slot.
 :::
 
-The `/hls` endpoint returns an HLS master playlist with per-audio-track
+The manifest URL returns an HLS master playlist with per-audio-track
 `#EXT-X-MEDIA` renditions, video `#EXT-X-STREAM-INF` (with `VIDEO-RANGE=PQ` for
 HDR output), WebVTT subtitle tracks, an I-frame playlist for tvOS scrubbing, and
 a trickplay image stream for Roku. Every segment URL already carries the `grant`.
@@ -162,8 +161,8 @@ and wait until the cooldown elapses before retrying.
 
 ## 4. Audio & subtitle tracks
 
-**Audio: select by `absoluteIndex`**, the wire value on every API (`&hlsAudioTrack=`
-on the HLS URL, `audioStreamIndex` on progress reports). Mixing it up with the
+**Audio: select by `absoluteIndex`**, the wire value on every API (`audioStreamIndex`
+on the start request and on progress reports). Mixing it up with the
 display-only `index` is the classic "wrong audio language" bug.
 
 **Subtitles: select by `index`.** The start response lists every track in
@@ -191,9 +190,8 @@ display-only `index` is the classic "wrong audio language" bug.
   Bitmap sidecar files have no hrefs.
 - Every href is an `/api/v1` URL that already carries `?grant=`, so it works for
   header-less players and for bearer clients alike.
-- Pass `index` back as `subtitleStreamIndex` in the start request to select or burn in a
-  track (or `SubtitleStreamIndex` with `SubtitleMethod=Encode` on the HLS URL). Tracks you
-  cannot render are burned in.
+- Pass `index` back as `subtitleStreamIndex` in the start request to select or burn in
+  a track. Tracks you cannot render are burned in.
 - `delivery.recommended` gives `audioStreamIndex` and `subtitleStreamIndex` from the
   user's language preferences. It is absent when the server has no opinion. The
   `default` and `forced` flags on each track are the file's own.

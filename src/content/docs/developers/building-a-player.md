@@ -220,15 +220,27 @@ hint. Durations are in `durationMs`.
 A series node additionally embeds traversal links (`seasons`, `episodes`, `nextEpisode`,
 `watchStatus`), each with an `href`.
 
-## Describe an item (deprecated)
+## Probe before you start
 
-`GET` and `POST /api/v1/playback/{itemId}/info` are **deprecated** for third parties.
-They return the first-party player's internal decision record, in snake_case, and no
-playable URL. Older app builds still use them. Start playback with
-`POST /api/v1/play-sessions` instead: the start response carries the tracks, the
-subtitles and the resume point. The info record's optional `versions[].size_bytes` (on-disk
-size; absent means unknown, not zero) is still the way to show *"Download (45 GB)"*, see
-[Offline downloads](/developers/offline-downloads/).
+`POST /api/v1/media/{id}/playability` answers "what would a start decide?" without
+starting anything: no session, no grant, no transcode, no watch history. Send the same
+optional `capabilities` as a start, and an optional `fileId` to probe one version. Each
+entry in `versions[]` carries `playable` and `blockedBy`, the `playMethod` a start would
+choose for your capabilities, the tracks, and `sizeBytes` (on-disk size; absent means
+unknown, not zero) — enough for a version picker, a track picker, a "this will
+transcode" hint, or sizing a download (see [Offline
+downloads](/developers/offline-downloads/)). The response also gives the resume
+position and `recommended` tracks. It needs `media:read` and applies the same library
+and age checks as a start. It is for movies, episodes and videos; music, audiobooks,
+Live TV and series answer `422`.
+
+Then start with the pick: `POST /api/v1/play-sessions` with `fileId`, `audioStreamIndex`
+(an audio track's `absoluteIndex`) and `subtitleStreamIndex` (a subtitle track's
+`index`). The start response carries the tracks, the subtitles and the resume point.
+
+`GET` and `POST /api/v1/playback/{itemId}/info` are **deprecated** for third parties:
+the first-party player's internal decision record (snake_case), kept for older app
+builds and removed in a later release.
 
 ## Play media from your own client
 

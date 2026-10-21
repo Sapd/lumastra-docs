@@ -116,7 +116,8 @@ releases.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET/POST` | `/playback/{id}/info` | user | **Deprecated** for third parties: the first-party player's internal record (snake_case). Use `POST /play-sessions` |
+| `GET/POST` | `/playback/{id}/info` | user | **Deprecated** for third parties: the first-party player's internal record (snake_case), kept for older app builds and removed in a later release. Probe with `POST /media/{id}/playability`, start with `POST /play-sessions` |
+| `POST` | `/media/{id}/playability` | user | Probe before you start: versions, play method per version for your `capabilities`, tracks, resume position, recommended tracks. Needs `media:read`; creates no session or grant |
 | `GET` | `/playback/{id}/file` | user | Direct file download (`?grant=`) |
 | `GET` | `/playback/{id}/hls` | user | HLS master playlist (`?grant=`) |
 | `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (`?grant=`) |
@@ -131,6 +132,10 @@ releases.
 | `DELETE` | `/playback/grants/{id}` | user (owner) | Revoke a grant |
 | `POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
 | `POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
+
+The media routes above are byte endpoints. Stream URLs are **opaque**: take them from
+the start response (`delivery.url` and the hrefs inside `delivery`) and send them back
+unchanged. Never build, parse or rewrite an HLS URL yourself.
 
 ### Sessions and watch state
 
@@ -303,6 +308,7 @@ The commands and their arguments are described in
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
+| `GET/PATCH` | `/me/privacy` | user | Your privacy preferences (`hideFromOthers`, `shareListeningActivity`, `shareAudiobookActivity`, read-only `listeningCircleConfigured`); device tokens and PATs accepted. `PATCH` is partial: omitted fields keep their stored values; an empty update answers `422 validation_failed` |
 | `GET` | `/user/profile` | user | Own profile: `{id, username, isAdmin, isAgeRestricted, permissions, groups}` |
 | `GET/PUT` | `/user/playback-preferences` | user | Client playback settings; `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
 | `GET/POST` | `/user/pats` | user | Own PATs; `DELETE /user/pats/{id}` revokes (`204`) |

@@ -131,6 +131,11 @@ Each user has **Settings → Privacy** with three switches, described in
 decide whether they share at all. A user who turns everything off is invisible no matter
 how you configure this page.
 
+Third-party clients read and update the same switches with `GET` and `PATCH
+/api/v1/me/privacy`; device tokens and personal access tokens are accepted. `PATCH` is
+partial: omitted fields keep their stored values, and an empty update answers `422`.
+Audiobook sharing stays ineffective while streams are hidden.
+
 Audiobook sharing is **reciprocal**: someone sees other people's audiobook activity only
 while sharing their own, on both the detailed and the coarse feed.
 

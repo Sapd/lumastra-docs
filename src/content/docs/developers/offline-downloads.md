@@ -35,9 +35,11 @@ same as a missing item.
 Every download decision the user makes is really a decision about bytes on a
 metered connection, so both paths tell you the size up front.
 
-For the **original file**, each entry in `versions[]` from `GET /api/v1/playback/{id}/info`
-(deprecated for third parties, still served) carries `size_bytes`, which is optional:
-absent means the file has not been scanned yet, not zero. For a
+For the **original file**, each entry in `versions[]` from
+`POST /api/v1/media/{id}/playability` carries `sizeBytes`, which is optional: absent
+means the file has not been scanned yet, not zero. The old `GET
+/api/v1/playback/{id}/info` is deprecated for third parties and will be removed in a
+later release; use the probe. For a
 **rendition**, the ladder endpoint below returns an estimate per quality
 before anything has been encoded.
 
@@ -94,8 +96,8 @@ Authorization: Bearer <token>
   `failed`).
 - The ladder never offers a quality above the source height.
 - **`audio_index`** is the **absolute** stream index, not the display index.
-  It's the same `absoluteIndex` value `playback/{id}/info` gives per audio
-  track. Renditions are keyed on (file, quality, audio track).
+  It's the same `absoluteIndex` value `POST /api/v1/media/{id}/playability` gives per
+  audio track. Renditions are keyed on (file, quality, audio track).
 
 ### 2. Request one
 
