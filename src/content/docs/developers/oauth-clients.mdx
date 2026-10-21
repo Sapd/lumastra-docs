@@ -65,7 +65,7 @@ curl -X POST https://lumastra.example.com/oauth/device \
 |---|---|---|---|
 | `client_id` | string | Yes | A free-form identifier for your app (e.g. `"apple-tv-app"`). No registration needed. |
 | `device_name` | string | No | Human-readable device name shown to the user during approval. |
-| `scope` | string | No | One of two recognized values. `"media"` grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback. See [What your token can do](#what-your-token-can-do). An absent or unknown value gets the full user grant. Max 256 characters. |
+| `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback (`403 scope_required`). See [What your token can do](#what-your-token-can-do). Max 256 characters. |
 
 **Response (200 OK):**
 
@@ -429,8 +429,7 @@ never off who approved it. Two closed-form grants exist:
 
 | Requested `scope` | Resulting grant |
 |---|---|
-| `"media"` | Read **and** write |
-| Omitted or unrecognized | The full user grant (see [API & tokens](/developers/api/)) |
+| `"media"` (or omitted, or anything unrecognized) | Read **and** write |
 | `"media:read"` | Read **only**. Cannot start playback (`403 scope_required`) |
 
 A device-flow token from either grant carries:

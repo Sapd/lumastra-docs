@@ -38,13 +38,13 @@ for notification permission only when it can. To see the same answer, call the
 capabilities endpoint:
 
 ```bash
-curl -s https://your-server/api/v1/server/capabilities | jq .push
+curl -s https://your-server/api/v1/server -H "Authorization: Bearer <token>" | jq .capabilities.push
 ```
 
-`{"available": true}` means push is ready. Otherwise, `unavailable_reason` says
+`{"available": true}` means push is ready. Otherwise, `unavailableReason` says
 why:
 
-| `unavailable_reason` | Meaning | Fix |
+| `unavailableReason` | Meaning | Fix |
 | --- | --- | --- |
 | `feature_disabled` | `FEATURE_PUSH_NOTIFICATIONS` is off | Turn it on under **Settings → Access → Push notifications** |
 | `device_auth_disabled` | `FEATURE_DEVICE_AUTH` (the Public API) is off, so the app cannot register a device | Turn it back on under **Settings → Access → Public API & Device Auth** (on by default) |

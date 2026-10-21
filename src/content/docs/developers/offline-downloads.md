@@ -16,7 +16,7 @@ client usually needs both:
 | What you get | The untouched source file, byte for byte | A newly encoded H.264/AAC MP4 at a quality you pick |
 | Cost to the server | None: it streams bytes that already exist | CPU-minutes and gigabytes of cache per quality |
 | When to use it | The device can **direct play** the source | It cannot: 4K HEVC/TrueHD on a phone, say |
-| Availability | `features.media_download` | `features.download_renditions` |
+| Availability | `capabilities.features.mediaDownload` | `capabilities.features.downloadRenditions` |
 
 Downloading a source the device cannot decode leaves the user with an
 unplayable multi-gigabyte file. That's the failure this whole surface exists
@@ -25,7 +25,7 @@ to prevent.
 :::caution[Gate on capabilities, not on optimism]
 Both features are **off by default**; turning them on is a self-hoster's
 decision, since raw file egress and per-user transcoding cost real bandwidth
-and CPU. Check `GET /api/v1/server/capabilities` once at startup and hide the
+and CPU. Check `capabilities.features.mediaDownload` and `downloadRenditions` in `GET /api/v1/server` once at startup and hide the
 affordance when the flag is false. A disabled feature answers **404**, the
 same as a missing item.
 :::
@@ -35,8 +35,8 @@ same as a missing item.
 Every download decision the user makes is really a decision about bytes on a
 metered connection, so both paths tell you the size up front.
 
-For the **original file**, each entry in `versions[]` from
-`GET /api/v1/playback/{id}/info` carries `size_bytes`, which is optional:
+For the **original file**, each entry in `versions[]` from `GET /api/v1/playback/{id}/info`
+(deprecated for third parties, still served) carries `size_bytes`, which is optional:
 absent means the file has not been scanned yet, not zero. For a
 **rendition**, the ladder endpoint below returns an estimate per quality
 before anything has been encoded.

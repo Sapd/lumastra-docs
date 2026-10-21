@@ -81,18 +81,19 @@ theft signal: the whole device session is revoked and the user must authorize ag
 
 | Convention | Rule |
 |---|---|
-| IDs | `id` is an opaque handle: pass it back as `{id}` and never parse it. `catalogId` is the library row UUID, or `null` for titles outside your library. Every `{id}` also accepts an external handle such as `tmdb:653:movie`. |
+| IDs | `id` is an opaque handle: pass it back as `{id}` and never parse it. `catalogId` is the library row UUID, or `null` for titles outside your library. Every `{id}` also accepts an external handle such as `tmdb:653:movie`; `GET /media/{id}` also takes it as `?externalId=tmdb:653:movie`. |
 | Media type | Canonical discriminator is `type`, a closed enum: `movie \| series \| season \| episode \| track \| album \| artist \| audiobook`. Ignore or filter types your client does not render. Legacy `tv`/`show` are retired. |
 | Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. `total` is returned only with `?includeTotal=true`. Limit-only lists return `truncated` instead of `hasMore`. Cursor-based endpoints replace `offset` with `cursor`. |
 | Images | Read `images.<role>.href` from the item, or pick a size from `variants` (`thumb`, `card`, `hd`, `wide`, `full`). Never build an image URL. |
-| Errors | Every `/api/v1/*` error is `application/problem+json`. Switch on `code`. |
+| Errors | Resource errors use `application/problem+json`; HLS startup has a JSON exception documented in [Streaming](/developers/building-a-player-streaming/). Switch on `code` for problem responses. |
 | Header-less players | Use the `delivery` URLs from `POST /play-sessions`: each carries a `?grant=` for that one item and session. The server does not accept `api_key` or `stream_token` query parameters. |
 | Time units | Milliseconds everywhere: `positionMs`, `durationMs`, `startPositionMs`, and `/api/v1/playback/{id}/timeline`. |
 
 ## Errors
 
-Every error from `/api/v1/*` is `application/problem+json`, including bearer and grant
-failures:
+Resource errors from `/api/v1/*` are `application/problem+json`, including bearer and grant
+failures (the one exception is the HLS startup JSON in
+[Streaming](/developers/building-a-player-streaming/)):
 
 ```jsonc
 // 422 response body
@@ -130,31 +131,37 @@ with `Cache-Control: no-store`, **not** problem+json. See
 
 ## Discover server capabilities
 
-Call `GET /api/v1/server/capabilities` once on startup to learn what this instance
-supports. The response is public and cached (`Cache-Control: public, max-age=60`).
+Call `GET /api/v1/server` once on startup, then again after sign-in. Without a credential it
+returns the server name, release, sign-in methods (`auth.deviceFlow`, `auth.passwordLogin`)
+and `links`. With `Authorization: Bearer …` it adds `build`, `caller.permissions` and
+`capabilities`. The response is `Cache-Control: private, no-cache` with an `ETag`.
 
 ```bash
-curl https://lumastra.example.com/api/v1/server/capabilities \
+curl https://lumastra.example.com/api/v1/server \
   -H "Authorization: Bearer pat_your_token_here"
 ```
 
 ```jsonc
 {
-  "playback": { "direct": true, "remux": true, "transcode": true },
-  "transcoder": { "output_video_codecs": ["h264", "hevc", "av1"], "max_resolution": "4K" },
-  "streaming": { "hls_variants": ["360p", "480p", "720p", "1080p", "4K"] },
-  "features": {
-    "livetv": true, "watch_together": true, "device_auth": true,
-    "video_previews": true, "top_shelf_previews": false,
-    "media_download": false, "download_renditions": false
-  },
-  "events": { "url": "/api/v1/events", "reconnect_max_ms": 30000 }
+  "caller": { "id": "…", "isAdmin": false,
+              "permissions": { "canRequest": true, "canReview": true, "canAnnotateMedia": true,
+                               "canWatchLiveTv": true, "canSeeAllPlayback": false } },
+  "capabilities": {
+    "playback": { "direct": true, "remux": true, "transcode": true },
+    "liveTv": { "available": true },
+    "music": { "available": true, "clustering": false, "sonicSimilarity": false, "sonicMixes": false },
+    "features": { "watchTogether": true, "videoPreviews": true, "topShelfPreviews": false,
+                  "mediaDownload": false, "downloadRenditions": false },
+    "events": { "href": "/api/v1/events", "reconnectMaxMs": 30000 }
+  }
 }
 ```
 
-Use `features.*` to conditionally enable UI elements. `media_download` and
-`download_renditions` gate the two offline paths (both default off); see
+Show a feature only when both `capabilities` and `caller.permissions` allow it. Use
+`capabilities.features.*` to conditionally enable UI elements. `mediaDownload` and
+`downloadRenditions` gate the two offline paths (both default off); see
 [Offline downloads](/developers/offline-downloads/) for the capability-gating rule.
+`GET /api/v1/server/notice` returns the active maintenance notice, or `{ "notice": null }`.
 
 ## Browse & discover
 
@@ -219,7 +226,9 @@ A series node additionally embeds traversal links (`seasons`, `episodes`, `nextE
 They return the first-party player's internal decision record, in snake_case, and no
 playable URL. Older app builds still use them. Start playback with
 `POST /api/v1/play-sessions` instead: the start response carries the tracks, the
-subtitles and the resume point.
+subtitles and the resume point. The info record's optional `versions[].size_bytes` (on-disk
+size; absent means unknown, not zero) is still the way to show *"Download (45 GB)"*, see
+[Offline downloads](/developers/offline-downloads/).
 
 ## Play media from your own client
 
@@ -341,7 +350,7 @@ expires. For a cast or AirPlay receiver on another network address, add
 ## Putting it together
 
 ```text
-on startup    → GET /server/capabilities, GET /server/notice
+on startup    → GET /server, GET /server/notice
 authenticate  → OAuth device flow, open GET /api/v1/events (SSE)
 browse        → continue-watching, trending, search, GET /media/{id}
 start         → POST /play-sessions → delivery.url

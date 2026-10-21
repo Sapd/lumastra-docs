@@ -33,7 +33,7 @@ reporting), see [Building a player](/developers/building-a-player/).
 :::
 
 :::tip[Route-by-route reference]
-Every `/api/v1/*` route group, `/events`, `/server/capabilities`, language
+Every `/api/v1/*` route group, `/events`, `/server`, language
 negotiation, and the library scan/ingest contract live in [API routes
 reference](/developers/api-routes/). The interactive [**API
 reference**](/reference/) has parameters, schemas, and responses per endpoint.
@@ -104,7 +104,8 @@ Every entity response also carries `id`, an opaque handle. Pass it back as `{id}
 never parse it. `catalogId` is the library row UUID, or `null` when the title is not in
 the library. `ids` is an open map of raw provider values (for example `{ "imdb":
 "tt0903747", "tmdb": "1396" }`) with no internal key. Every `{id}` also accepts an
-external handle such as `tmdb:1396:series`; URL-encode the colons. The
+external handle such as `tmdb:1396:series`; URL-encode the colons. `GET /media/{id}` and its
+image routes also take that handle as `?externalId=tmdb:1396:series`. The
 canonical detail node for any single item is `GET /media/{id}`. `/movies` and
 `/series` are type-filtered aliases over `GET /media?type=…`, not their own
 detail routes.
@@ -114,10 +115,13 @@ catalog, images, and sizing contract.
 
 ## Errors: `application/problem+json`
 
-Every `/api/v1` error is `application/problem+json`, including authentication failures
-and unknown paths. The `code` field is the machine-parseable contract; `error` text is
-human-readable and must not be parsed by clients. `reason` refines some codes, such as
-`invalid_grant`.
+Resource API errors, including authentication failures and unknown paths, use
+`application/problem+json`. One exception: HLS startup errors from
+`GET /playback/{id}/hls` come back as JSON with an `error` string
+(`transcode_start_timeout`, `transcode_start_failed` or `transcode_start_interrupted`) and a
+`message`, not as problem+json. The `code` field is the machine-parseable contract; `error`
+text is human-readable and must not be parsed by clients. `reason` refines some codes, such
+as `invalid_grant`.
 
 ```jsonc
 {
@@ -154,6 +158,12 @@ response header.
 | `bad_gateway` | 502 | Upstream returned an unexpected error |
 | `dependency_unavailable` | 503 | Required dependency (DB, Valkey, external API, stream proxy) is down. Always sent with `Retry-After` |
 | `stream_limit` | 503 | Live-TV stream slot limit reached (capacity full) |
+| `cap_unavailable` | 503 | Requested Live TV bitrate ceiling could not be honored |
+| `server_id_unavailable` | 503 | The server's persistent identity is not available yet; retry after `Retry-After` |
+| `channel_offline`, `provider_auth_failed`, `geo_blocked`, `no_video`, `all_feeds_failed`, `upstream_stalled` | 502 | Live TV start or playback failures; see [Live TV playback](/developers/live-tv-playback/) |
+| `encoder_failed` | 500 | Live TV: the server could not encode the channel |
+| `provider_connection_limit` | 503 | Live TV: the provider has no free connection |
+| `provider_unreachable` | 504 | Live TV: the provider cannot be reached |
 
 **Feature-off is `404 not_found`**, not `403 forbidden`: a disabled feature
 does not exist from the client's perspective.
@@ -164,7 +174,8 @@ an empty array. The `details` field may name the failing component. Grant failur
 
 Once a byte or stream response has started, errors are transport-native: an SSE `error`
 event frame, an HLS `410` or `503` on the next segment fetch, or the connection closing.
-Before the stream starts, errors are `application/problem+json`.
+Before the stream starts, errors are `application/problem+json` (the HLS startup JSON
+above is the one exception).
 
 ## Pagination: `{ items, page }`
 
@@ -464,8 +475,8 @@ Content-Type: application/json
 secret. Security rests on the user's explicit approval in step 2.
 
 `"media"` is read and write: browse, play and report. `"media:read"` gives a read-only
-token that cannot start playback (`403 scope_required`). An absent or unknown scope gets
-the full user grant.
+token that cannot start playback (`403 scope_required`). When `scope` is absent or not
+recognized, the default is `"media"` (read and write).
 
 An optional `device_id` (a stable UUID you generate and persist per physical
 device) lets the server reuse the same `device_session_id` across
@@ -575,9 +586,7 @@ from issuance), and reactively on any `401` from `/api/v1/*`.
 |---|---|
 | `POST /oauth/device` | 10 requests / minute / IP |
 | `POST /oauth/token` (polling) | 5s minimum poll interval |
-| `PUT /music/sessions/{id}` + `POST /music/sessions/{id}/beacon` | Shared 30 requests / 60s per user |
-| `PUT /play-sessions/{id}` | No endpoint-level rate limit |
-| `POST /play-sessions/{id}/beacon` | Rate-limited |
+| `PUT /play-sessions/{id}` + `POST /play-sessions/{id}/beacon` | No endpoint-level rate limit |
 | `POST /play-sessions` | 60 requests / minute / user |
 | `POST /playback/grants/{id}/renew` | 30 requests / minute / user |
 | Everything else | No explicit client-side limit (dependency limits may still apply) |

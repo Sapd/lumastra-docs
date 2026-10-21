@@ -101,8 +101,14 @@ Open `delivery.url` as returned. For a file, `delivery.kind` is `file`; for HLS 
 ```
 GET /api/v1/playback/{id}/hls
     ?PlaySessionId=<playbackSessionId>&grant=…
-    [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>][&seek=<seconds>]
+    [&fileId=<file-uuid>][&hlsAudioTrack=<absoluteIndex>]
+    [&SubtitleStreamIndex=<index>&SubtitleMethod=Encode][&seek=<seconds>]
 ```
+
+To start on a given audio or subtitle track, send `audioStreamIndex` (absolute index) and
+`subtitleStreamIndex` (a track's `index`) in the `POST /play-sessions` body; the returned
+`delivery.url` already carries `hlsAudioTrack` and, for a burn-in, `SubtitleStreamIndex` with
+`SubtitleMethod=Encode`. Change them on the URL to switch track mid-play.
 
 `maxBitrate`, `maxHeight` and `maxAudioChannels` are pre-filled by the start call; if you
 set them yourself, the last value wins.
@@ -140,8 +146,13 @@ new position. A segment that has aged out of the rewind window returns
 | Segment, normal sequential playback | 10 s |
 | Segment, immediately after a seek | 45 s |
 
-Startup failures are `application/problem+json` too. Switch on `code`. `retryAfter` and
-the `Retry-After` header say when to try again.
+```jsonc
+// 503 — transcoder did not produce the manifest in time
+{ "error": "transcode_start_timeout", "message": "HLS transcode startup timed out" }
+// Other startup codes: transcode_start_failed, transcode_start_interrupted.
+// Sent as application/json, not problem+json. Retry the same request after a delay;
+// when a Retry-After header is present, wait that long.
+```
 
 :::caution[Stream-start can return 403 (admin kick)]
 An admin kick returns `403` with an `application/problem+json` body:
@@ -181,7 +192,8 @@ display-only `index` is the classic "wrong audio language" bug.
   Bitmap sidecar files have no hrefs.
 - Every href is an `/api/v1` URL that already carries `?grant=`, so it works for
   header-less players and for bearer clients alike.
-- Pass `index` back as `subtitleStreamIndex` to select or burn in a track. Tracks you
+- Pass `index` back as `subtitleStreamIndex` in the start request to select or burn in a
+  track (or `SubtitleStreamIndex` with `SubtitleMethod=Encode` on the HLS URL). Tracks you
   cannot render are burned in.
 - `delivery.recommended` gives `audioStreamIndex` and `subtitleStreamIndex` from the
   user's language preferences. It is absent when the server has no opinion. The
@@ -275,13 +287,13 @@ curl "https://lumastra.example.com/api/v1/media/{id}/topshelf-preview" -H "Autho
 
 The URLs are **path-relative, HMAC-signed**: no `Bearer` header or `grant`
 needed, valid until `expiresAt` (~48 h). Gate on
-`capabilities.features.top_shelf_previews`; re-mint on every snapshot rewrite,
+`capabilities.features.topShelfPreviews`; re-mint on every snapshot rewrite,
 since repeat mints reuse the cached artifact.
 
 :::caution[Different lane from preview sessions]
 `POST /api/v1/playback/previews` and `GET /api/v1/media/{id}/topshelf-preview` are
-**separate features with separate flags** (`video_previews` vs
-`top_shelf_previews`). Neither writes watch state.
+**separate features with separate flags** (`videoPreviews` vs
+`topShelfPreviews`). Neither writes watch state.
 :::
 
 ## 7. Trickplay, chapters & skip markers

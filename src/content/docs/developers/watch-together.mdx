@@ -23,7 +23,7 @@ participant still streams the media itself; Watch Together only coordinates
 
 :::note[Feature gate]
 Watch Together requires `FEATURE_WATCH_TOGETHER=true` on the server. Check
-`features.watch_together` in [`GET /server/capabilities`](/developers/api/)
+`capabilities.features.watchTogether` in [`GET /server`](/developers/api-routes/#server-discovery-and-capabilities)
 before attempting to create or join a session.
 :::
 
@@ -613,7 +613,7 @@ the feature is off or the session does not exist.
 
 - Generate a stable per-device `clientId`; pass it on the SSE URL and in every
   `POST /events` body.
-- Check `features.watch_together` before showing the feature.
+- Check `capabilities.features.watchTogether` before showing the feature.
 - Compute `clockOffset = serverTime - Date.now()` from the `connected` frame.
 - Implement `buffer_check → ready → all_ready`; treat `seekInitiated: true` as
   target-authoritative, including on the host.

@@ -97,9 +97,11 @@ Pass `stationIds` (up to 200 station ids, comma-separated) for a chosen set, or 
 with `cursor` paging for all visible stations. Follow `page.nextCursor` until
 `page.hasMore` is `false`.
 
-The guide returns `stations[{stationId, airings, nowNext}]`, ordered. Each airing carries
-its `stationId`, a title, and `start` and `end` (ISO 8601).
-`nowNext` is the current airing and the next one. Current is `start <= now < end`;
+The guide returns `stations[{stationId, airings, nowNext}]`, ordered, plus `window`,
+`page` and, when you passed `stationIds`, `unknownStationIds` for ids that matched nothing.
+Each airing has `id`, `stationId`, `title`, `startTime` (inclusive) and `endTime` (exclusive),
+both ISO 8601 UTC, plus optional `description`, `genres` and `officialRating`.
+`nowNext` is the current airing and the next one. Current is `startTime <= now < endTime`;
 next is the first airing that has not started. The same rule applies in every response.
 
 For one station, use
@@ -108,8 +110,18 @@ window rules (required UTC, at most 24 hours). It returns `airings` and `nowNext
 `GET /api/v1/livetv/stations/{stationId}/current-program` returns `nowNext` and `asOf`
 (server time) for a now-playing banner.
 
-Invalid windows return `422 validation_failed`; an unavailable provider returns
-`503 dependency_unavailable`.
+Compute duration from `endTime - startTime`. Invalid windows return `422 validation_failed`;
+an unavailable provider returns `503 dependency_unavailable`.
+
+### Non-overlap guarantee
+
+Airings on a station are **non-overlapping**: one ends at or before the next begins. You can
+lay them out on a timeline without collision handling; at most one airing covers any instant.
+Gaps are possible.
+
+Lumastra deduplicates at import time and re-checks on read. **Do not write your own
+title-based deduplication**: genuine repeats at different times are preserved. Report
+overlapping entries rather than filtering them in a client.
 
 ### Pick a feed
 
@@ -155,11 +167,23 @@ A successful start returns **`201`** with the shared playback envelope:
 
 | Field | Meaning |
 |---|---|
-| `playbackSessionId`, `stationId`, `feedId` | Session handle, stable station, and the selected feed |
-| `delivery` | `kind: "live-hls"`, `url` (the HLS URL, already carrying a `?grant=`), `heartbeatIntervalMs` (how often to send keepalives) and `keepaliveHref` |
+| `playbackSessionId`, `stationId` | Session handle and the stable station |
+| `delivery` | `kind: "live-hls"`, `url` (the HLS URL, already carrying a `?grant=`), `feedId` (the selected feed), `heartbeatIntervalMs` (how often to send keepalives) and `keepaliveHref`. Also the output details below |
 | `grant` | `{ id, token, param: "grant", ipPinned, expiresAt, renewAfter, renewHref }`, as for every other media kind. Valid for 6 hours |
 
-Use the returned output information to show the quality actually applied.
+`delivery` also carries the output details:
+
+| Field | Meaning |
+|---|---|
+| `requiresProxy` | Whether playback must go through the Live TV proxy |
+| `sourceId`, `maxStreams` | Optional: upstream source id, and the concurrent-stream limit when enforced |
+| `rungId` | Selected quality rung, or `null` |
+| `requestedMaxBitrate`, `appliedMaxBitrate`, `appliedMaxHeight` | Requested cap and applied output limits, or `null` |
+| `reason` | Quality decision: `source_within_cap`, `hdr_source`, `unprobeable`, `capacity`, `below_ladder` or `insufficient_ladder`, or `null` |
+| `adaptive` | Optional: `{ rungs: [{ id, height, maxBitrate, codec: "h264" }], includesOriginal }` |
+| `variant` | Optional: `fmp4` or `h264`, the HEVC compatibility output selected for this player |
+
+Use this information to show the quality actually applied.
 Adaptive quality depends on server configuration and available capacity;
 don't assume the requested ladder or cap was applied.
 
@@ -185,6 +209,7 @@ what to show.
 | `upstream_stalled` | 502 | yes | 3000 | The channel stopped delivering video |
 | `stream_limit` | 503 | yes | 30000 | Our own viewer slots are full (`details` has the limit) |
 | `dependency_unavailable` | 503 | yes | 5000 | The stream proxy is down |
+| `cap_unavailable` | 503 | - | - | The requested output cap cannot be produced |
 
 `retryable: false` means do not retry automatically; offer another station. When
 `retryAfterMs` is set, wait that long before one more try (the same value, rounded up to
@@ -243,8 +268,8 @@ slot. Players that cannot send keepalives stay alive through media fetches.
 GET /api/v1/livetv/playback-sessions/{playbackSessionId}
 ```
 
-returns `playbackSessionId`, `state` (`active` or `ended`), and `endReason` (the values in
-the table below, plus `failed`). For a failed session it also returns `failure`:
+returns `playbackSessionId`, `stationId`, `feedId`, `state` (`active` or `ended`), optional
+`adaptive` and `variant`, and `endReason` (the values in the table below, plus `failed`). For a failed session it also returns `failure`:
 `{ code, retryable, retryAfterMs?, at }`. Session state and lifecycle operations are
 restricted to the owning user.
 

@@ -189,9 +189,8 @@ needed.
 Audiobooks work through this same endpoint. The server fans each record out to
 whichever store owns the resume point (AudiobookShelf, for a book) before the
 response returns. See [Audiobook playback](/developers/audiobook-playback/) for
-the audiobook-specific rules. Music isn't yet accepted on this endpoint: finished music
-plays go to `POST /api/v1/play-sessions/replay`, and music batches to
-`POST /api/v1/music/progress/end/batch`.
+the audiobook-specific rules. Music isn't accepted on this endpoint: finished music
+plays that had no live session go to `POST /api/v1/play-sessions/replay`.
 
 ## 5. Network speed test
 
@@ -276,7 +275,7 @@ const res = await fetch('/api/v1/events', {
 
 Every frame is `event: <name>` plus a JSON `data:` line: subscribe to `name`
 verbatim. The per-install list is advertised at
-`GET /api/v1/server/capabilities` → `events.kinds[]`.
+`GET /api/v1/server` → `capabilities.events.kinds[]`.
 
 | `event:` | Class | Durable |
 |---|---|---|
@@ -322,16 +321,15 @@ exception: no `id:`, never replayed (see above).
 ### Announce what you can render
 
 ```jsonc
-POST /api/v1/play-sessions
-{ "mediaId": "…", "deviceId": "…", "clientFeatures": ["admin_message", "maintenance_notice", "watch_together"] }
+POST /api/v1/devices/{id}/heartbeat
+{ "features": ["admin_message", "maintenance_notice", "watch_together"] }
 ```
 
 The admin UI hides actions a client would silently swallow, so a client that
 does not announce support is never sent one. This is a feature list, not a
-version check: tvOS, iOS, and web version independently. The same list is
-accepted on `POST /api/v1/music/sessions` and `POST /api/v1/devices/{id}/heartbeat`
-(where it generalizes the older `supportsWatchTogether` boolean, which wins if
-both are sent). Unknown tokens are ignored, never rejected.
+version check: tvOS, iOS, and web version independently. It generalizes the older
+`supportsWatchTogether` boolean on the same call, which wins if both are sent. Unknown
+tokens are ignored, never rejected.
 
 This global channel is separate from the scoped ones: `play-sessions/{id}/events`
 ([§1](#1-report-progress)) and Watch Together's own session channel, which have

@@ -47,9 +47,10 @@ GET /api/v1/{entity}/{id}/images/{role}/{index}
 `role ∈ poster | backdrop | logo | thumb | banner | still`
 `index`: for entities with multiple backdrops or logos.
 Item descriptors also use the `primary` role (square art: music, audiobooks, people, users,
-stations, libraries, playlists).
+stations, libraries, playlists). People have only `profile`; users have only `avatar`.
 
-These endpoints are reachable without a bearer credential. Payloads embed
+Media images and user avatars are reachable without a bearer credential. People and library
+images need a signed-in user. Payloads embed
 image `href`s directly and browsers load them without attaching an
 `Authorization` header. Per-item library/age gating still applies whenever a
 session *is* present; an `?sig=` HMAC query parameter on the same canonical
@@ -61,7 +62,8 @@ to request a derivative:
 
 | `?size=` | Pixel width | Where offered |
 |---|---|---|
-| `thumb` | 250px (library mosaics 256, avatars 96) | poster, thumb, primary, still |
+| `thumb` | 250px (library mosaics 256, avatars 48) | poster, thumb, primary, still |
+| `medium` | 350px | accepted, but not offered in descriptor `variants` |
 | `card` | 480px | most roles |
 | `hd` | 1280px | backdrop |
 | `wide` | 1920px | backdrop |
@@ -73,7 +75,7 @@ Everything else gets `max-age=3600` with an ETag. `full` is never `immutable`.
 - **`?width=N`** snaps onto the smallest preset that is at least as wide and
   within ±20% of it (covering, not nearest), so a request never comes back
   with fewer pixels than it asked for (e.g. `?width=460` → `card`,
-  `?width=240` → `thumb`). Widths outside every ±20% band render as custom,
+  `?width=300` → `medium`). Widths outside every ±20% band render as custom,
   non-`immutable` derivatives, clamped to `[1, 3840]`.
 - **`?quality=Q`** snaps to the nearest canonical tier (`50, 70, 85, 95`),
   within ±20%.
@@ -84,8 +86,8 @@ Everything else gets `max-age=3600` with an ETag. `full` is never `immutable`.
 
 Two entity types don't follow the preset system: `/people/{id}/images/profile`
 uses TMDB's native size vocabulary (`w45`, `w185`, `h632`, `original`), and
-`/libraries/{id}/images/{role}` doesn't support `?size=`/`?width=` at all: it's
-served at its generated mosaic resolution.
+`/libraries/{id}/images/{role}` takes only `?size=thumb|card|hd|full` (256, 512 and 1280
+pixels wide, or the generated original).
 
 ### Discovery and recommendations
 
@@ -238,11 +240,12 @@ third-party clients. It's distinct from the end-user "New episode" toggle in the
 web UI's notification settings, which controls the same event for the account
 as a whole.
 
-### Server capabilities
+### Server discovery
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/server/capabilities` | user | Per-instance capabilities (streaming, features, events) |
+| `GET` | `/server` | public / user | Discovery: name, release, sign-in methods. With a bearer token it adds `capabilities`, `build` and `caller` (`id`, `isAdmin`, `permissions`) |
+| `GET` | `/server/notice` | user | The active maintenance notice, or `{ "notice": null }` |
 
 ### Watch-together
 
@@ -304,10 +307,10 @@ The commands and their arguments are described in
 | `GET/PUT` | `/user/playback-preferences` | user | Client playback settings; `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
 | `GET/POST` | `/user/pats` | user | Own PATs; `DELETE /user/pats/{id}` revokes (`204`) |
 | `GET` | `/user/links` | user | Linked third-party accounts |
-| `GET` | `/user/links/provider` | user | External provider identity |
-| `POST` | `/user/links/authorize` | user | Initiate OIDC account linking |
+| `GET/DELETE` | `/user/links/{provider}` | user | One linked account: status, and unlink |
+| `POST` | `/user/links/{provider}/authorize` | user | Initiate OAuth account linking (returns an `authUrl`) |
 | `GET` | `/users/{id}` | `users:read` | Read another user's profile |
-| `GET` | `/users/{id}/images/avatar` | public | User avatar (shown in social contexts without a session) |
+| `GET` | `/users/{id}/images/avatar` | public | User avatar (shown in social contexts without a session); sizes `thumb`, `card`, `full` = 48, 96, 200 px |
 | `PUT/DELETE` | `/users/{id}/images/avatar` | user (self or admin) | Upload / remove an avatar (multipart) |
 
 ### Permissions
@@ -398,15 +401,7 @@ and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 | `GET` | `/music/tracks/{id}/lyrics` | user | Lyrics, when available |
 | `GET` | `/music/tracks/{id}/similar` | user | Similar tracks; `?basis=auto|metadata|sonic`, `{ items, source, page }` |
 | `GET` | `/music/tracks/{id}/stream` | user | Audio playback (see [Music streaming and transcoding](#music-streaming-and-transcoding)) |
-| `POST` | `/music/tracks/{id}/like` | user | Like feedback (204) |
-| `POST` | `/music/tracks/{id}/dislike` | user | Dislike feedback (204) |
-| `POST` | `/music/tracks/{id}/skip` | user | Skip feedback (204) |
-| `POST` | `/music/tracks/{id}/complete` | user | Completion feedback (204) |
 | `PUT`, `DELETE` | `/user/music/tracks/{id}/feedback` | user | Explicit like or dislike (`{ "feedback": "liked" }` or `"disliked"`). Skips and completions never change it |
-| `POST` | `/music/sessions` | user | Start a music session |
-| `GET` | `/music/sessions` | user | Active session (`?scope=mine\|current`) |
-| `GET/PUT` | `/music/sessions/{id}` | user | Session detail / progress |
-| `POST` | `/music/sessions/{id}/beacon` | user | `sendBeacon` alias of PUT; rate-limited |
 | `POST` | `/music/recommendations` | user | What to play next: `{ seed?, context: { currentTrackId?, history?, skipped?, exclude?, upcoming?, crossfade?, startedBy? } }` → `{ next?, alternatives, source }`; a mood seed alone is a cold start |
 | `GET` | `/music/albums/{id}/similar`, `/music/artists/{id}/similar` | user | Sonic similarity, requires `sonicEmbeddings` (`/server` → `capabilities.music.sonicSimilarity`) |
 | `GET` | `/music/path` | user | Sonic bridge between two tracks, requires `sonicEmbeddings`; rate-limited |
@@ -496,7 +491,7 @@ Notification frames carry an `id:` field for `Last-Event-ID` replay. On
 reconnect, pass the last received notification ID to replay missed notifications
 from the Valkey buffer. Live signals such as `admin` carry no replay ID.
 
-**SSE frame names** are advertised at `/server/capabilities` in `events.kinds[].name`:
+**SSE frame names** are advertised at `GET /server` in `capabilities.events.kinds[].name`:
 
 | Event type | Trigger |
 |---|---|
@@ -519,54 +514,46 @@ The scoped SSE channels (`watch-together/{code}/events`, `runs/stream`,
 `play-sessions/{id}/events`) remain separate; they have a resource lifecycle the
 global channel does not.
 
-## `/server/capabilities`
+## `/server`: discovery and capabilities
 
-`GET /api/v1/server/capabilities` returns per-instance capabilities with
-`Cache-Control: public, max-age=60`. It is distinct from `/config` (which is
-per-user and private).
+`GET /api/v1/server` (also `HEAD`) is the one discovery call, with `Cache-Control: private,
+no-cache` and an `ETag`. Without a credential it answers the anonymous tier: `id`, `name`,
+`release`, `apiVersions`, `branding`, `auth` (`deviceFlow`, `passwordLogin`) and `links`. With a
+valid bearer token it adds `build`, `caller` and `capabilities`. There is no separate
+`/server/capabilities` route.
 
 ```jsonc
 {
-  "playback": { "direct": true, "remux": true, "transcode": true },
-  "transcoder": {
-    "engine": "ffmpeg",
-    "output_video_codecs": ["h264", "hevc", "av1"],
-    "output_audio_codecs": ["aac", "ac3", "eac3", "mp3", "flac", "opus"],
-    "output_containers": ["mp4", "mkv", "ts"],
-    "max_resolution": "4K",
-    "hdr_passthrough": true,
-    "dolby_vision_passthrough": false
-  },
-  "streaming": {
-    "hls_variants": ["360p", "480p", "720p", "1080p", "4K"],
-    "max_bitrate_kbps": null
-  },
-  "features": {
-    "ai_recommendations": true,
-    "ai_assistant": false,
-    "livetv": true,
-    "watch_together": true,
-    "social": true,
-    "device_auth": true,
-    "music": false,
-    "music_clustering": false
-  },
-  "events": {
-    "url": "/api/v1/events",
-    "reconnect_max_ms": 30000,
-    "event_types": ["social.comment", "device.command_status", "…"]
-  },
-  "metadata": {
-    "primary": "en",
-    "additional": ["de"]
+  "id": "…", "name": "Home", "release": "0.1.0", "apiVersions": ["v1"],
+  "caller": { "id": "…", "isAdmin": false, "permissions": { "canRequest": true, "canReview": true,
+              "canAnnotateMedia": true, "canWatchLiveTv": true, "canSeeAllPlayback": false } },
+  "capabilities": {
+    "playback": { "direct": true, "remux": true, "transcode": true,
+                  "transcoder": { "engine": "ffmpeg", "videoCodecs": ["h264", "hevc"],
+                                  "audioCodecs": ["aac", "ac3"], "containers": ["mp4", "ts"],
+                                  "maxResolution": "4K", "hdrPassthrough": true,
+                                  "dolbyVisionPassthrough": false },
+                  "hlsVariants": ["720p", "1080p"], "maxBitrateKbps": null },
+    "liveTv": { "available": true },
+    "music": { "available": true, "clustering": false, "sonicSimilarity": false, "sonicMixes": false },
+    "audiobooks": { "available": false },
+    "features": { "watchTogether": true, "videoPreviews": true, "topShelfPreviews": false,
+                  "mediaDownload": false, "downloadRenditions": false, "…": true },
+    "events": { "href": "/api/v1/events", "reconnectMaxMs": 30000,
+                "kinds": [ { "name": "connected", "class": "bootstrap", "durable": false, "available": true } ] },
+    "metadata": { "primary": "en", "additional": ["de"] }
   }
 }
 ```
 
-`features` is the **engine-can-do matrix** (toggles), distinct from the
-`playback.*` transcoder capabilities. `metadata.primary`/`.additional` list the
+`capabilities.features` is the **engine-can-do matrix** (booleans in camelCase), distinct
+from the `playback` transcoder capabilities. `music.available` is true when the server has at
+least one enabled music library; `music.clustering` is a separate recommendation feature and
+says nothing about whether music exists. `metadata.primary` and `.additional` list the
 languages enabled for metadata translation, see [Language
-negotiation](#language-negotiation-accept-language) below.
+negotiation](#language-negotiation-accept-language) below. `GET /api/v1/server/notice`
+returns the active maintenance notice or `{ "notice": null }`; call it on launch and on
+foreground.
 
 ## Language negotiation (`Accept-Language`)
 
@@ -601,7 +588,7 @@ French, because the cookie already supplied (and exhausted) a signal.
 from `Accept-Language` against `en`/`de` only. It is never affected by the
 metadata chain above, nor by a stored `metadataLanguage` preference.
 
-Use `GET /server/capabilities` to discover which languages are enabled before
+Use `GET /server` to discover which languages are enabled before
 assuming a preference will resolve (see the `metadata` block above).
 
 :::note[Behavior change for cookie-less clients]
