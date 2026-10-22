@@ -200,8 +200,11 @@ The music quick-picks recommender (bucket distribution, taste-cluster inspector)
 
 **Route:** `/admin/users/sessions`
 
-Inspect active playback across users, including delivery method, bandwidth, and
-transcoding jobs. With Jellyfin sync enabled, direct Jellyfin sessions also appear.
+Inspect active playback across users, including delivery method, bandwidth per stream,
+total stream bandwidth, and transcoding jobs. With Jellyfin sync enabled, direct Jellyfin
+sessions also appear. CPU, memory and GPU load are not shown here: **System load →**
+opens **System health → Cluster**, which shows them per machine (see
+[Watching GPU load](/guides/gpu-transcoding/#watching-gpu-load)).
 
 Select a session to send a message to it. On a Lumastra app the message shows on the
 device. In other players it shows as a notice. You can also stop a session from here.

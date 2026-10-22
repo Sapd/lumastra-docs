@@ -227,8 +227,8 @@ works on AMD, with no config. For these HDR→SDR transcodes the CPU decodes and
 tone-maps, and the GPU encodes. A 4K HDR film runs at about 2.5–5× real time on a
 6-core Ryzen 5 8600G and uses most of its cores, so expect two or three of these at
 once. HDR→HDR (an HEVC-capable client) and SDR transcodes stay entirely on the GPU.
-The active mode is shown in **Users & Sessions → Active sessions** (the GPU panel:
-*HDR tone-mapping: Hardware / Software*).
+The active mode is shown in **System health → Cluster → Hardware encoder check**
+(*HDR tone-mapping: Hardware / Software*).
 :::
 
 HDR **pass-through** (HDR→HDR for capable clients) and direct play / remux never
@@ -249,8 +249,34 @@ For these, Lumastra **decodes in software and feeds the frames to the GPU encode
 automatically, so an old Xvid AVI or a Hi10P file still transcodes on the GPU instead
 of hard-failing. It's learned per host: the first time a codec proves undecodable it's
 recorded (and remembered across restarts), so later plays skip straight to the working
-path. After a GPU or driver change you can re-probe by clearing the cache in **Users & Sessions →
-Active sessions**: the GPU panel lists the learned codecs with a **Reset** button.
+path. After a GPU or driver change you can re-probe by clearing the cache in **System health →
+Cluster → Hardware encoder check**: it lists the learned codecs with a **Reset** button.
+
+## Watching GPU load
+
+**System health → Cluster** shows one card per machine, and every machine with a GPU
+gets a GPU block. The figures come from the services' heartbeats (every 10 seconds), so
+they describe the machine the transcodes actually run on, whichever web replica answers
+the page.
+
+- **Video (encode/decode)** and **Render/3D**: how busy those GPU engines are, from the
+  FFmpeg processes of every Lumastra service on the machine added together (transcodes
+  and Live TV). Intel (i915 and xe drivers) only; a small line under the bars follows
+  the video engine while the page is open.
+- **Awake** (Intel): the share of time the GPU was out of its idle state. Any work at
+  all keeps it awake, so it often reads 100 % while one stream runs; the engine bars say
+  how much headroom is left.
+- **NVIDIA**: utilization, encoder and decoder load, open NVENC sessions against the
+  driver's cap (for example *3 / 8 encode sessions*), VRAM, temperature and power, read
+  with `nvidia-smi` once per heartbeat on services that use `GPU_ACCELERATION=nvenc`.
+- **Clock** and **Power** (Intel discrete GPUs), and the result of each service's last
+  test encode (*QSV ready*, refreshed every 30 minutes).
+
+The **Server**/**Cluster** tile on the admin home page shows one figure from this:
+**GPU encodes**, the transcodes on the GPU (NVIDIA: sessions in use / cap). For
+monitoring, `GET /api/v1/system-metrics` (scope `metrics:read`) returns the same
+per-host figures under `hosts`; its other fields describe only the server process that
+answered.
 
 ## Tested hardware
 
@@ -284,10 +310,13 @@ After restarting:
    `docker exec <container> /config/bin/ffmpeg -encoders | grep -E 'nvenc|qsv|vaapi'`
 3. **Start a transcoded playback** and watch the app logs. The chosen encoder (e.g.
    `hevc_nvenc`) is logged when a transcode starts (*Full mode: GPU-accelerated
-   (h264_vaapi)*), and `nvidia-smi` / `intel_gpu_top` should show encoder utilization.
-   On AMD, `radeontop` doesn't show the video engine, so rely on the log line.
-4. **Check the GPU panel** in **Users & Sessions → Active sessions**: it shows the GPU status, the HDR
-   tone-mapping mode (hardware / software), and any learned decode fallbacks.
+   (h264_vaapi)*). The host card in **System health → Cluster** should show the
+   **Video (encode/decode)** engine busy and the transcode counted on the GPU (see
+   [Watching GPU load](#watching-gpu-load)). On AMD there is no per-engine figure, so
+   rely on the log line.
+4. **Open the hardware encoder check** in **System health → Cluster**: it runs a test
+   encode and shows the GPU status, the HDR tone-mapping mode (hardware / software), and
+   any learned decode fallbacks.
 5. **Run the config doctor** for a quick sanity check: `curl http://localhost:3000/api/health/config`.
 </Steps>
 
@@ -302,8 +331,8 @@ After restarting:
 | `/dev/dri` exists but transcode fails with permission errors | Add the correct `group_add` GID for the render node. |
 | High CPU despite `GPU_ACCELERATION` set | The encoder isn't available in ffmpeg (check step 2); auto-select fell back to software. Note that HDR→SDR on AMD VA-API (decode and tone-mapping) and undecodable source codecs use the CPU by design (see below). |
 | `videotoolbox` / `amf` set in Docker but ignored | Not supported inside Linux containers. Use a Linux backend or run bare metal. |
-| HDR plays but uses a lot of CPU on AMD VA-API | Expected when the client gets SDR. AMD has no hardware HDR VPP, so decoding and tone-mapping run in software and only the encode uses the GPU. Confirm *HDR tone-mapping: Software* in Users & Sessions → Active sessions. |
-| Old Xvid / DivX, VC-1, or 10-bit H.264 won't start, or did once then recovered | Handled by the software-decode fallback. If it was mis-learned after a GPU/driver change, clear the decode cache in Users & Sessions → Active sessions. |
+| HDR plays but uses a lot of CPU on AMD VA-API | Expected when the client gets SDR. AMD has no hardware HDR VPP, so decoding and tone-mapping run in software and only the encode uses the GPU. Confirm *HDR tone-mapping: Software* in System health → Cluster → Hardware encoder check. |
+| Old Xvid / DivX, VC-1, or 10-bit H.264 won't start, or did once then recovered | Handled by the software-decode fallback. If it was mis-learned after a GPU/driver change, clear the decode cache in System health → Cluster → Hardware encoder check. |
 | Player says the server's video encoder is busy; Active sessions shows **Encoder busy** | Another app is using the GPU encoder (Sunshine/Apollo, OBS, Discord, Instant Replay). Stop it, or see [Other apps share the encoder](#other-apps-share-the-encoder). |
 | Player says the video is encoded in software; logs say "GPU encoder could not open a session" | NVENC had no free session (`OpenEncodeSessionEx failed`). Another app holds the encoder, or the driver's session cap is reached. Lumastra continued that transcode on the CPU. |
 | Active sessions shows **CPU too slow** | A software transcode can't keep up. Enable GPU transcoding, or keep the **Downscale 4K to 1080p on CPU** setting on (it is by default). |
