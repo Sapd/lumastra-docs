@@ -17,10 +17,18 @@ The [quick reference](#quick-reference-where-to-go-for-common-tasks) lists commo
 
 **Route:** `/admin/library/sources`
 
-Create a library group and add paths under **Library Paths**. Each path needs an
-on-disk directory, media type, and metadata provider. Scan the full library or an
-individual group. **Library Types** configures names, icons, and sidebar visibility
-for non-entertainment media.
+Use **New library** to set up a library, then open its name to manage folders,
+metadata providers, and access. Each folder needs an on-disk directory, media type,
+and metadata provider. **Scan all** scans all libraries; each library also has its
+own **Scan** action. While scanning, its row shows progress and a **Stop** action.
+
+The **Scan status** panel brings together the automatic scan schedule, file totals,
+and files awaiting hashing or probing. Choose **Reorder libraries** to reveal drag
+handles and up/down buttons. Order changes save automatically; choose **Done**
+to leave reorder mode.
+
+**Library Types**, under **Settings → Homepage & navigation**, configures names,
+icons, and sidebar visibility for non-entertainment media.
 
 Each path belongs to exactly one library group, which holds the name, icon, age-rating
 ceiling, and metadata-provider chain for all its paths. For naming conventions and
@@ -32,7 +40,7 @@ path supports only one provider (TMDB, MusicBrainz, AniDB, etc.).
 :::
 
 Per-group access can be restricted to specific identity-provider groups from the
-permissions row on a library group; an empty allowed-groups list means all authenticated
+library’s detail page; an empty allowed-groups list means all authenticated
 users can see it.
 
 ---
@@ -284,7 +292,7 @@ you've created the new admin.
 
 | Task                                     | Route                             |
 | ----------------------------------------- | ---------------------------------- |
-| Add a library folder                      | `/admin/library/sources` → Library Paths tab |
+| Add a library folder                      | `/admin/library/sources` → open a library → Add folder |
 | Fix unmatched files                       | `/admin/library/fix-matches` → Never matched view |
 | Find / edit a title                       | `/admin/library/media`            |
 | Reorder a series' episodes                | `/admin/library/media/[id]` → Reorder / Ordering tab |
