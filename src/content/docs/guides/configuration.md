@@ -12,6 +12,22 @@ Settings resolve in this order (highest priority first):
 Most URLs and API keys support both environment and UI configuration. JWT/master
 keys and proxy-trust settings are environment-only.
 
+## Finding and changing settings
+
+Open **Admin → Settings** and use the search field to find settings across pages.
+Search accepts words in any order, setting names, environment variable names and
+common terms such as “hardware transcoding”. Results link to the matching setting.
+
+The location trail shows **Settings → Page → Section**, including on smaller
+screens. Selecting a section updates the address; use browser Back and Forward to
+revisit sections, or bookmark a setting link to return directly to it.
+
+A disabled setting explains what controls it. Follow its prerequisite link to the
+controlling option. Search may show an inactive setting so you can find it, but
+you must satisfy its prerequisite before editing it. Environment overrides name
+the variable to change in your deployment; environment-only settings cannot be
+changed through the admin form.
+
 ## Secrets at rest
 
 `LUMASTRA_MASTER_KEY` encrypts stored integration and webhook secrets. Keep it stable
