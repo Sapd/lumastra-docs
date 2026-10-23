@@ -37,6 +37,11 @@ look for a working backend, review its recommendation, then save any changes thr
 If an environment variable controls a setting, change it in your deployment configuration;
 it takes priority over the saved settings file.
 
+Automatic detection probes NVIDIA NVENC, Intel Quick Sync and VAAPI. For AMF or
+VideoToolbox, choose the backend manually and use **Test saved encoder** after saving.
+A detection result names the server that answered; it can differ from the server
+that answered the status check in a deployment with several replicas.
+
 Use **View GPU activity & diagnostics** to open cluster monitoring. Each cluster GPU
 card links back to the hardware settings. Setup completion, GPU-related transcode
 failures, and expanded active-transcode details also offer a route to these settings.
