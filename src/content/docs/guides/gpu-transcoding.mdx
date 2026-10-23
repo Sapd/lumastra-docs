@@ -22,6 +22,26 @@ falls back to software with a warning: it doesn't crash, you just get no
 acceleration.
 :::
 
+## Find hardware acceleration settings
+
+Open **Admin → Settings → Playback → Hardware acceleration (GPU)**. You can also
+search the admin command palette for **hardware**, **hardware transcode**, **GPU**,
+or your encoder name, such as **NVENC**, **Quick Sync**, or **VAAPI**. The settings
+result opens the hardware section directly; **GPU diagnostics & activity** opens
+the cluster's hardware encoder check.
+
+The hardware section distinguishes the detected hardware, the configured encoder,
+and the verification result for the responding server. Use **Detect hardware** to
+look for a working backend, review its recommendation, then save any changes through
+**Save Changes**. A pending selection is not proof that the new configuration works.
+If an environment variable controls a setting, change it in your deployment configuration;
+it takes priority over the saved settings file.
+
+Use **View GPU activity & diagnostics** to open cluster monitoring. Each cluster GPU
+card links back to the hardware settings. Setup completion, GPU-related transcode
+failures, and expanded active-transcode details also offer a route to these settings.
+Files that play directly do not need GPU transcoding, so zero GPU transcodes can be normal.
+
 ## Two steps
 
 <Steps>
