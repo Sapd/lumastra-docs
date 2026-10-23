@@ -266,6 +266,22 @@ groups shown.
 The **Audit log** CSV export stops at 10,000 rows and warns when it did; narrow the
 filters (for example a later start date) to export the rest.
 
+## Read the pipeline
+
+Open **Tasks → Pipeline** to follow processing in **Flow** or inspect individual
+stage completion in **Completion**.
+
+The health cards in Flow describe the whole pipeline, across all media types and
+time windows. They remain visible in both **Map** and **Table**. Use the issue
+links to jump to stopped retries, recent errors, or stuck items; matching failures
+link to **Library → Fix matches**.
+
+Search, media-type filters, and the time window control the items shown below the
+cards. A line's item count includes recently completed items in that loaded window;
+it is not the same as the global count of unfinished work. When only the newest
+items are loaded, the page says so. Use **Table** to read titles and current stages,
+or scroll within the map to inspect every station. The legend explains its symbols.
+
 ## Diagnose stalled work
 
 The Pipeline's stuck-items panel flags:
