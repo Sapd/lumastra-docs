@@ -146,7 +146,10 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
    succeeded and **Confirm** retries only the identity update.
 5. If the folder name is a release name (`[Group] Show - 07 (JA) [1080p]`), rename the
    folder to `Show (Year)` with a `Season 01` subfolder and rescan.
-6. Home videos and test clips have no provider entry. Dismiss them.
+6. Home videos, test clips and personal compilations may have no provider entry.
+   Keep their local metadata rather than selecting an unrelated provider match.
+   The Fix matches list can continue to show these items; removing them from the
+   library is not a metadata repair.
 
 ## "N items need re-identification"
 
