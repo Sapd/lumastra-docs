@@ -136,7 +136,9 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
 3. If another entry owns the selected id, review the conflict and its file counts.
    For a series, choose **Review episode links** for each source file. Select the
    canonical target series, add the correct episodes and **Save links**. Changes stay
-   in the draft until saved; closing the editor writes nothing.
+   in the draft until saved; closing the editor writes nothing. If the target has no
+   episodes yet, open its **Sync** tab, select **Include children** and choose **Sync
+   from provider**. After that task finishes, reload the episodes in the file editor.
 4. Once every source file has moved, choose **Merge entries**. The canonical series
    remains, including its provider identity, files and watch data. Remaining source
    files keep the merge blocked. Movie merges retain the file-bearing entry and apply
