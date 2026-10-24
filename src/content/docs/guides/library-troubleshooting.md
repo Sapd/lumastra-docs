@@ -22,8 +22,22 @@ For task failures in general (stuck items, queues that won't drain), see
 
 ## "N media files have health problems"
 
-The item counts files whose `media_files.health_issues` is not empty. It links to
-**System → Health → Files**. Group them by issue type first:
+The item counts files whose `media_files.health_issues` is not empty. Open
+**System → Health → Files**, read the warnings on the affected row, then choose
+**Recheck** to check that one file again. A previous task failure or linked library
+item is not required.
+
+Rechecking starts a background run. Use its run link to follow progress; acceptance
+or a running status does not mean the file is healthy. **Cancel** asks the run to
+stop, and the page waits for its final state. Closing the page stops tracking, not
+the worker. Repeating the request while the same file is being checked reuses that
+run. A disabled media probe or an incomplete check retains the warning.
+
+Only fresh evidence can remove a recorded problem. Other warnings, newer concurrent
+findings and genuine damaged or unsupported media remain visible. See the recipes
+below for interpreting a retained warning.
+
+For an advanced count by issue type, use a read-only query:
 
 ```sql
 SELECT e->>'type' AS issue, count(*)
@@ -57,11 +71,13 @@ The last row used to be reported as damage. Current versions only report a file 
 the stream ends are really missing; older entries are re-checked by the next media
 probe run.
 
-Use the affected file's **Retry** action in the media-probe failure or pipeline view
-to re-check its stream ends. It removes only warnings disproved by a successful check.
-Failed or inconclusive checks keep the warning, as do unrelated decode problems.
-This does not require discarding probe data for the whole library. A retry cannot
-repair missing or encrypted bytes; keep genuine file warnings visible.
+Use **Recheck** on the affected row in **System → Health → Files** to re-check its
+stream ends. **Retry** in the media-probe task's **Failures** tab starts the same
+selected-file background check and exposes its run link. It removes only warnings
+disproved by a successful check; failed or inconclusive checks keep the warning,
+as do unrelated decode problems. This does not require discarding probe data for
+the whole library. A recheck cannot repair missing or encrypted bytes; keep genuine
+file warnings visible.
 
 ### `video_ends_early` that the file does not confirm
 
@@ -186,7 +202,9 @@ failure, use **Retry** on this step, then **Do this one first** if it is waiting
 Keep unmatched personal material or an uncertain special separate until its identity
 is established.
 
-## "<Task> could not process N items"
+<span id="-could-not-process-n-items"></span>
+
+## "Task could not process N items"
 
 These count unresolved rows in `plugin_failure_events`, per task. Group them by reason
 and compare with the item's current state:
@@ -211,6 +229,11 @@ GROUP BY 1, 2 ORDER BY 1, 3 DESC;
 - **`FFmpeg operation timed out`** on intro detection: large 4K files under load. Retry
   from the task's **Failures** tab after addressing resource pressure; see
   [intro-analysis recovery](/guides/task-troubleshooting/#retrying-intro-analysis-from-the-ui).
+  **Process all pending** works through waiting work without resetting completed
+  analysis. Eligible movies also participate in video analysis; a formerly blocked
+  movie can move from **Not applicable** to **Waiting** after an update. Processing
+  must still succeed before its historical failure is resolved. Unsupported codecs
+  remain warnings.
 - **`already mapped to media item …`** on artist enrichment: compare the artists'
   provider identities and credits before merging. Similar punctuation or a `DJ`
   prefix alone does not prove they are the same act. Keep distinct artists separate
