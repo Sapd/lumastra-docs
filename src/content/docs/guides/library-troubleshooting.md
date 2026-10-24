@@ -56,6 +56,12 @@ The last row used to be reported as damage. Current versions only report a file 
 the stream ends are really missing; older entries are re-checked by the next media
 probe run.
 
+Use the affected file's **Retry** action in the media-probe failure or pipeline view
+to re-check its stream ends. It removes only warnings disproved by a successful check.
+Failed or inconclusive checks keep the warning, as do unrelated decode problems.
+This does not require discarding probe data for the whole library. A retry cannot
+repair missing or encrypted bytes; keep genuine file warnings visible.
+
 ### `video_ends_early` that the file does not confirm
 
 If the ends above are complete and a frame near the end decodes:
@@ -66,7 +72,8 @@ ffmpeg -v error -ss 3500 -i "$f" -map 0:v:0 -frames:v 1 -f null - && echo decode
 
 then the entry is stale: the trickplay run that wrote it hit a temporary decode
 failure. Regenerate the item's trickplay, which re-checks the file and clears the
-entry:
+entry. In the item's **Files** tab, choose **Force Regenerate** under **Trickplay**.
+The equivalent API request is:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -100,8 +107,9 @@ read as episode numbers.
 ### `range_superseded`
 
 A multi-episode file (`S11E14-E15`) whose episodes all have files of their own. It is
-not linked, so it is a duplicate. Remove it if you don't need it; Lumastra links it
-again if one of the single-episode files disappears.
+not linked. Verify that every episode in the combined file is available separately
+before removing anything: a stale link or numbering mismatch can hide unique content.
+Lumastra links the combined file again if a single-episode file disappears.
 
 ## "N library integrity issues found"
 
@@ -125,16 +133,24 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
 
 1. Search the provider by title or IMDb id (the identify dialog does this).
 2. If the id is free, match it.
-3. If the match is refused because another item already owns that id, the library holds
-   a duplicate: usually a file-less catalog entry created earlier. Merge the two (keep
-   the item with the files).
-4. If the folder name is a release name (`[Group] Show - 07 (JA) [1080p]`), rename the
+3. If another entry owns the selected id, review the conflict and its file counts.
+   For a series, choose **Review episode links** for each source file. Select the
+   canonical target series, add the correct episodes and **Save links**. Changes stay
+   in the draft until saved; closing the editor writes nothing.
+4. Once every source file has moved, choose **Merge entries**. The canonical series
+   remains, including its provider identity, files and watch data. Remaining source
+   files keep the merge blocked. Movie merges retain the file-bearing entry and apply
+   the selected provider identity; if that final step fails, the dialog explains what
+   succeeded and **Confirm** retries only the identity update.
+5. If the folder name is a release name (`[Group] Show - 07 (JA) [1080p]`), rename the
    folder to `Show (Year)` with a `Season 01` subfolder and rescan.
-5. Home videos and test clips have no provider entry. Dismiss them.
+6. Home videos and test clips have no provider entry. Dismiss them.
 
 ## "N items need re-identification"
 
-A provider call for the item failed permanently. Read the error on the stage row:
+A provider has rejected the stored identity, or the task explicitly needs a corrected
+match. Review it in **Library → Fix matches → Broken match**. Read the error on the
+stage row when more detail is needed:
 
 ```sql
 SELECT media_item_id, stage_id, last_error
@@ -145,8 +161,10 @@ WHERE status = 'failed_permanent';
 | `last_error` says | Cause | Fix |
 | --- | --- | --- |
 | The provider has no entry for the id | A wrong or deleted provider id; sometimes two TV films filed as a series | Match the item to the right id, or move the films into movie folders |
-| `aborted due to timeout` | A timeout that was recorded as permanent | Retry the stage: `POST /api/admin/media/<id>/pipeline` with `{"stageId":"<stage>"}` |
-| A trickplay or decode stage failed | The file itself cannot be decoded | See `container_unreadable` above |
+
+Timeouts, unsupported codecs, encryption and generic processing errors remain task
+or file warnings. They do not establish that a provider identity is wrong. Follow
+their task or pipeline action instead of changing the match.
 
 ## "<Task> could not process N items"
 
@@ -171,10 +189,14 @@ GROUP BY 1, 2 ORDER BY 1, 3 DESC;
 - **`FFmpeg aborted`**: a run was stopped by a restart or update. Not a file problem; the
   next run processes the item.
 - **`FFmpeg operation timed out`** on intro detection: large 4K files under load. Retry
-  the task when the server is quiet.
-- **`already mapped to media item …`** on artist enrichment: two artist rows for one act
-  (different apostrophes, hyphens or a `DJ` prefix). Merge them.
-- Anything else: open the task's **Failures** tab; the per-item **Retry** re-runs it.
+  from the task's **Failures** tab after addressing resource pressure; see
+  [intro-analysis recovery](/guides/task-troubleshooting/#retrying-intro-analysis-from-the-ui).
+- **`already mapped to media item …`** on artist enrichment: compare the artists'
+  provider identities and credits before merging. Similar punctuation or a `DJ`
+  prefix alone does not prove they are the same act. Keep distinct artists separate
+  and investigate the lookup that selected the conflicting identity.
+- Anything else: open the task's **Failures** tab and use its available retry action
+  after fixing the cause.
 
 ## Music hygiene items
 

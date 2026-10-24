@@ -6,9 +6,25 @@ description: >
   Each comes with diagnosis commands and a resolution path.
 ---
 
-These recipes assume shell access and `psql` / `valkey-cli` inside the deployment.
-For UI diagnostics, start with [Monitoring tasks and pipelines](/guides/task-monitoring/).
+Start with the admin UI and [Monitoring tasks and pipelines](/guides/task-monitoring/).
+The advanced recipes below use shell access and `psql` / `valkey-cli` inside the deployment.
 The state model is documented in [Task system](/architecture/task-system/).
+
+## Retrying intro analysis from the UI
+
+Open **Tasks → Detect Intros & Credits → Failures** and read the cause. A timeout or
+an interrupted run does not establish that the media is damaged. Unsupported codecs
+and unreadable or encrypted files need attention to the file itself.
+
+After addressing the cause, choose **Retry all failed items** and confirm its scope.
+This restores failed work and automatic exclusions caused by repeated failures with
+a fresh retry budget. Intentional operator exclusions, ineligible items, completed
+work and active runs stay unchanged. The confirmation reports the actual count;
+zero means no additional eligible work was queued.
+
+The failure list remains visible until processing succeeds. Check the task's runs
+for progress rather than clearing its history. For file warnings and duplicate
+matches, see [Library problems](/guides/library-troubleshooting/).
 
 :::note[Conventions used below]
 Set these shell variables first. The actual container names depend on your

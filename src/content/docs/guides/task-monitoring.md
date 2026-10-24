@@ -24,6 +24,13 @@ processing, see [Background tasks on day one](/guides/task-basics/).
 - Transient failures retry with backoff. Permanently failed or dead-lettered work
   has exhausted retries; fix the cause before retrying it.
 
+In a task's **Failures** tab, **Retry all failed items** also restores automatic
+exclusions caused by repeated analysis failures, with a fresh retry budget. It leaves
+completed work, active runs, ineligible items and intentional operator exclusions
+unchanged. The result reports how many items were queued; repeating it can report zero.
+Failure history remains visible until processing succeeds. See
+[intro-analysis recovery](/guides/task-troubleshooting/#retrying-intro-analysis-from-the-ui).
+
 A **circuit auto-pause** follows repeated failures and probes again after a cooldown:
 1 minute, then 5 minutes, 30 minutes, and 2 hours on repeated trips. A **schedule
 pause** is an operator setting that stops automatic starts until resumed. The two
