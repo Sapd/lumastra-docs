@@ -31,6 +31,10 @@ build scripts, image build).
   and can fall back to the album artist's picture.
 - Image choices retain their provider and source references across caching and metadata
   updates, with protected manual choices and provider-based selection.
+- Artwork upgrades preserve existing selections and enrichment attribution. Replacing a
+  cover at the same path refreshes its image version, and stale repair or cleanup work
+  cannot remove a newer image. Cached local artwork verifies its source bytes, adding
+  filesystem reads when images are served.
 - Cleanup works through successive bounded batches, and the homepage's active streams
   refresh follows the same display rules as its first load.
 - Each release now says whether the Live TV proxy needs an update, and Admin → System
