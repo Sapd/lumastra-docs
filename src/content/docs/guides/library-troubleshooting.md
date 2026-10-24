@@ -52,13 +52,16 @@ Then follow the recipe for each type.
 
 Both say the video stops before the duration the container header claims. That has
 three different causes, and only two of them mean the file is damaged. Read the end of
-the video and the audio stream (one seek each, fast even on large files):
+the video and the audio stream. The commands below read from the final seek to
+end-of-file; reading just one packet can stop at a keyframe before the true end.
+A damaged index can make a tail read slow. Prefer the bounded UI **Recheck** for
+routine checks, and keep the warning when the result is inconclusive:
 
 ```bash
 f="/media/movies/Example Film (2001)/Example Film (2001).mkv"
 ffprobe -v error -show_entries format=duration -of csv=p=0 "$f"
-ffprobe -v error -select_streams v:0 -read_intervals 999999%+#1 -show_entries packet=pts_time -of csv=p=0 "$f" | tail -1
-ffprobe -v error -select_streams a:0 -read_intervals 999999%+#1 -show_entries packet=pts_time -of csv=p=0 "$f" | tail -1
+ffprobe -v error -select_streams v:0 -read_intervals 999999% -show_entries packet=pts_time -of csv=p=0 "$f" | tail -1
+ffprobe -v error -select_streams a:0 -read_intervals 999999% -show_entries packet=pts_time -of csv=p=0 "$f" | tail -1
 ```
 
 | What you see | Cause | Fix |
