@@ -124,15 +124,17 @@ result after confirming a mapping.
 Saving or resetting a manual mapping checks that the file, current links, and target
 episodes still match the review you opened. If another edit or scan changed them,
 the operation stops for a fresh review. Check the updated evidence before saving
-again; do not retry an old selection blindly. A successful manual repair records
+again; do not retry an old selection blindly. Episodes that were removed or moved
+out of the selected series stay visible in your draft but must be removed or
+replaced before saving. A successful manual repair records
 the administrator and removes only the mapping warning it actually resolves.
 Other source-file warnings remain.
 
 With chapter scanning enabled, new episode files also invalidate the series'
 chapter-processing result. Library scans revisit files whose chapter inspection is
 missing or outdated. An inspection that successfully finds no embedded chapters
-is remembered, so it does not cause repeated work. Chapter refresh preserves
-manually reviewed episode windows.
+is remembered, so it does not cause repeated work, and replaces any obsolete
+chapter records. Chapter refresh preserves manually reviewed episode windows.
 
 A descending or otherwise ambiguous filename range requires review of the file's
 actual contents. It is not proof that other files already cover its episodes.
