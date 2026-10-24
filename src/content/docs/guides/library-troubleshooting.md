@@ -1,8 +1,8 @@
 ---
 title: Library problems on the admin home
 description: >
-  What each library and file item on the admin home means, how to check it in a
-  few commands, which causes are real and which are noise, and how to clear it.
+  What each library and file item on the admin home means, how to check it in the
+  admin UI, which causes need repair, and when to keep a warning visible.
 ---
 
 The admin home (**Admin**) lists what needs your attention. Most library items there
@@ -10,7 +10,8 @@ have a handful of known causes, and several of them are not problems with your m
 at all. Each recipe below goes from what you see, to what to check, to the cause, to
 the fix.
 
-The checks use three tools:
+Start with the linked admin page and its retry or repair action. The advanced checks
+below use three tools when the UI needs supporting evidence:
 
 - `psql` on the Lumastra database (read-only queries are enough).
 - `ffprobe` from the same FFmpeg build Lumastra uses, run where the media is mounted.
@@ -171,6 +172,20 @@ Timeouts, unsupported codecs, encryption and generic processing errors remain ta
 or file warnings. They do not establish that a provider identity is wrong. Follow
 their task or pipeline action instead of changing the match.
 
+## Series metadata says “No usable provider identity”
+
+Open the series, choose **Pipeline**, and read **Refresh Series Metadata**. Without a
+usable provider identity this step is **Not applicable**, with guidance to use
+**Identify**. It has not completed a provider sync, and an empty response is not proof
+that the provider has no episodes.
+
+Use **Identify** only when you can verify the correct series. Assigning a supported
+identity queues the step again. A provider that is temporarily unavailable remains
+retryable. After updating from a version that reported the missing identity as a
+failure, use **Retry** on this step, then **Do this one first** if it is waiting.
+Keep unmatched personal material or an uncertain special separate until its identity
+is established.
+
 ## "<Task> could not process N items"
 
 These count unresolved rows in `plugin_failure_events`, per task. Group them by reason
@@ -213,8 +228,13 @@ These are review lists, not errors.
 - **"N track titles come from their file names"**: tracks whose title was taken from the
   file name because the file has no title tag. Check a sample with
   `ffprobe -v error -show_entries format_tags=title -of csv=p=0 "<file>"`. If the tag is
-  there, the marker is left over from an older version and clears on the next scan.
-  If it is missing, tag the files.
+  there, run a normal **Scan** from **Library → Sources & scanning → your music
+  library**, then check its **Recent scans** result. Current versions also recheck
+  previously scanned, unchanged files whose title source has not been verified.
+  A successful tag read clears a stale filename marker; missing tags remain listed.
+  Failed or cancelled reads stay eligible for a later scan. Manually locked titles
+  are preserved, and segmented tracks are not renamed from a whole-file title tag.
+  If the title tag is missing, add it with your preferred tagging tool and scan again.
 - **"N artist names may be combined credits"**: names containing `&`, `and`, `feat.` and
   the like. For an act whose name really contains `&` (a duo), open the artist and mark
   it **single act, do not split**. Real one-off collaborations can stay as they are.
