@@ -64,29 +64,98 @@ Deleting an item removes its Lumastra data (ratings, history, embeddings, and ex
 IDs). A later scan imports it again. Duplicate merging can join items sharing an
 external ID, including a file-backed item and its discovery-only counterpart.
 
-Per-item tools include:
+### Find a title or a problem
 
-- **Drag-and-drop reorder**: rewrites the stored episode numbers within a season.
-  Irreversible with no undo. Reorder one season at a time.
-- **Alternative orderings** (**Ordering** tab): fetches TMDB's alternative episode
-  groupings (DVD order, absolute order, etc.) and links to them non-destructively; pick
-  **Standard (default)** to revert at any time.
-- **Auto-fixing episode titles** (**Health** tab → **Analyze episode titles**): repairs
-  wrong/generic titles by reading embedded chapter names (fallback: filenames) and
-  fuzzy-matching the provider's episode list. Confident matches (≥ 90%) apply
-  automatically right after a TMDB series sync completes with an episode catalog, and
-  again in a periodic 24-hour sweep across the library; lower-confidence candidates are
-  queued for manual review from the same tab, which you can also trigger by hand at any
-  time.
-- **Split-cour anime auto-fix**: after every TMDB series sync, Lumastra looks for a TMDB
-  alternative episode group that matches your on-disk season layout and, if found,
-  re-binds mismatched episodes and merges away duplicate "ghost" episodes automatically.
+The media browser starts with **title search**. Choose broader search explicitly to
+include other metadata. **All**, **Needs attention**, and **Recently added** are the
+primary views; choose an issue category within Needs attention to narrow the list.
+Use **Table settings** for columns and page size. Music, video, and audiobook views
+show information appropriate to their media type.
+
+Selections can span pages. The selection bar distinguishes items on the current
+page from items selected elsewhere; selecting the table header selects that page,
+not every matching item. Returning from a detail page restores the browser context.
+
+### Inspect a title
+
+Video details have these sections:
+
+| Section | Use it for |
+| --- | --- |
+| **Overview** | Availability, outstanding issues, metadata, and the title's files or versions |
+| **Episodes** | Regular seasons, specials, ordering, and episode issues for a series |
+| **Files** | Physical files, episode links, streams, chapters, and preview information |
+| **Artwork** | Provider or inherited images and custom overrides |
+| **Maintenance** | Metadata refresh, media processing, and processing history |
+
+The series availability summary distinguishes aired regular episodes with files
+from provider-listed episodes. Specials are counted separately. Catalog totals may
+also include future episodes or entries without files. An unresolved identity or
+ordering conflict can make the missing count uncertain; resolve that conflict before
+treating the count as a list of files to find.
+
+A physical file can serve several episodes. **Files** groups those links beneath the
+file, showing each episode's boundaries. **File time** starts at the beginning of the
+physical file; **episode time** starts at the beginning of the selected episode.
+The file's size and full duration describe the whole file, not each episode's share.
+Use **Episodes in file** to inspect or correct the links and their playback order.
+
+For movies with multiple versions, compare the version's available source, quality,
+size, and default status. Expand technical details to see the full filename and path.
+
+### Episode organization
+
+- **Reorder** rewrites stored episode numbers within one season. It is irreversible
+  and has no undo; review the selected season before saving.
+- **Ordering**, within **Episodes**, chooses TMDB alternative episode groupings
+  (DVD order, absolute order, etc.). Choose **Standard (default)** to revert.
+  Changing the display ordering does not move or rename files, or correct a file
+  linked to the wrong episode; inspect that mapping under **Files**.
+- **Issues**, within **Episodes**, shows availability and linking discrepancies.
+  Episode-title analysis compares embedded chapter names (fallback: filenames) with
+  provider episode names. Confident matches (at least 90%) apply automatically after
+  a TMDB series sync with an episode catalog and during the periodic 24-hour sweep;
+  lower-confidence candidates need review.
+- **Split-cour anime auto-fix** looks for a TMDB alternative episode group matching
+  the season layout after a series sync, and can re-bind mismatched episodes and
+  merge duplicate catalog episodes.
+
+### Metadata and processing
+
+Use **Maintenance** for provider refreshes and processing jobs. Check the stated
+scope before starting a series-wide action: including descendants affects seasons
+and episodes as well as the series. A forced metadata refresh can overwrite manual
+edits and unlock the item. Processing history shows completed, pending, and failed
+steps; an expired run record means its detailed logs are no longer retained.
+
+Delete remains available under the title's **More** actions and requires confirmation.
 
 :::note[Watch progress survives reordering]
 Both reordering tools key on each episode's internal id, which never changes. Watch
 progress, ratings, and series links stay attached to the right episode regardless of its
 displayed number.
 :::
+
+### Music: artists, albums, and tracks
+
+An artist's **Discography** leads to its albums. Use an album's **Tracks** to find
+and inspect a track, open its metadata editor, or jump to lyrics, audio analysis,
+and files. Search covers the whole collection; use the page controls to browse long
+track lists. The album list keeps its search and ordering when you return from a track.
+The default album order follows stored disc and track numbers; missing numbers do
+not imply that the tracks are missing. Sorting the list changes the view, not the
+stored playback order.
+
+A personal collection stored as an album can be managed without linking an external
+metadata provider. Use **Edit metadata** for its title, year, description, or artist
+assignment. Manual changes retain the existing metadata-lock protection; provider
+refreshes can overwrite edits and unlock the item, so check their scope first.
+
+Track details retain **Lyrics**, **Audio Features**, and **Chapters**. Lyrics support
+plain and timed text; chapters can describe a continuous mix or be pasted from a
+tracklist. Audio analysis shows danceability on Essentia's 0–3 scale. It is a score,
+not a percentage. An artist or album's files belong to its descendant tracks; a
+parent with no direct file is not necessarily missing audio.
 
 ### Fix matches (unmatched items)
 
@@ -295,7 +364,7 @@ you've created the new admin.
 | Add a library folder                      | `/admin/library/sources` → open a library → Add folder |
 | Fix unmatched files                       | `/admin/library/fix-matches` → Never matched view |
 | Find / edit a title                       | `/admin/library/media`            |
-| Reorder a series' episodes                | `/admin/library/media/[id]` → Reorder / Ordering tab |
+| Reorder a series' episodes                | `/admin/library/media/[id]` → Episodes → Reorder / Ordering |
 | Configure an API key / integration        | `/admin/settings` or `/admin/settings/providers` |
 | Rotate the master key                     | `/admin/settings/secrets`         |
 | Revoke a user's devices / tokens          | `/admin/users` → Connections      |

@@ -79,7 +79,7 @@ larger runs; smaller runs use the real-time API.
 
 Chapter scanning is enabled per library path by default. It reads embedded markers,
 falling back to Jellyfin chapters when sync is configured. Re-run it from the title's
-admin page under **Files → Sync Chapters**.
+admin page under **Maintenance → Media processing → Sync Chapters**.
 
 Chapter names also support episode-title repair and segment detection.
 
@@ -95,9 +95,11 @@ fingerprinting across episodes.
 - A stability delay allows imports to finish before analysis.
 - Fingerprinting requires Chromaprint in `ffmpeg`, included in the official image.
 
-On a title's admin page, **Segments** supports analysis, viewing, and deletion.
-**Deep** analysis resets existing segments before analyzing the title and its children.
-Detector thresholds are configured in the analyzer's admin settings.
+On a title's admin page, **Maintenance → Media processing** contains segment analysis
+and maintenance actions. Check the stated scope before running work for a whole
+series. Detector thresholds are configured in the analyzer's admin settings.
+When a file contains several episodes, distinguish file-relative timestamps from
+episode-relative timestamps before adding or changing a segment.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -108,7 +110,8 @@ Detector thresholds are configured in the analyzer's admin settings.
 ## Trickplay (scrubbing-preview thumbnails)
 
 Self-generation is off by default because it uses CPU and disk space. Enable
-`TRICKPLAY_ENABLED` and run **Trickplay → Generate** on a title's admin page, or let
+`TRICKPLAY_ENABLED` and generate trickplay under **Maintenance → Media processing**
+on a title's admin page, or let
 processing generate previews.
 
 Lumastra writes WebP sprite sheets with a timestamp manifest. Reused Jellyfin sheets
