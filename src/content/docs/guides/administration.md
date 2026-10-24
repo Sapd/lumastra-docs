@@ -161,11 +161,26 @@ size, and default status. Expand technical details to see the full filename and 
 
 ### Metadata and processing
 
-Use **Maintenance** for provider refreshes and processing jobs. Check the stated
+Use **Maintenance → Metadata** for provider refreshes and **Maintenance → Media
+processing** for analysis jobs. **History** keeps the earlier runs. Check the stated
 scope before starting a series-wide action: including descendants affects seasons
 and episodes as well as the series. A forced metadata refresh can overwrite manual
 edits and unlock the item. Processing history shows completed, pending, and failed
 steps; an expired run record means its detailed logs are no longer retained.
+
+Segment analysis waits for an eligible local video file with a usable duration.
+If the default version is unavailable but an alternate qualifies, the page names
+the version analysis will use. A completed pass that finds no segments is different
+from work that was skipped or ran against an earlier file. Replacing a file or
+changing an episode's playback window, detector settings, or analysis version requires
+fresh evidence for that input; older failures stay available as history.
+
+Open file, processing, and Health views refresh when you return to the page and
+periodically while visible. The last refresh time describes the displayed data;
+if a refresh fails, retained rows are marked stale. Health lists physical files,
+including files without a title link. For an episode mapping warning on an unlinked
+file, use **Review episode mapping**, select the intended series, and review the
+episode list before saving through the same guarded editor.
 
 Delete remains available under the title's **More** actions and requires confirmation.
 
