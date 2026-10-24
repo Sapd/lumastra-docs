@@ -20,6 +20,19 @@ The full changelog is in the repository:
 Live TV proxy: update needed (protocol 0 → 1, TypeScript proxy, Rust proxy, shared modules,
 build scripts, image build).
 
+- Sync quarantine can recheck decisions that are already applied and retain uncertain
+  proposals. Changes that remain use reviewed batches with dependency checks and clear
+  continuation results. See [Library troubleshooting](/guides/library-troubleshooting/).
+- Unavailable library entries now use a 30-day retention window by default. Installations
+  without a stored or environment override adopt it; existing unavailable entries receive
+  a one-time grace reset before cleanup.
+- Music can prepare the next track without occupying a playback slot before it starts.
+- Album cover lookup adds Deezer and normalized title searches, retries missing covers,
+  and can fall back to the album artist's picture.
+- Image choices retain their provider and source references across caching and metadata
+  updates, with protected manual choices and provider-based selection.
+- Cleanup works through successive bounded batches, and the homepage's active streams
+  refresh follows the same display rules as its first load.
 - Each release now says whether the Live TV proxy needs an update, and Admin → System
   health → Cluster warns when the running proxy is behind or no longer works with the app.
   Update the proxy image to this release once, so later checks can tell. See
