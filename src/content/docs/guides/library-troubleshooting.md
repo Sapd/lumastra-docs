@@ -199,7 +199,10 @@ GROUP BY 1, 2 ORDER BY 1, 3 DESC;
 - **`already mapped to media item …`** on artist enrichment: compare the artists'
   provider identities and credits before merging. Similar punctuation or a `DJ`
   prefix alone does not prove they are the same act. Keep distinct artists separate
-  and investigate the lookup that selected the conflicting identity.
+  and investigate the lookup that selected the conflicting identity. Current
+  enrichment preserves an existing artist identity and rejects metadata explicitly
+  naming another artist. After updating, use that item's **Retry** action. A lookup
+  that finds no compatible metadata does not require merging the artists.
 - Anything else: open the task's **Failures** tab and use its available retry action
   after fixing the cause.
 
