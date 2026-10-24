@@ -229,14 +229,20 @@ GROUP BY 1, 2 ORDER BY 1, 3 DESC;
   artwork). Also no longer counted.
 - **`FFmpeg aborted`**: a run was stopped by a restart or update. Not a file problem; the
   next run processes the item.
-- **`FFmpeg operation timed out`** on intro detection: large 4K files under load. Retry
-  from the task's **Failures** tab after addressing resource pressure; see
+- **`FFmpeg operation timed out`** on intro detection: large 4K files under load, or
+  files with invalid timing. Open the movie or episode's **Sync → Media Segments**
+  section and choose **Generate** to process that item. Follow **View run** and use
+  **Check result again** if the result has not arrived. Queued or running is not a
+  completed analysis. A failed, skipped, cancelled or inconclusive check keeps its
+  warning; **Cancel** asks the worker to stop. See
   [intro-analysis recovery](/guides/task-troubleshooting/#retrying-intro-analysis-from-the-ui).
   **Process all pending** works through waiting work without resetting completed
   analysis. Eligible movies also participate in video analysis; a formerly blocked
   movie can move from **Not applicable** to **Waiting** after an update. Processing
   must still succeed before its historical failure is resolved. Unsupported codecs
-  remain warnings.
+  and malformed timestamps remain warnings. A result with no detected segments can
+  be valid, but only after the selected analysis actually completes. Existing manual
+  segments are preserved; a later failure can leave earlier valid work in place.
 - **`already mapped to media item …`** on artist enrichment: compare the artists'
   provider identities and credits before merging. Similar punctuation or a `DJ`
   prefix alone does not prove they are the same act. Keep distinct artists separate
@@ -260,7 +266,14 @@ These are review lists, not errors.
   A successful tag read clears a stale filename marker; missing tags remain listed.
   Failed or cancelled reads stay eligible for a later scan. Manually locked titles
   are preserved, and segmented tracks are not renamed from a whole-file title tag.
-  If the title tag is missing, add it with your preferred tagging tool and scan again.
+  If the title is already correct, open that track's **Overview** and choose
+  **Confirm title**. This keeps its exact spelling and protects the metadata from
+  automatic updates, without changing the file or claiming it has a title tag. If
+  the title is wrong, use **Edit** to correct it instead. Review each track before
+  confirming; preserve meaningful version and guest-artist credits. A concurrent
+  change requires reloading the current title before confirmation. If a request or
+  refresh fails, reload before trying again: the write may already have succeeded.
+  Alternatively, add the missing tag with your tagging tool and scan again.
 - **"N artist names may be combined credits"**: names containing `&`, `and`, `feat.` and
   the like. For an act whose name really contains `&` (a duo), open the artist and mark
   it **single act, do not split**. Real one-off collaborations can stay as they are.
