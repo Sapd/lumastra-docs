@@ -214,19 +214,61 @@ Lumastra links the combined file again if a single-episode file disappears.
 
 ## "N library integrity issues found"
 
-Open integrity findings live in `integrity_violations`:
-
-```sql
-SELECT rule, count(*) FROM integrity_violations WHERE resolved_at IS NULL GROUP BY 1;
-```
+Open the finding in **System → Health** and follow its affected-items link. For a
+sync backlog, open **Library → Quarantine** and inspect the series group. A backlog
+count describes unresolved decisions; it does not mean every proposal is safe to apply.
 
 - **`unprobed-files-stale`**: files older than a week that were never probed. If the file
   also has a `health_issues` entry (unreadable, unparsed episode name), the health item
   above is the real problem and fixing the file clears both. Current versions no longer
   count such files here. Without a health entry, the media probe queue is not draining:
   see [Troubleshooting the task system](/guides/task-troubleshooting/).
-- **`quarantine-backlog-large`**: many rows wait in the sync quarantine. Triage them at
-  **Library → Quarantine**.
+- **`quarantine-backlog-large`**: many rows wait in the sync quarantine. Review them
+  using the controls below.
+
+### Reviewing sync quarantine
+
+Start with **Recheck completed decisions**. This closes only unchanged proposals
+whose exact TMDB identity and proposed title are already bound to the expected
+series and season. It does not change media. Read the examined, already-applied and
+retained totals; use **Continue recheck** for later batches in a large group.
+Ambiguous proposals, conflicting identities, changed records and fileless items
+remain open for investigation.
+
+For proposals that still need a change, choose **Review and accept batch**. A preview
+can contain only retained warnings and no eligible changes. Cancel in that case and
+inspect the reasons; accepting an empty batch does not repair those warnings.
+
+For a batch with eligible changes:
+
+1. Inspect each linked episode's current and proposed identity and title. Review
+   the identity releases and dependencies too: a batch can include related episodes
+   from later pages. Up to 1,000 decisions are reviewed together, without splitting
+   a required dependency group.
+2. Read the proposed overview and still. A missing provider value preserves the
+   existing value; a present provider value may replace it. Accepting also binds
+   the title to its provider identity, excluding that episode from later automatic
+   title reconciliation until its binding is deliberately changed.
+3. Confirm only decisions you have verified. These media changes cannot be undone
+   from this screen. Read the accepted, blocked and skipped
+   totals afterward. **Continue accepting** reaches later batches. A retained
+   warning has not been repaired merely because another decision succeeded.
+
+If the reviewed page changed, no decisions are accepted and traversal does not
+advance. Review a fresh batch, or choose **Reload and restart review**. Follow links
+in retained-dependency messages to inspect the specific blocking item. Protected,
+ambiguous or oversized groups require individual investigation; accepting cannot
+invent a supported match.
+
+**Dismiss** applies to the whole series group. Use it only when you have established
+that its warnings need no further action. Do not dismiss unresolved proposals to
+make the backlog counter disappear.
+
+For an optional advanced count, open findings live in `integrity_violations`:
+
+```sql
+SELECT rule, count(*) FROM integrity_violations WHERE resolved_at IS NULL GROUP BY 1;
+```
 
 ## "N library items have never been matched to a provider"
 
