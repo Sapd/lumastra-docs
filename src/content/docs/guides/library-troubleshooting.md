@@ -51,8 +51,7 @@ Then follow the recipe for each type.
 ### `truncated_video` or `video_ends_early`: is the file really cut off?
 
 Both say the video stops before the duration the container header claims. That has
-three different causes, and only two of them mean the file is damaged. Read the end of
-the video and the audio stream. The commands below read from the final seek to
+several possible causes. Read the end of the video and each audio stream. The commands below read from the final seek to
 end-of-file; reading just one packet can stop at a keyframe before the true end.
 A damaged index can make a tail read slow. Prefer the bounded UI **Recheck** for
 routine checks, and keep the warning when the result is inconclusive:
@@ -67,12 +66,15 @@ ffprobe -v error -select_streams a:0 -read_intervals 999999% -show_entries packe
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | ffprobe prints `File ended prematurely`; video and audio both stop early | The file is cut off (an incomplete copy) | Replace the file with a complete copy |
-| Audio continues well past the last video frame | Video is missing at the end, or the release has an audio-only tail (black screen with sound) | Replace the file if the missing part matters |
+| Audio continues well past the last video frame | Possible missing video, a deliberate audio-only ending, or silent padding in one audio track | Inspect the actual ending and compare the language tracks; retain the warning if completeness is uncertain |
 | Video and audio end together at the real running time, no error | Only the container header overstates the duration (common with old muxers and long subtitle tracks). Nothing is missing | Not damage. Remuxing the file (`mkvmerge -o out.mkv in.mkv`) corrects the header |
 
 A duration mismatch alone does not establish missing content. Rechecking compares
 the stream ends; failed or inconclusive checks retain the warning. Inspect the
 actual release when an audio-only tail or a language-specific edit remains possible.
+Silent audio after the last video frame does not prove that the video is complete.
+Closing credits near the cutoff are supporting evidence, not a substitute for
+checking the ending; scene footage at the cutoff needs further investigation.
 
 Use **Recheck** on the affected row in **System → Health → Files** to re-check its
 stream ends. **Retry** in the media-probe task's **Failures** tab starts the same
@@ -156,6 +158,25 @@ in **Lumastra → Admin → Library → Media**:
 
 If no complete, correctly identified copy is available, keep the warning visible.
 Retrying a task cannot restore missing bytes.
+
+### Episode filenames and provider numbering disagree
+
+Compare the episode title and physical content with the provider metadata before
+changing links. A release can count a two-part story as two files while the provider
+counts it as one episode, shifting the numbers of every later file in the season.
+The number shown in the episode picker comes from the library’s canonical metadata;
+it does not establish which episode the file contains.
+
+The file’s episode editor assigns one physical file to one or more episodes. Saving
+makes that file the default for the chosen episodes; other attached files remain
+alternate versions. Linking two separate halves to the same episode does not join
+them into continuous playback. Verify which version plays after any saved change.
+
+If several episodes are shifted, review the whole season before saving individual
+reassignments. Preserve existing provider identities, watch progress and alternate
+files. A combined provider episode needs a verified complete source or a supported
+multipart playback workflow before its separate halves can be considered repaired.
+Do not delete an extra episode row merely because its number appears duplicated.
 
 ### Intro analysis reports video timestamps that do not advance
 
