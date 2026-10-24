@@ -70,9 +70,9 @@ ffprobe -v error -select_streams a:0 -read_intervals 999999% -show_entries packe
 | Audio continues well past the last video frame | Video is missing at the end, or the release has an audio-only tail (black screen with sound) | Replace the file if the missing part matters |
 | Video and audio end together at the real running time, no error | Only the container header overstates the duration (common with old muxers and long subtitle tracks). Nothing is missing | Not damage. Remuxing the file (`mkvmerge -o out.mkv in.mkv`) corrects the header |
 
-The last row used to be reported as damage. Current versions only report a file when
-the stream ends are really missing; older entries are re-checked by the next media
-probe run.
+A duration mismatch alone does not establish missing content. Rechecking compares
+the stream ends; failed or inconclusive checks retain the warning. Inspect the
+actual release when an audio-only tail or a language-specific edit remains possible.
 
 Use **Recheck** on the affected row in **System → Health → Files** to re-check its
 stream ends. **Retry** in the media-probe task's **Failures** tab starts the same
@@ -84,16 +84,22 @@ file warnings visible.
 
 ### `video_ends_early` that the file does not confirm
 
-If the ends above are complete and a frame near the end decodes:
+If the stream ends above are complete, check video **after the reported cutoff**
+and near the expected end. Choose the seek time for the actual file:
 
 ```bash
-ffmpeg -v error -ss 3500 -i "$f" -map 0:v:0 -frames:v 1 -f null - && echo decodes
+ffmpeg -v error -ss 3500 -i "$f" -map 0:v:0 -t 10 -an -sn -f null - -progress pipe:1
 ```
 
-then the entry is stale: the trickplay run that wrote it hit a temporary decode
-failure. Regenerate the item's trickplay, which re-checks the file and clears the
-entry. In the item's **Files** tab, choose **Force Regenerate** under **Trickplay**.
-The equivalent API request is:
+Look for a positive `frame=` count and advancing output time, as well as decode
+errors. An exit status of zero with no frames, a frame before the reported cutoff,
+or a single successfully decoded frame does not prove the whole file is healthy.
+
+Use the selected-file **Recheck** first. If fresh checks disprove the warning but
+trickplay is incomplete, regenerate the item's trickplay. In the item's **Files**
+tab, choose **Force Regenerate** under **Trickplay** and follow the resulting run.
+Keep the warning if the check or regeneration fails or remains inconclusive. The
+equivalent API request is:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -114,6 +120,60 @@ mediainfo --Inform="Video;%Format% %CodecID%" "$f"
 | Size 0, or only `00` bytes | A placeholder or a failed copy | Replace or remove the file |
 | `VVC` / `V_MPEGI/ISO/VVC` | H.266 video, which the bundled FFmpeg cannot decode | Replace it with an H.264 or HEVC release |
 | `encv` sample entry, "unknown codec" | An encrypted video track | Replace the file |
+
+### Replacing a confirmed damaged file
+
+If you use Sonarr or Radarr, open the existing series or movie there and search for
+a replacement for that specific episode or film. Check the title, year, episode
+name and language as well as the number: releases can use different episode
+ordering, and a search can return unrelated titles. Use the normal download and
+import flow. Avoid changing monitoring or quality settings just to replace one file.
+
+If you keep multiple versions, compare the managed folder and file with the
+affected Lumastra file first. Separate HD and 4K Radarr instances can manage the
+same film; replacing its healthy HD copy will not repair the damaged 4K copy.
+
+A completed download is only the first step. Sonarr or Radarr can hold a complete
+replacement because its quality or custom-format score is below the existing file.
+Read the import warning, review the exact file, episode and language, then use the
+selected download's **Manual Import** if that replacement is correct. Keep unrelated
+downloads and global quality settings unchanged.
+
+Check that Sonarr or Radarr reports a successful import, then open the same entry
+in **Lumastra → Admin → Library → Media**:
+
+1. In **Files**, check that the replacement is attached to the correct entry and is
+   selected as the default. A changed filename can produce a new file record while
+   the existing movie or episode remains.
+2. In **Pipeline**, follow the fresh media probe and applicable intro/credits and
+   trickplay stages. A queued stage, an old completed run or an expired run record
+   does not prove that the replacement has been processed.
+3. Check the new duration, streams and language, then confirm that the file warning
+   has cleared after a successful check. If it remains, use the selected-file
+   **Recheck** described above and inspect its result.
+4. Confirm that the existing library identity and watch progress remain intact.
+   Do not delete and recreate the movie or episode to remove a warning.
+
+If no complete, correctly identified copy is available, keep the warning visible.
+Retrying a task cannot restore missing bytes.
+
+### Intro analysis reports video timestamps that do not advance
+
+Open **Tasks → Detect Intros & Credits → Failures** and read the affected item's
+error. A file can play normally at the beginning but contain many video packets
+with the same timestamp near its end. Its declared duration and a successful probe
+at the beginning do not disprove that defect.
+
+The bounded timing check prevents repeatedly running a decoder against this known
+failure. Retrying unchanged input cannot repair its timeline. Use the confirmed
+file replacement workflow above, then follow the fresh analysis for the same
+library entry. Keep the failure visible until the replacement has actually been
+analysed successfully; download completion or a newly empty file-warning field is
+not proof of recovery.
+
+An analysis can complete without detecting any segments. Read its outcome before
+retrying; a no-detection result does not mean the file is damaged or that segment
+markers should be forced.
 
 ### `episode_number_unparsed`
 
