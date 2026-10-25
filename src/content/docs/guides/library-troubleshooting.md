@@ -22,10 +22,20 @@ For task failures in general (stuck items, queues that won't drain), see
 
 ## "N media files have health problems"
 
-The item counts files whose `media_files.health_issues` is not empty. Open
-**System → Health → Files**, read the warnings on the affected row, then choose
-**Recheck** to check that one file again. A previous task failure or linked library
-item is not required.
+The item counts physical files needing review. Open **System → Health → Files**
+and start with **Needs review**. **Mapping observations** contains combined-file
+records with current evidence for their dedicated episode mappings; **All recorded**
+keeps both groups discoverable. A file with another warning still needs review,
+and unknown, stale or malformed evidence is not treated as a successful check.
+
+Each physical file counts once even if several library items link to it. A title
+count elsewhere can therefore differ. Page controls reach later files; each page
+shows its matching total and snapshot time. Files can change between pages, so
+refresh after a scan or when results change.
+
+Read the affected row, then choose **Recheck** to check that one file again. A
+previous task failure or linked library item is not required. A missing-file label
+records the last scan's result; check the library path before scanning or rechecking.
 
 Rechecking starts a background run. Use its run link to follow progress; acceptance
 or a running status does not mean the file is healthy. **Cancel** asks the run to
@@ -37,12 +47,16 @@ Only fresh evidence can remove a recorded problem. Other warnings, newer concurr
 findings and genuine damaged or unsupported media remain visible. See the recipes
 below for interpreting a retained warning.
 
-For an advanced count by issue type, use a read-only query:
+For an advanced count of recorded array entries by issue type, use a read-only
+query. Multiple entries can belong to one file, so this is a different total:
 
 ```sql
 SELECT e->>'type' AS issue, count(*)
-FROM media_files mf, jsonb_array_elements(mf.health_issues) e
-WHERE jsonb_typeof(mf.health_issues) = 'array'
+FROM media_files mf,
+     jsonb_array_elements(CASE
+         WHEN jsonb_typeof(mf.health_issues) = 'array' THEN mf.health_issues
+         ELSE '[]'::jsonb
+     END) e
 GROUP BY 1 ORDER BY 2 DESC;
 ```
 
