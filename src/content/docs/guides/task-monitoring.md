@@ -187,11 +187,22 @@ the `runs:read` scope comes only with `tasks:admin` or `admin`; an ordinary user
 session or a device-flow token no longer has it. Mutations need their own scopes or
 admin access.
 
-On the **Runs** page, the **Running** tab ignores the 24 h / 7 d window: a run that
+On the **Runs** page, the **In progress** tab ignores the 24 h / 7 d window: a run that
 started two days ago and is still active, or stuck stopping, is exactly what that
 tab is for. The window applies to the other tabs. When you have used **Load more**,
 the extra pages stay through the live refresh; if a refresh fails, the rows stay
 with a "Could not refresh" notice.
+
+Run rows distinguish **Running**, **Waiting in queue**, **Deferred during playback**,
+and **Status unconfirmed** when supporting observations are available. A recorded
+pending run alone does not prove that a worker is waiting or executing. Manual run
+controls remain disabled while an unfinished run is recorded, even if it is outside
+the loaded list.
+
+In run details, **Recorded** is the run's creation time. **Execution started** and
+execution elapsed are shown only when an actual execution start was recorded;
+older runs can show **Execution time unknown**. A long recorded age is not proof
+that a worker is stuck.
 
 Preview-generation counts use **frames**, while ordinary task counts use **items**.
 Source-version progress is shown separately. When a completed pass stopped at its
@@ -204,6 +215,13 @@ of a task (`POST /api/v1/runs/cancel?byTask=…`, `{ "force": true }` to escalat
 A run that finished between loading the page and confirming **Stop** is reported
 as already finished. For Force stop, see
 [Run states and cancellation](/guides/administration-operations/#run-states-and-cancellation).
+
+For seek-data synchronization, backlog counts use **file links**: each title and
+linked file combination is one unit. A combined file linked to several episodes can
+therefore contribute several links. Waiting, failed, and ineligible links are shown
+separately. One version's result does not complete an unprocessed alternate. An
+execution estimate is omitted when its completion-rate units do not match the
+backlog units.
 
 ## Preparing a dedicated worker for an upgrade
 
