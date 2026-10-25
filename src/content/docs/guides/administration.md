@@ -233,6 +233,15 @@ For a compilation, change album ownership separately from the album's metadata
 editor after reviewing the whole release. The single-act declaration is for a real
 band, duo, or artist identity; it does not repair a genuine collaboration's credits.
 
+In the **Possibly a combined artist (heuristic)** review queue, use **Mark as a single act** for a
+confirmed band, duo, or artist identity. Its entry leaves the queue and the count
+refreshes. The confirmation keeps an **Undo** action: this removes the single-act
+flag and returns the artist to review. It does not undo a merge or a split. Failed
+writes keep a retry action visible; if only the list refresh fails, retry the
+refresh separately. Names containing conjunctions are review hints, not evidence
+of multiple artists. Genuine collaboration repair remains a separate review.
+
+
 #### Review an album merge
 
 The merge preview identifies the kept album and the album that will be removed,
