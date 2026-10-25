@@ -84,6 +84,14 @@ as do unrelated decode problems. This does not require discarding probe data for
 the whole library. A recheck cannot repair missing or encrypted bytes; keep genuine
 file warnings visible.
 
+When a recheck measures audio after the last video frame, **Files**, the inspector,
+and **Health → Files** show the dated observation and measured interval. Expand
+**Measurement details** for stream/channel readings and measurement limits. The
+check is bounded to 180 seconds, eight audio streams, and its time budget; skipped
+streams or incomplete decoding are reported as inconclusive. Near-silent measured
+channels do not prove a complete ending and do not clear existing warnings. Source
+or stream changes discard the old measurement until a fresh check completes.
+
 ### `video_ends_early` that the file does not confirm
 
 If the stream ends above are complete, check video **after the reported cutoff**
