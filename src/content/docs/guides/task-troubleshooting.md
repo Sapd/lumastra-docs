@@ -54,9 +54,11 @@ when diagnosing capacity.
 ## Recipe 1: "Stuck items" panel shows entries
 
 **Symptom:** the **Pipeline** page's Stuck Items panel (`/admin/tasks/pipeline`)
-shows entries matching any of `running > 15m`, `attempt ≥ 3`, or pending in a
-dormant stage (no completions in 30 min, and not just waiting on its next
-scheduled run).
+shows stage rows recorded as running without an update for over 15 minutes,
+rows with at least 3 recorded attempts, or rows pending over 30 minutes with no
+same-stage completion in the last 30 minutes and no future unpaused scheduled
+run. Each row shows which criterion selected it. The displayed age is time since
+the stage-state update, not measured worker execution time.
 
 **Likely causes:** a worker died mid-stage; a handler hung (a transcode on a
 corrupted file, an API call that never returns); or a legitimate retry loop

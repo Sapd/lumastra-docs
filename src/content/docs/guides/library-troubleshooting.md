@@ -22,10 +22,20 @@ For task failures in general (stuck items, queues that won't drain), see
 
 ## "N media files have health problems"
 
-The item counts files whose `media_files.health_issues` is not empty. Open
-**System → Health → Files**, read the warnings on the affected row, then choose
-**Recheck** to check that one file again. A previous task failure or linked library
-item is not required.
+The item counts physical files needing review. Open **System → Health → Files**
+and start with **Needs review**. **Mapping observations** contains combined-file
+records with current evidence for their dedicated episode mappings; **All recorded**
+keeps both groups discoverable. A file with another warning still needs review,
+and unknown, stale or malformed evidence is not treated as a successful check.
+
+Each physical file counts once even if several library items link to it. A title
+count elsewhere can therefore differ. Page controls reach later files; each page
+shows its matching total and snapshot time. Files can change between pages, so
+refresh after a scan or when results change.
+
+Read the affected row, then choose **Recheck** to check that one file again. A
+previous task failure or linked library item is not required. A missing-file label
+records the last scan's result; check the library path before scanning or rechecking.
 
 Rechecking starts a background run. Use its run link to follow progress; acceptance
 or a running status does not mean the file is healthy. **Cancel** asks the run to
@@ -37,12 +47,16 @@ Only fresh evidence can remove a recorded problem. Other warnings, newer concurr
 findings and genuine damaged or unsupported media remain visible. See the recipes
 below for interpreting a retained warning.
 
-For an advanced count by issue type, use a read-only query:
+For an advanced count of recorded array entries by issue type, use a read-only
+query. Multiple entries can belong to one file, so this is a different total:
 
 ```sql
 SELECT e->>'type' AS issue, count(*)
-FROM media_files mf, jsonb_array_elements(mf.health_issues) e
-WHERE jsonb_typeof(mf.health_issues) = 'array'
+FROM media_files mf,
+     jsonb_array_elements(CASE
+         WHEN jsonb_typeof(mf.health_issues) = 'array' THEN mf.health_issues
+         ELSE '[]'::jsonb
+     END) e
 GROUP BY 1 ORDER BY 2 DESC;
 ```
 
@@ -83,6 +97,14 @@ disproved by a successful check; failed or inconclusive checks keep the warning,
 as do unrelated decode problems. This does not require discarding probe data for
 the whole library. A recheck cannot repair missing or encrypted bytes; keep genuine
 file warnings visible.
+
+When a recheck measures audio after the last video frame, **Files**, the inspector,
+and **Health → Files** show the dated observation and measured interval. Expand
+**Measurement details** for stream/channel readings and measurement limits. The
+check is bounded to 180 seconds, eight audio streams, and its time budget; skipped
+streams or incomplete decoding are reported as inconclusive. Near-silent measured
+channels do not prove a complete ending and do not clear existing warnings. Source
+or stream changes discard the old measurement until a fresh check completes.
 
 ### `video_ends_early` that the file does not confirm
 
@@ -207,10 +229,17 @@ read as episode numbers.
 
 ### `range_superseded`
 
-A multi-episode file (`S11E14-E15`) whose episodes all have files of their own. It is
-not linked. Verify that every episode in the combined file is available separately
-before removing anything: a stale link or numbering mismatch can hide unique content.
-Lumastra links the combined file again if a single-episode file disappears.
+A recorded warning that a combined multi-episode file (`S11E14-E15`) was left
+unlinked because dedicated episode files were found. Open its mapping observation
+to see whether that decision has current evidence. A dated observation records
+file presence and episode mappings at the check; it does not verify content
+completeness. **Recorded mapping details** shows the participating files.
+
+Legacy, stale or incomplete evidence is shown as unproven. Verify every episode
+before removing anything: a stale link or numbering mismatch can hide unique
+content. If a dedicated file disappears, ordinary stale-link cleanup and a later
+library scan can make the combined file eligible again. Ambiguous ownership is
+left for review.
 
 ## "N library integrity issues found"
 
@@ -235,9 +264,19 @@ retained totals; use **Continue recheck** for later batches in a large group.
 Ambiguous proposals, conflicting identities, changed records and fileless items
 remain open for investigation.
 
+Use **Inspect** to compare each warning's historical evidence with its current
+media, files, and metadata. Missing or moved subjects are identified explicitly;
+historical provider keys do not establish the current identity. **Next warnings**
+continues within that group, and opening media details retains the review context.
+
+After checking the content, **Dismiss this warning** rejects only that recorded
+warning and leaves its siblings and media unchanged. Confirmation is required. If
+the warning or its current subject changes during review, refresh and inspect it
+again before dismissing.
+
 For proposals that still need a change, choose **Review and accept batch**. A preview
-can contain only retained warnings and no eligible changes. Cancel in that case and
-inspect the reasons; accepting an empty batch does not repair those warnings.
+with no eligible changes is read-only: inspect its retained warnings or continue
+to the next preview page when available. It cannot apply an empty acceptance.
 
 For a batch with eligible changes:
 
@@ -293,6 +332,13 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
    Keep their local metadata rather than selecting an unrelated provider match.
    The Fix matches list can continue to show these items; removing them from the
    library is not a metadata repair.
+
+When provider matching finds nothing for a later episode, the scanner can reuse an
+established series folder owner even when its canonical title differs from the
+folder name. This requires one current owner, compatible library/year/provider
+evidence and positively available local files. Shared folders, missing witnesses
+or conflicting identities still require review. A busy or changed owner defers the
+import for a later attempt, preserving existing episode mappings and manual cuts.
 
 ## "N items need re-identification"
 
