@@ -193,6 +193,12 @@ tab is for. The window applies to the other tabs. When you have used **Load more
 the extra pages stay through the live refresh; if a refresh fails, the rows stay
 with a "Could not refresh" notice.
 
+Preview-generation counts use **frames**, while ordinary task counts use **items**.
+Source-version progress is shown separately. When a completed pass stopped at its
+budget, its details can show source checks remaining for a later pass. This does
+not mean regeneration has already been queued or that every remaining source
+needs new previews.
+
 Cancelling is graceful unless you ask for more, both for one run and for all runs
 of a task (`POST /api/v1/runs/cancel?byTask=…`, `{ "force": true }` to escalate).
 A run that finished between loading the page and confirming **Stop** is reported
@@ -293,10 +299,14 @@ or scroll within the map to inspect every station. The legend explains its symbo
 
 The Pipeline's stuck-items panel flags:
 
-- Runs active for more than 15 minutes.
-- Items with at least 3 attempts while running, pending, or transiently failed.
-- Pending items in a stage with no completions for 30 minutes, unless it is waiting
-  for its next scheduled run.
+- Stage rows recorded as running with no update for more than 15 minutes.
+- Items with at least 3 recorded attempts while running, pending, or transiently failed.
+- Items pending for more than 30 minutes in a stage with no completion in the last
+  30 minutes and no future unpaused scheduled run.
+
+Each row states the criterion that selected it. Its age measures time since the
+stage-state row was updated; it does not establish how long a worker has been
+executing. An attempt count alone does not establish repeated failures.
 
 | Symptom | Check |
 |---|---|
