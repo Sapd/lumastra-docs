@@ -70,7 +70,9 @@ The media browser starts with **title search**. Choose broader search explicitly
 include other metadata. **All**, **Needs attention**, and **Recently added** are the
 primary views; choose an issue category within Needs attention to narrow the list.
 Use **Table settings** for columns and page size. Music, video, and audiobook views
-show information appropriate to their media type.
+show information appropriate to their media type. Fresh table settings give titles
+more room and leave the TMDB ID column off; enable it in Table settings when needed.
+Existing saved column choices stay in place. Dense layouts scroll inside the table.
 
 Selections can span pages. The selection bar distinguishes items on the current
 page from items selected elsewhere; selecting the table header selects that page,
