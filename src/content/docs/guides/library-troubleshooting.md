@@ -401,6 +401,32 @@ These are review lists, not errors.
   the like. For an act whose name really contains `&` (a duo), open the artist and mark
   it **single act, do not split**. Real one-off collaborations can stay as they are.
 
+### Reviewing track artist credits
+
+From an artist's **Overview**, choose **Review artist tracks**, open a track, and find
+**Artist credits** on its **Overview**.
+
+1. Expand **Original tag evidence** and compare it with reliable release credits.
+   A separator in a name alone does not prove that it names separate performers.
+2. Find and select the existing artist identities. Set each role to **Performer** or
+   **Remixer**, and check their order and credited names. Keep legitimate groups intact.
+   Remove a combined credit from the draft only after verifying its separate performers.
+3. Choose **Review credit changes** and compare the current and proposed lists. Check
+   the acknowledgement, then choose **Confirm artist credits**. A new artist entered in
+   the draft is created only when this confirmation succeeds.
+4. Wait for the saved, protected and reloaded result. If the review is stale or the
+   result is uncertain, reload and inspect the current credits before trying again.
+
+Confirmation preserves the track title, file versions, album ownership and listening
+history. It protects the reviewed credits from automatic updates. Album ownership has
+its own review link; changing track performers does not move the album to another owner.
+A collaboration owner's name may therefore remain in the heuristic review list after
+its track credits are corrected. Mark it as a single act only when that describes the
+actual act, rather than to clear the count.
+
+Music hygiene counts on the health page refresh every 15 minutes. The affected-item
+list can reflect a saved correction before the aggregate health card does.
+
 ## "Live TV source imported with N warnings"
 
 An informational item. Read the warnings:
