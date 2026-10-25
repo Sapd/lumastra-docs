@@ -31,6 +31,11 @@ unchanged. The result reports how many items were queued; repeating it can repor
 Failure history remains visible until processing succeeds. See
 [intro-analysis recovery](/guides/task-troubleshooting/#retrying-intro-analysis-from-the-ui).
 
+For file-health probes, **Failures** lists recorded issue observations. **Latest
+recorded issue** dates that observation; it does not date the latest assessment.
+A completed recheck can still leave warnings. Use **Browse current file health**
+to review the current assessment; the earlier records remain available.
+
 A **circuit auto-pause** follows repeated failures and probes again after a cooldown:
 1 minute, then 5 minutes, 30 minutes, and 2 hours on repeated trips. A **schedule
 pause** is an operator setting that stops automatic starts until resumed. The two
