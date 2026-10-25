@@ -59,6 +59,13 @@ fallback. Live TV can use custom logo URLs.
 WebP/AVIF output, cache retention and size, local image patterns, and video-frame
 extraction when episode artwork is missing.
 
+For an episode, **Artwork → Extract from video** creates a new frame and selects it
+as your admin choice, even when artwork is already selected. For a season, open
+**Files → Create thumbnails from video for this season** to queue the same explicit
+replacement for its episodes. Follow the task result before assuming every episode
+was updated. Automatic scans preserve curated choices; these explicit extraction
+actions replace the selections in their requested scope.
+
 Environment defaults are WebP and AVIF enabled (`IMAGE_AVIF_ENABLED=true`), thumbnail
 quality `75`, full-image quality `85`, and cache retention `30` days
 (`IMAGE_WEBP_ENABLED`, `IMAGE_THUMB_QUALITY`,
