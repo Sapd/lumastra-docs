@@ -243,9 +243,19 @@ retained totals; use **Continue recheck** for later batches in a large group.
 Ambiguous proposals, conflicting identities, changed records and fileless items
 remain open for investigation.
 
+Use **Inspect** to compare each warning's historical evidence with its current
+media, files, and metadata. Missing or moved subjects are identified explicitly;
+historical provider keys do not establish the current identity. **Next warnings**
+continues within that group, and opening media details retains the review context.
+
+After checking the content, **Dismiss this warning** rejects only that recorded
+warning and leaves its siblings and media unchanged. Confirmation is required. If
+the warning or its current subject changes during review, refresh and inspect it
+again before dismissing.
+
 For proposals that still need a change, choose **Review and accept batch**. A preview
-can contain only retained warnings and no eligible changes. Cancel in that case and
-inspect the reasons; accepting an empty batch does not repair those warnings.
+with no eligible changes is read-only: inspect its retained warnings or continue
+to the next preview page when available. It cannot apply an empty acceptance.
 
 For a batch with eligible changes:
 
