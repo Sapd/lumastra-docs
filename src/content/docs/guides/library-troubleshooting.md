@@ -215,10 +215,17 @@ read as episode numbers.
 
 ### `range_superseded`
 
-A multi-episode file (`S11E14-E15`) whose episodes all have files of their own. It is
-not linked. Verify that every episode in the combined file is available separately
-before removing anything: a stale link or numbering mismatch can hide unique content.
-Lumastra links the combined file again if a single-episode file disappears.
+A recorded warning that a combined multi-episode file (`S11E14-E15`) was left
+unlinked because dedicated episode files were found. Open its mapping observation
+to see whether that decision has current evidence. A dated observation records
+file presence and episode mappings at the check; it does not verify content
+completeness. **Recorded mapping details** shows the participating files.
+
+Legacy, stale or incomplete evidence is shown as unproven. Verify every episode
+before removing anything: a stale link or numbering mismatch can hide unique
+content. If a dedicated file disappears, ordinary stale-link cleanup and a later
+library scan can make the combined file eligible again. Ambiguous ownership is
+left for review.
 
 ## "N library integrity issues found"
 
