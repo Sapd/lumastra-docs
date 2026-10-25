@@ -312,6 +312,13 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
    The Fix matches list can continue to show these items; removing them from the
    library is not a metadata repair.
 
+When provider matching finds nothing for a later episode, the scanner can reuse an
+established series folder owner even when its canonical title differs from the
+folder name. This requires one current owner, compatible library/year/provider
+evidence and positively available local files. Shared folders, missing witnesses
+or conflicting identities still require review. A busy or changed owner defers the
+import for a later attempt, preserving existing episode mappings and manual cuts.
+
 ## "N items need re-identification"
 
 A provider has rejected the stored identity, or the task explicitly needs a corrected
