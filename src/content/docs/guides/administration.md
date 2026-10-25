@@ -108,6 +108,8 @@ A physical file can serve several episodes. **Files** groups those links beneath
 file, showing each episode's boundaries. **File time** starts at the beginning of the
 physical file; **episode time** starts at the beginning of the selected episode.
 The file's size and full duration describe the whole file, not each episode's share.
+The linked-media total counts every association for that physical file across the
+library, including links outside the current detail page.
 Use **Episodes in file** to inspect or correct the links and their playback order.
 
 The editor names the target series and supports searching by episode title or code,
@@ -122,6 +124,8 @@ been imported into the library. Use the chapter refresh and inspect its run/resu
 then reload the saved chapters before applying them. Refreshing records does not
 replace an unsaved mapping draft. Review start/end previews and the saved/reloaded
 result after confirming a mapping.
+Chapter cuts retain millisecond precision in editable times. Missing draft cuts
+remain blank and prevent saving until you supply valid boundaries.
 
 Saving or resetting a manual mapping checks that the file, current links, and target
 episodes still match the review you opened. If another edit or scan changed them,
@@ -131,6 +135,9 @@ out of the selected series stay visible in your draft but must be removed or
 replaced before saving. A successful manual repair records
 the administrator and removes only the mapping warning it actually resolves.
 Other source-file warnings remain.
+If selected episodes are dismissed, explicitly confirm each one you intend to
+restore before saving. Reloading changed evidence clears that confirmation; review
+the current selection again. The repair audits which episodes were restored.
 
 With chapter scanning enabled, new episode files also invalidate the series'
 chapter-processing result. Library scans revisit files whose chapter inspection is
