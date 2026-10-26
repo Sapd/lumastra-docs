@@ -80,6 +80,19 @@ qualities; `LIVETV_DEFAULT_QUALITY` sets the initial choice (`adaptive` by defau
 When a requested quality cannot be produced, `LIVETV_CAP_FALLBACK=source` serves
 the original stream; choose `refuse` to fail playback instead.
 
+## Playback buffering and brief interruptions
+
+When a live HLS source already offers completed segments, the proxy can start farther
+behind its live edge to use that available history. It does not wait for a fixed buffer
+on every channel change: a short source playlist starts with the entries it already has.
+The tradeoff is a little more delay behind the broadcast, depending on segment length.
+
+During a brief playlist-refresh failure, the proxy can keep using its last good playlist
+for a limited time while available media remains readable. Access refusals and source
+connection limits are still reported. This helps with temporary delivery interruptions;
+it cannot restore missing video, repair corrupt timestamps, or guarantee uninterrupted
+playback when the source itself fails.
+
 ## Add a source
 
 Open **`/admin/settings/livetv`** (Sources tab) and choose **Add Source**, then pick a
