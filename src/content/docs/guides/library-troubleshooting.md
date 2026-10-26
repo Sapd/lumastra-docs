@@ -132,7 +132,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 ### `container_unreadable`
 
-FFmpeg cannot open the file. Look at the bytes and the codec:
+The current tools could not decode the media. This can be a codec-support limitation or a file defect; the warning alone does not establish damage. Read the recorded evidence and check the codec:
 
 ```bash
 head -c 32 "$f" | od -A d -t x1 | head -2      # all 00 = the file is empty or zero-filled
@@ -141,9 +141,11 @@ mediainfo --Inform="Video;%Format% %CodecID%" "$f"
 
 | What you see | Cause | Fix |
 | --- | --- | --- |
-| Size 0, or only `00` bytes | A placeholder or a failed copy | Replace or remove the file |
-| `VVC` / `V_MPEGI/ISO/VVC` | H.266 video, which the bundled FFmpeg cannot decode | Replace it with an H.264 or HEVC release |
-| `encv` sample entry, "unknown codec" | An encrypted video track | Replace the file |
+| Confirmed size 0, or an entirely zero-filled file | Missing media content | Recover a complete copy |
+| `VVC` / `V_MPEGI/ISO/VVC` | H.266/VVC video; decoder support may be unavailable | Try a decoder with VVC support, or verify a compatible copy before replacing the source |
+| Verified `encv` sample entry | A protected video track | Check whether your tools can read the protected stream; preserve the source while verifying an alternative |
+
+An unknown-codec message does not identify the codec. A header sample alone does not prove that an entire file is zero-filled. Preserve the source and verify the diagnosis before replacement.
 
 ### Replacing a confirmed damaged file
 
@@ -252,8 +254,10 @@ count describes unresolved decisions; it does not mean every proposal is safe to
   above is the real problem and fixing the file clears both. Current versions no longer
   count such files here. Without a health entry, the media probe queue is not draining:
   see [Troubleshooting the task system](/guides/task-troubleshooting/).
-- **`quarantine-backlog-large`**: many rows wait in the sync quarantine. Review them
-  using the controls below.
+- **`quarantine-backlog-large`**: one finding summarizes an aggregate review queue
+  across series. Select the series and decisions relevant to your current task, then
+  use the controls below. Repairing an unrelated file does not resolve the remaining
+  queue, and the finding does not mean every proposal should be accepted.
 
 ### Reviewing sync quarantine
 
@@ -329,9 +333,12 @@ Items with files but no provider id. Open **Library → Fix matches**. For each 
 5. If the folder name is a release name (`[Group] Show - 07 (JA) [1080p]`), rename the
    folder to `Show (Year)` with a `Season 01` subfolder and rescan.
 6. Home videos, test clips and personal compilations may have no provider entry.
-   Keep their local metadata rather than selecting an unrelated provider match.
-   The Fix matches list can continue to show these items; removing them from the
-   library is not a metadata repair.
+   Choose **Keep as personal** and confirm the decision. Files, playback availability
+   and user records stay attached to the same item; automatic matching skips it.
+   Open **Kept as personal** and choose **Return to matching** to reverse the choice,
+   including after reloading the page. If a rematch is already using the item, Keep
+   can ask you to retry after that work finishes. A failed action leaves the row
+   available for retry.
 
 When provider matching finds nothing for a later episode, the scanner can reuse an
 established series folder owner even when its canonical title differs from the

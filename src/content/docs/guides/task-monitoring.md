@@ -209,6 +209,12 @@ execution elapsed are shown only when an actual execution start was recorded;
 older runs can show **Execution time unknown**. A long recorded age is not proof
 that a worker is stuck.
 
+For a selected-file health check, the **Summary** tab shows the saved check outcome
+when the run completes, including when you already have its details open. Completion
+alone is not a healthy-file verdict. A successful check may have zero log entries.
+If the final result cannot be loaded, use the result-loading retry control rather
+than starting another file check.
+
 Preview-generation counts use **frames**, while ordinary task counts use **items**.
 Source-version progress is shown separately. When a completed pass stopped at its
 budget, its details can show source checks remaining for a later pass. This does
