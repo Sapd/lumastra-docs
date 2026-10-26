@@ -34,18 +34,21 @@ never appear, not even as a delete, and your state is delivered to you alone.
 GET /api/v1/sync/changes
 ```
 
-Without a cursor you get an empty page, a starting `nextCursor`, and `initialLoad` links
-for each kind. **Store `nextCursor` before you load anything.** Changes that happen while you
+Without a cursor you get an empty page, a starting `page.nextCursor`, and `initialLoad` links
+for each kind. **Store `page.nextCursor` before you load anything.** Changes that happen while you
 load show up again in the first poll; applying an entry twice is harmless.
 
 ## 2. Load everything once
 
 | What | Request | You get |
 | --- | --- | --- |
-| Library items, per kind (`movie`, `series`, `season`, `episode`, `artist`, `album`, `track`, `audiobook`) | `GET /sync/library?kind=movie&limit=1000`, then `after=<nextAfter>` until it is `null` | ids only |
-| Your state, per kind (`watch_state`, `listen_state`, `rating`, `watchlist`, `playlist`) | `GET /sync/user-state?kind=watch_state`, then `after=<nextAfter>` | the state inline |
+| Library items, per kind (`movie`, `series`, `season`, `episode`, `artist`, `album`, `track`, `audiobook`) | `GET /sync/library?kind=movie&limit=500`, then pass `cursor=<page.nextCursor>` while `page.hasMore` is true | ids only |
+| Your state, per kind (`watch_state`, `listen_state`, `rating`, `watchlist`, `playlist`) | `GET /sync/user-state?kind=watch_state`, then pass `cursor=<page.nextCursor>` while `page.hasMore` is true | the state inline |
 
-Hydrate the ids with `POST /media/batch` (up to 100 per call) and store the items by `id`.
+Hydrate the ids with `POST /api/v1/media/batch` and `{ "ids": ["<media UUID>"] }`
+(up to 100 per call for previews). Use `include: "detail"` for full detail, with at
+most 25 ids. This hydration endpoint is currently `beta`; the sync feed itself is
+`stable`. Store items by `id`.
 An id the batch call returns in `missing` is not visible to you: leave it out.
 
 Library items are the ones that are in your library: they have a file (or, for audiobooks,
@@ -58,7 +61,7 @@ the cache; read them online from the series endpoints.
 GET /api/v1/sync/changes?cursor=<stored>&limit=500
 ```
 
-Every few minutes, or when the app comes to the foreground. For each entry in `changes`:
+Every few minutes, or when the app comes to the foreground. For each entry in `items`:
 
 - `op: "delete"`: remove the `id` (ignore ids you never had).
 - State kinds with `op: "upsert"`: replace your stored state with the inline field named
@@ -66,10 +69,12 @@ Every few minutes, or when the app comes to the foreground. For each entry in `c
 - Catalog kinds with `op: "upsert"`: collect the `id`; hydrate the collected ids with
   `POST /media/batch`.
 
-Then **store `nextCursor`**, always, even when `changes` is empty. While `hasMore` is `true`,
+Then **store `page.nextCursor`**, always, even when `items` is empty. While
+`page.hasMore` is `true`,
 call again right away.
 
-A poll with nothing changed is one call. With N changed catalog items it is 1 + ⌈N/100⌉.
+A poll with nothing changed is one call. With N changed catalog items, preview hydration
+takes 1 + ⌈N/100⌉ calls; full-detail hydration takes 1 + ⌈N/25⌉.
 
 ## 4. Reload when the server says so
 

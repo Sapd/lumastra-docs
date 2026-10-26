@@ -19,7 +19,16 @@ clock offset so everyone resumes at the same instant.
 
 This builds on the normal [player](/developers/building-a-player/) flow. Each
 participant still streams the media itself; Watch Together only coordinates
-*when* everyone plays.
+*when* everyone plays. Each participant must start its own authorized play session
+and report progress independently. Never share one participant's delivery grant.
+
+Watch Together currently negotiates complete physical `fileId` releases. It does not
+negotiate multipart video `versionId` groups; require a complete alternative or explain
+that the episode is unavailable for a party.
+
+Party `currentTime` and `position` are **seconds**; `serverTime`, `timestamp` and
+`resumeAt` are epoch **milliseconds**. Convert between those and the millisecond
+positions on the separate play-session reporting API.
 
 :::note[Feature gate]
 Watch Together requires `FEATURE_WATCH_TOGETHER=true` on the server. Check
@@ -59,6 +68,27 @@ Implement these four steps first; the rest of this page explains each part.
   session end.
 :::
 
+### Create the party
+
+```http
+POST /api/v1/watch-together/parties
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "itemId": "550e8400-e29b-41d4-a716-446655440000",
+  "mediaType": "movie",
+  "title": "Nosferatu",
+  "clientId": "my-player-installation",
+  "visibility": "unlisted"
+}
+```
+
+The response is `201 { party: { … } }`. Retain `party.code` and read the authoritative
+party state. Guests must join before opening the SSE channel. `fileId` optionally selects
+a complete physical release; `currentTime` optionally supplies seconds. Visibility
+defaults to `unlisted`.
+
 ## Protocol reference
 
 ### Transport: one channel for everything
@@ -75,7 +105,7 @@ Content-Type: application/json
 
 | Event type | Status | Body |
 |---|---|---|
-| `join` | `200` | `{ "session": { … } }` |
+| `join` | `200` | `{ "party": { … } }` |
 | `position` | `200` | `{ "resyncing": boolean }` |
 | everything else | `202` | `{ "accepted": true }` |
 
@@ -108,13 +138,13 @@ API. Do not put a bearer token in the URL.
 
 **The host is a `clientId`, not a `userId`.** The same user on a phone and a
 TV are two separate participants, and only the host *device* can seek or
-navigate: `amIHost = session.hostClientId === myClientId`.
+navigate: `amIHost = party.hostClientId === myClientId`.
 
 ### Session lifecycle
 
 ```text
-1. Host:  POST /api/v1/watch-together                → session { code }
-2. Guest: POST .../events {type:"join"}               → 200 {session} + buffer_check to all
+1. Host:  POST /api/v1/watch-together/parties        → 201 { party: { code, … } }
+2. Guest: POST .../events {type:"join"}               → 200 {party} + buffer_check to all
 3. All:   GET  .../events?clientId=…                  (SSE)
 4. Any:   POST .../events {type:"sync"}  (play/pause) · Host: {type:"seek"}
 5. All:    POST .../events {type:"position"} every ~10 s · Host: {type:"heartbeat"} every ~5 s
@@ -161,7 +191,7 @@ participant, so any participant can pause or resume the party.
 | `position` | any | `{ position }` | `buffer_check` if drift detected |
 | `navigate` | host-only | `{ itemId, mediaType, title, posterUrl?, fileId? }` | `navigate` |
 | `version` | host-only | `{ fileId }` | `version_change`: switch to another file (version) of the current item |
-| `visibility` | host-only | `{ isPublic }` | `visibility_changed`: list or unlist the party |
+| `visibility` | host-only | `{ visibility: "listed" or "unlisted" }` | `visibility_changed`: list or unlist the party |
 | `activity` | host-only | `{ activity, message? }` | `host_activity`: tell guests what the host is doing (`watching`, `searching`, or `browsing`) |
 | `transfer-host` | host-only | `{ newHostUserId }` | `host_changed` |
 | `disband` | host-only | `{}` | `session_ended` |
@@ -203,17 +233,18 @@ later, still corrects a play state that a missed `sync` left wrong.
 
 | Event type | Data fields |
 |---|---|
-| `connected` | `session`, `serverTime` (ms), `bufferCheck` (see below) |
+| `connected` | `party`, `lastEventId`, `serverTime` (ms), `requestReceivedAt`, `bufferCheck` (see below) |
 | `sync` | `state: {currentTime, isPlaying, playbackRate, timestamp}`, `userId` |
 | `buffer_check` | `checkId`, `currentTime`, `initiator`, `isPlaying`, `seekInitiated` |
 | `all_ready` | `checkId`, `currentTime`, `resumeAt` (ms), `isPlaying`, `serverTime` (ms) |
 | `stall` / `resume` | `userId`, `username`, `clientId` / *(empty)* |
 | `host_position` | `position`, `timestamp` (ms), `isPlaying`, `playbackRate` |
 | `session_ended` | `hostUserId`, `hostUsername` |
+| `resync` | `reason: "gap" | "ahead"`, `lastEventId` |
 
 #### The `connected` snapshot
 
-Besides `session` and `serverTime`, the `connected` frame carries `bufferCheck`:
+Besides `party`, `lastEventId`, `serverTime`, and `requestReceivedAt`, the `connected` frame carries `bufferCheck`:
 the barrier that is pending right now, or `null`. It has `checkId`,
 `currentTime`, `isPlaying`, and `seekInitiated`. A client that connects or
 reconnects while a barrier is pending must treat it like a `buffer_check`:
@@ -284,10 +315,12 @@ const clientId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 11)
 function connectSSE(code, lastEventId) {
 	const params = new URLSearchParams({ clientId });
 	if (lastEventId) params.set('lastEventId', String(lastEventId));
+	const requestStartedAt = Date.now();
 	const es = openAuthenticatedSSE(`/api/v1/watch-together/${code}/events?${params}`,
 		{ headers: { Authorization: `Bearer ${token}` } });
 
-	let clockOffset = 0, lastSeq = lastEventId ? Number(lastEventId) : 0, resumeGeneration = 0, ended = false;
+	let clockOffset = 0, clockUncertainty = 0, lastSeq = lastEventId ? Number(lastEventId) : 0;
+	let resumeGeneration = 0, ended = false;
 
 	async function resumeWhenReady(target, resumeAt, generation) {
 		await new Promise((r) => setTimeout(r, Math.max(0, (resumeAt - clockOffset) - Date.now())));
@@ -309,12 +342,22 @@ function connectSSE(code, lastEventId) {
 	}
 
 	es.onmessage = (event) => {
-		if (event.lastEventId) lastSeq = Number(event.lastEventId);
+		if (event.lastEventId) lastSeq = Math.max(lastSeq, Number(event.lastEventId));
 		const data = JSON.parse(event.data);
 		switch (data.type) {
 			case 'connected':
-				clockOffset = data.serverTime - Date.now();
+				const receivedAt = Date.now();
+				const serverWorkMs = data.serverTime - data.requestReceivedAt;
+				const networkRoundTripMs = Math.max(0, receivedAt - requestStartedAt - serverWorkMs);
+				clockOffset = ((data.requestReceivedAt - requestStartedAt) +
+					(data.serverTime - receivedAt)) / 2;
+				clockUncertainty = Math.min(1000, networkRoundTripMs / 2);
+				lastSeq = Math.max(lastSeq, Number(data.lastEventId));
 				if (data.bufferCheck) enterBarrier(data.bufferCheck); // same handling as buffer_check
+				break;
+			case 'resync':
+				lastSeq = Math.max(lastSeq, Number(data.lastEventId));
+				// Re-read GET /watch-together/{code}; the server skipped incomplete replay.
 				break;
 			case 'sync': data.state.isPlaying ? video.play() : video.pause(); break;
 			case 'buffer_check': enterBarrier(data); break;
@@ -342,17 +385,19 @@ POST /api/v1/watch-together
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "itemId": "550e8400-…", "mediaType": "movie", "title": "Casablanca", "currentTime": 0, "clientId": "client_…" }
+{ "itemId": "550e8400-…", "mediaType": "movie", "title": "Casablanca", "currentTime": 0, "clientId": "client_…", "visibility": "unlisted" }
 ```
 
 `mediaType` is one of `movie`, `episode`, `series`. A series id has no
 playable item of its own, so resolve it to an episode first and create the
 party for the concrete movie or episode that Play would start. Treat `series`
 as "resolve to an episode first". Response is a bare
-`{ session: WatchTogetherSession }`. `session.code` is the shareable session
+`{ party: WatchTogetherPartyOutput }`. `party.code` is the shareable session
 code (e.g. `"MOVIE-7X3K"`) used in all subsequent requests, and carries
 `hostClientId` (the host device, see `clientId` vs `userId` above),
-`isPublic`, `participants[]`, and `createdAt`/`lastSync`.
+`visibility` (`listed` or `unlisted`), `participants[]`, and `createdAt`/`lastSync`.
+Omit `visibility` to create an unlisted party. A host can change it later with
+the `visibility` event.
 
 If the user is already in another party, creating one first ends that party
 when the user is its host, or leaves it when the user is a guest there.
@@ -367,12 +412,22 @@ POST /api/v1/watch-together/MOVIE-7X3K/events
 { "clientId": "client_…", "type": "join", "payload": {} }
 ```
 
-Response is `200 { session }`. The server simultaneously broadcasts
+Response is `200 { party }`. The server simultaneously broadcasts
 `buffer_check` to **all** current participants, including the joiner, so
 everyone pauses and synchronizes before the new guest starts playing. If the
 guest's SSE stream connects after that broadcast, it picks the barrier up from
 `connected.bufferCheck`. If a barrier never completes, the server resolves it
 after a timeout of about 5 seconds, so a guest may wait up to ~5 s on join.
+
+### Reconnect when the replay cursor is stale
+
+The SSE replay ring keeps the newest 50 business frames. The unnumbered
+`connected` frame includes the current `party` snapshot and `lastEventId`. If the
+cursor is older than the ring, the server sends `resync` with reason `gap`; a
+cursor ahead of the server counter gets reason `ahead`. Malformed cursors, or a
+cursor received while Valkey is unavailable, also produce `gap`. In each case
+replay is skipped. Re-read `GET /api/v1/watch-together/{code}` and continue from
+the current snapshot; do not apply an incomplete replay.
 
 ## Barrier details: buffer-gated resume
 
@@ -597,9 +652,10 @@ errors: see the [API reference](/reference/).
 
 | Method | Path | Who | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/watch-together` | user | Current user's active session (or `null`) |
-| `POST` | `/api/v1/watch-together` | user | Create a session (host) |
-| `GET` | `/api/v1/watch-together/{code}` | user | Get a session by code |
+| `GET` | `/api/v1/watch-together` | user | Current user's active party (or `null`) |
+| `GET` | `/api/v1/watch-together/parties` | user | List parties the host chose to make visible; admins can request unlisted parties |
+| `POST` | `/api/v1/watch-together/parties` | user | Create a session (host) |
+| `GET` | `/api/v1/watch-together/{code}` | user | Get a party by code |
 | `POST` | `/api/v1/watch-together/{code}/events` | user | Send an event |
 | `GET` | `/api/v1/watch-together/{code}/events?clientId=` | user | SSE event stream |
 | `POST` | `/api/v1/devices/{id}/heartbeat` | user | Report device online status |
@@ -625,6 +681,7 @@ the feature is off or the session does not exist.
 - Stop position/heartbeat reporting the moment you start navigating away.
 - Reconnect with `Last-Event-ID` (or `?lastEventId=`) on SSE disconnect, but
   never after `session_ended`.
+- On `resync`, discard the missing replay range and refresh the party snapshot.
 - Enter the barrier in `connected.bufferCheck` and send `ready`.
 - Never auto-play on load; stay in the session when your own media ends.
 - Age `host_position` by its `timestamp`, trusting only the age beyond your

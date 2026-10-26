@@ -116,8 +116,7 @@ releases.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET/POST` | `/playback/{id}/info` | user | **Deprecated** for third parties: the first-party player's internal record (snake_case), kept for older app builds and removed in a later release. Probe with `POST /media/{id}/playability`, start with `POST /play-sessions` |
-| `POST` | `/media/{id}/playability` | user | Probe before you start: versions, play method per version for your `capabilities`, tracks, resume position, recommended tracks. Needs `media:read`; creates no session or grant |
+| `POST` | `/media/{id}/playability` | user | Probe before you start: versions, play method per version for your `capabilities`, tracks, resume position, recommended tracks. Needs `media:read`; accepts physical `fileId` or logical `versionId` with `capabilities.multipartVideo`; creates no session or grant |
 | `GET` | `/playback/{id}/file` | user | Direct file download (`?grant=`) |
 | `GET` | `/playback/{id}/hls` | user | HLS master playlist (`?grant=`) |
 | `GET` | `/playback/{id}/hls/{…path}` | user | HLS segment (`?grant=`) |
@@ -132,6 +131,12 @@ releases.
 | `DELETE` | `/playback/grants/{id}` | user (owner) | Revoke a grant |
 | `POST` | `/playback/telemetry` | user | Client telemetry / quality metrics |
 | `POST` | `/playback/previews` | user | Ephemeral hover-preview transcode session |
+| `POST` | `/playback/previews/{id}/keepalive` | user (owner) | Bodyless preview heartbeat; use the returned reporting descriptor |
+| `DELETE` | `/playback/previews/{id}` | user (owner) | Release a preview (idempotent, including unknown or foreign ids) |
+
+The removed `GET` and `POST /playback/{id}/info` routes answer `410
+route_retired` for older clients. Use `POST /media/{id}/playability` to probe
+and `POST /play-sessions` to start.
 
 The media routes above are byte endpoints. Stream URLs are **opaque**: take them from
 the start response (`delivery.url` and the hrefs inside `delivery`) and send them back
@@ -144,12 +149,13 @@ unchanged. Never build, parse or rewrite an HLS URL yourself.
 | `GET` | `/play-sessions` | user / admin | Playing now (`?scope=mine\|all&itemId=`; `scope=all` requires admin) |
 | `POST` | `/play-sessions` | user | Start playback for video, music and audiobooks (`media:write`): `201` with `{ playbackSessionId, mediaId, kind, delivery, grant, reporting }`; see [Play media from your own client](/developers/building-a-player/#play-media-from-your-own-client) |
 | `PUT` | `/play-sessions/{id}` | user (owner) | Report progress (heartbeat). `status: COMPLETED` ends the session (`204`) |
-| `POST` | `/play-sessions/{id}/beacon` | user (owner) | `sendBeacon` alias of PUT; rate-limited |
+| `POST` | `/play-sessions/{id}/beacon` | user (owner) | Authenticated POST alias of PUT; no endpoint-level rate limit |
 | `GET` | `/play-sessions/{id}/events` | user (owner) | SSE events for a session |
-| `POST` | `/play-sessions/{id}/cancel` | owner or admin | Terminate a session and free its stream slot. Anyone else gets `404` |
+| `DELETE` | `/play-sessions/{id}` | owner or admin | Terminate a session and free its stream slot. Anyone else gets `404` |
 | `POST` | `/play-sessions/replay` | user | Replay finished plays that had no live session (offline music) |
+| `GET` | `/me/resume-handoff` | user | Check whether another device continued this user's playback; call while paused, with `mediaId`, `positionMs`, `deviceId`, and `idleMs` |
 | `GET` | `/watch-state/{id}` | user | `{ watched, positionMs, resumeAnchor, favorite, rating }` |
-| `PUT` | `/watch-state/{id}` | user | Set watched / favorite / rating (partial) |
+| `PATCH` | `/watch-state/{id}` | user | Set watched / favorite (partial); rate through `/media/{id}/rating` |
 
 `positionMs` uses milliseconds, and so does `/playback/{id}/timeline` (chapters, skip
 segments, trickplay). Follow the schema for each time field.
@@ -256,11 +262,15 @@ as a whole.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/watch-together` | user | List sessions (`?scope=mine\|current`) |
-| `POST` | `/watch-together` | user | Create a watch-together session |
-| `DELETE` | `/watch-together/{code}` | user (host) | Disband a session |
+| `GET` | `/watch-together` | user | Current user's active party (or `null`) |
+| `GET` | `/watch-together/parties` | user | List host-listed parties; admins may include unlisted parties |
+| `POST` | `/watch-together/parties` | user | Create a watch-together session (`201 { party }`) |
+| `GET` | `/watch-together/{code}` | user | Get a party by code |
 | `POST` | `/watch-together/{code}/events` | user | Send an event (join, seek, reaction, etc.) |
 | `GET` | `/watch-together/{code}/events` | user | SSE downstream (renamed from `/stream`) |
+
+End a party by sending the `disband` event; guests leave with `leave`. There is
+no `DELETE /watch-together/{code}` route.
 
 Events use a discriminated `{ clientId, type, payload }` envelope on both the
 `POST` upstream and the SSE downstream. A future WebSocket transport would
@@ -309,19 +319,19 @@ The commands and their arguments are described in
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET/PATCH` | `/me/privacy` | user | Your privacy preferences (`hideFromOthers`, `shareListeningActivity`, `shareAudiobookActivity`, read-only `listeningCircleConfigured`); device tokens and PATs accepted. `PATCH` is partial: omitted fields keep their stored values; an empty update answers `422 validation_failed` |
-| `GET` | `/user/profile` | user | Own profile: `{id, username, isAdmin, isAgeRestricted, permissions, groups}` |
-| `GET/PUT` | `/user/playback-preferences` | user | Client playback settings; `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
-| `GET/POST` | `/user/pats` | user | Own PATs; `DELETE /user/pats/{id}` revokes (`204`) |
-| `GET` | `/user/links` | user | Linked third-party accounts |
-| `GET/DELETE` | `/user/links/{provider}` | user | One linked account: status, and unlink |
-| `POST` | `/user/links/{provider}/authorize` | user | Initiate OAuth account linking (returns an `authUrl`) |
+| `GET` | `/me` | user | Own profile: `{id, username, isAdmin, isAgeRestricted, permissions, groups}` |
+| `GET/PATCH` | `/me/playback-preferences` | user | Client playback settings; partial update. `metadataLanguage`/`metadataTitleLanguage` override `Accept-Language`, see [Language negotiation](#language-negotiation-accept-language) |
+| `GET/POST` | `/me/pats` | user | Own PATs; `DELETE /me/pats/{id}` revokes (`204`) |
+| `GET` | `/me/links` | user | Linked third-party accounts |
+| `GET/DELETE` | `/me/links/{provider}` | user | One linked account: status, and unlink |
+| `POST` | `/me/links/{provider}/authorize` | user | Initiate OAuth account linking (returns an `authUrl`) |
 | `GET` | `/users/{id}` | `users:read` | Read another user's profile |
 | `GET` | `/users/{id}/images/avatar` | public | User avatar (shown in social contexts without a session); sizes `thumb`, `card`, `full` = 48, 96, 200 px |
 | `PUT/DELETE` | `/users/{id}/images/avatar` | user (self or admin) | Upload / remove an avatar (multipart) |
 
 ### Permissions
 
-`GET /server` (`caller.permissions`) and `GET /user/profile` (`permissions`) return the same
+`GET /server` (`caller.permissions`) and `GET /me` (`permissions`) return the same
 object:
 
 | Field | Meaning |
@@ -387,12 +397,12 @@ Exceeding quota → `422 quota_exceeded` with the bucket in `details`.
 | `GET/PUT` | `/livetv/favorites` | user | Favorites use `stationIds`; PUT `{ stationId, favorite }` |
 | `PUT` | `/livetv/favorites/order` | user | Reorder favorites with `{ stationIds }` |
 | `GET/PATCH` | `/livetv/simple-mode` | user | Viewer settings use `stationIds`, `startStationId`, `clearStartStation` |
-| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrate?, hevc? }` → `201` with the shared envelope (`playbackSessionId`, `delivery.url`, `delivery.heartbeatIntervalMs`, `delivery.keepaliveHref`, `grant`) |
+| `POST` | `/livetv/playback-sessions` | user | Start: `{ stationId, feedId?, quality?, maxBitrateBps?, hevc? }` → `201` with `delivery.url`, quality details, `reporting` keepalive descriptor, and `grant` |
 | `GET` | `/livetv/playback-sessions/{playbackSessionId}` | user (owner) | `state` (`active` / `ended`), `endReason`, and `failure` (`code`, `retryable`, `retryAfterMs`, `at`) when the channel failed |
-| `POST` | `/livetv/playback-sessions/{playbackSessionId}/keepalive` | user (owner) | Every `delivery.heartbeatIntervalMs` (`delivery.keepaliveHref`); `204` or `410` with `reason: evicted\|superseded\|expired\|left\|failed` |
+| `POST` | `/livetv/playback-sessions/{playbackSessionId}/keepalive` | user (owner) | Call `reporting.href` every `reporting.intervalMs`; `204` or `410` with `reason: evicted\|superseded\|expired\|left\|failed` |
 | `DELETE` | `/livetv/playback-sessions/{playbackSessionId}` | user (owner) | Stop the session (`204`, idempotent). `POST .../leave` is the same for `sendBeacon` |
 | `POST` | `/livetv/playback-sessions/{playbackSessionId}/leave` | user (owner) | Same cleanup for `sendBeacon` |
-| `GET` | `/livetv/channels/{feedId}/stream/**` | user | Unchanged HLS manifests and segments; use the returned `delivery.url` |
+| HLS | `delivery.url` | user | Opaque manifest URL returned by the start response; follow its child URLs and do not construct protocol paths |
 
 Station and playback-session routes replace the old channel viewer routes
 without aliases. For the complete lifecycle, feed selection, quality options
@@ -407,35 +417,33 @@ and eviction handling, see [Live TV playback](/developers/live-tv-playback/).
 | `GET` | `/music/tracks/{id}/lyrics` | user | Lyrics, when available |
 | `GET` | `/music/tracks/{id}/similar` | user | Similar tracks; `?basis=auto|metadata|sonic`, `{ items, source, page }` |
 | `GET` | `/music/tracks/{id}/stream` | user | Audio playback (see [Music streaming and transcoding](#music-streaming-and-transcoding)) |
-| `PUT`, `DELETE` | `/user/music/tracks/{id}/feedback` | user | Explicit like or dislike (`{ "feedback": "liked" }` or `"disliked"`). Skips and completions never change it |
+| `PUT`, `DELETE` | `/me/music/tracks/{id}/feedback` | user | Explicit like or dislike (`{ "feedback": "liked" }` or `"disliked"`). Skips and completions never change it |
 | `POST` | `/music/recommendations` | user | What to play next: `{ seed?, context: { currentTrackId?, history?, skipped?, exclude?, upcoming?, crossfade?, startedBy? } }` → `{ next?, alternatives, source }`; a mood seed alone is a cold start |
 | `GET` | `/music/albums/{id}/similar`, `/music/artists/{id}/similar` | user | Sonic similarity, requires `sonicEmbeddings` (`/server` → `capabilities.music.sonicSimilarity`) |
 | `GET` | `/music/path` | user | Sonic bridge between two tracks, requires `sonicEmbeddings`; rate-limited |
-| `GET` | `/music/clusters`, `/music/clusters/{id}/tracks` | user | Sonic mixes, requires `musicClusters` (`capabilities.music.sonicMixes`) |
-| `GET` | `/user/music/taste-stations`, `/user/music/taste-stations/{id}/tracks` | user | Taste stations; the `id` may be stored, `410` once its clustering expired |
+| `GET` | `/music/sonic-mixes`, `/music/sonic-mixes/{id}/tracks` | user | Sonic mixes, requires `musicClusters` (`capabilities.music.sonicMixes`) |
+| `GET` | `/me/music/taste-stations`, `/me/music/taste-stations/{id}/tracks` | user | Taste stations; the `id` may be stored, `410` once its clustering expired |
 | `GET` | `/music/mood-recommendations` | user | Requires the `sonicQueue` feature; rate-limited |
-| `GET/POST` | `/user/music/pinned-genres` | user | Pinned genres |
-| `DELETE` | `/user/music/pinned-genres/{genre}` | user | Unpin (percent-encode any `/` in the genre name) |
-| `GET` | `/user/music/recently-played`, `/user/music/top-tracks`, `/user/music/top-artists` | user | Listener rows for a music home; `{ items, page: { limit, truncated } }` |
+| `GET/POST` | `/me/music/pinned-genres` | user | Pinned genres |
+| `DELETE` | `/me/music/pinned-genres/{genre}` | user | Unpin (percent-encode any `/` in the genre name) |
+| `GET` | `/me/music/recently-played`, `/me/music/top-tracks`, `/me/music/top-artists` | user | Listener rows for a music home; `{ items, page: { limit, truncated } }` |
 | `GET` | `/music/radio/stations` | user | Internet-radio station list |
 | `GET` | `/music/radio/stations/{id}/stream` | user | Radio stream |
 | `GET` | `/music/radio/stations/{id}/now-playing` | user | Current track on a station |
 
 #### Music streaming and transcoding
 
-`GET /music/tracks/{id}/stream` direct-plays by default. Transcoding kicks in
-when any of these is true, checked in this order, first match wins:
+Prefer `POST /play-sessions` with music `audio` options and open its opaque
+`delivery.url`. Capability negotiation and explicit format/bitrate controls determine
+`delivery.codec`, `delivery.bitrateKbps` and `delivery.playMethod`.
 
-1. `?format=` is set and differs from the source container
-2. `?maxBitRate=` (kbps) is set and the source bitrate exceeds it
-3. `?timeOffset=` (seconds) is greater than `0`
-
-`?format=raw` always short-circuits to direct play regardless of the other
-params. `format` accepts `mp3 | opus | aac | raw`; see [Codec
-support](/reference/codec-support/) for the full codec/bitrate/container matrix
-and defaults. Under sustained load the server enforces a cluster-wide
-concurrent-transcode cap. Once it's hit, the endpoint returns `503` with a
-`Retry-After` header rather than queuing indefinitely.
+For direct bearer requests to `/music/tracks/{id}/stream`, `format`, `bitrateKbps`,
+`maxBitrateKbps` and `startPositionSeconds` control conversion. A requested bitrate or
+nonzero start position forces encoding; a maximum bitrate caps output when needed.
+`format: raw` requires a compatible source and cannot satisfy a conversion or stream
+seek. Format tokens include `mp3`, `opus`, `aac`, `m4a` and `raw`. See
+[Music playback](/developers/music-playback/) and the [API reference](/reference/).
+On capacity failure, honor `503` and `Retry-After`.
 
 ### Webhooks
 
@@ -578,7 +586,7 @@ Two negotiations run independently, against different candidate sets:
 above it produced no signal:
 
 1. Stored preference: `metadataLanguage` / `metadataTitleLanguage` fields on
-   `PUT /user/playback-preferences`
+   `PATCH /me/playback-preferences`
 2. The language-switcher cookie set by the web UI
 3. The `Accept-Language` request header
 4. The server's primary language
@@ -612,7 +620,7 @@ precedence over the header for both negotiations going forward.
 
 Send `Accept-Language` with the device language on every request, for example
 `Accept-Language: de-DE, de;q=0.9, en;q=0.5`. To let a user pick a metadata language that differs
-from the device, store it once with `PUT /api/v1/user/playback-preferences` (`metadataLanguage`
+from the device, store it once with `PATCH /api/v1/me/playback-preferences` (`metadataLanguage`
 for overviews and taglines, `metadataTitleLanguage` for titles); the stored preference then wins
 over the header on every client. Operations whose responses carry translated titles or overviews
 list the `Accept-Language` header parameter in the [API reference](/reference/).

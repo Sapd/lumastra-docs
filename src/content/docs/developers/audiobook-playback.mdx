@@ -12,9 +12,9 @@ versioned **`/api/v1`** surface, the same one covered in
 [Building a player](/developers/building-a-player/).
 
 :::note[Stability]
-Every endpoint in this guide is tagged `x-stability: experimental` in the
-[API reference](/reference/). The shapes below are correct as of this writing,
-but treat them as more likely to change than the `stable` VOD endpoints.
+The shared play-session endpoints are `x-stability: stable` in the
+[API reference](/reference/). Check the stability of each additional audiobook
+endpoint individually; audiobook catalog resources and facets can have different labels.
 :::
 
 ## The model in one paragraph
@@ -27,6 +27,12 @@ position back upstream. When a player asks where a listener left off, the
 answer comes from AudiobookShelf's saved progress, not from Lumastra's watch
 state. Most audiobook bugs come from forgetting that; see
 [§5](#5-where-the-resume-point-actually-lives).
+
+Check `capabilities.audiobooks.available` from `GET /api/v1/server` before offering
+audiobooks. Availability does not prove the caller has a linked AudiobookShelf account:
+a start can return `403` for a missing link, or `503` when the upstream is unavailable.
+Video-only `fileId`, `versionId`, audio/subtitle selections and video quality caps are
+not audiobook controls. `audio.format` and `audio.bitrateKbps` are unsupported for books.
 
 ## 1. Start a session
 
@@ -51,18 +57,25 @@ no longer exists. AudiobookShelf ids never leave the server: you only see Lumast
   "playbackSessionId": "uuid", "mediaId": "550e8400-…", "kind": "audiobook",
   "delivery": {
     "kind": "multipart-audio", "startPositionMs": 1423000, "durationMs": 5400000,
-    "tracks": [ { "index": 0, "url": "/api/v1/…?grant=…", "startMs": 0, "durationMs": 1800000 /* … */ } ],
-    "chapters": [ /* may be empty */ ],
+    "tracks": [ { "index": 0, "url": "/api/v1/…?PlaySessionId=…&grant=…", "remuxUrl": "/api/v1/…?PlaySessionId=…&grant=…", "startMs": 0, "durationMs": 1800000, "mime": "audio/mpeg", "needsRemux": false } ],
+    "chapters": [ { "index": 0, "name": "Chapter 1", "startMs": 0, "endMs": 900000 } ],
     "book": { "title": "…", "author": "…", "narrator": "…" }
   },
   "grant": { "id": "uuid", "token": "…", "param": "grant", "expiresAt": "…" /* … */ },
-  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "kind": "progress", "method": "PUT", "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
-`delivery.tracks[]` carry ready URLs with the `grant` attached. Open them as given. Media
-URLs always start at 0: the book's position is not a URL offset, so seek to
-`delivery.startPositionMs` yourself. When the server transcodes, `tracks[]` holds one
+`delivery.tracks[]` carry ready URLs with the session-bound `PlaySessionId` and, when
+issued, a `grant`. Open them as given; do not construct or rewrite these URLs. The server
+issues plural `/audiobooks/{mediaId}/files/{trackIndex}` and `/remux/{trackIndex}` routes.
+The retired singular file and remux routes return `410`. Raw AudiobookShelf paths and the
+old `session`, `trackIndex` and `t` selectors are no longer accepted. Media URLs always
+start at 0 by default. Find the track containing `delivery.startPositionMs`, then
+seek within that track to `delivery.startPositionMs - track.startMs`. Report the
+whole-book position. A single whole-book HLS track has `startMs: 0`. If you use `remuxUrl` to seek within a file,
+pass `startPositionSeconds` (file-relative seconds); do not pass a book-clock value.
+When the server transcodes, `tracks[]` holds one
 HLS playlist (`mime: application/vnd.apple.mpegurl`) for the whole book.
 A grant for a book lasts 24 hours; renew it with `POST grant.renewHref` and
 `{ "token": grant.token }` if a listening session may run longer, or when a download
@@ -90,9 +103,10 @@ Two units are in play at once, and mixing them up is the single most common
 A book is a list of files. To find which file a book position falls in, walk
 `delivery.tracks` and compare against each `startMs`; never report a
 *file* offset as `positionMs`, which silently rewinds a multi-file book to
-file one. `chapters` is server-normalised into contiguous spans covering the
-whole book. It may be empty: a meaningful minority of books carry no chapter
-data.
+file one. Each chapter has `index`, `name`, `startMs` and `endMs`, plus an
+optional `image`. `chapters` is server-normalised into contiguous spans covering
+the whole book. It may be empty: a meaningful minority of books carry no
+chapter data.
 
 ## 3. Report progress
 
@@ -102,36 +116,40 @@ Report against the Lumastra `playbackSessionId`, as for video. `PUT` to
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "positionMs": 1461000, "listenedMs": 38000, "status": "ACTIVE",
+  -d '{ "positionMs": 1461000, "listenedDeltaMs": 38000, "status": "ACTIVE",
         "eventSeq": 12, "sessionElapsedMs": 38000 }'
 ```
 
-**`listenedMs` is audio actually heard since your last report, never a
+**`listenedDeltaMs` is audio actually heard since your last report, never a
 position delta.** Computing it by subtracting positions inflates listening
 statistics by however far a single scrub jumps. Accumulate wall-clock time
 while the element is actually playing, excluding pauses, buffering, and seeks,
-the same way you'd track a live video heartbeat's `sessionElapsedMs`.
+the same way you'd track a live video heartbeat's `sessionElapsedMs`. You can omit
+`listenedDeltaMs` and let the server use growth of cumulative `sessionElapsedMs`; every
+accepted report advances that baseline. New clients should use these explicit fields.
+The legacy `listenedMs` field is deprecated.
 
-If a bookkeeping call fails, **keep playing.** Never interrupt the listener for it;
-retry, and carry on reporting at the current position.
+For a transient reporting failure, keep local playback running and retry with the
+same sequence number. Prefer cumulative `sessionElapsedMs` if the server's acceptance
+of a per-interval delta is uncertain. Authentication failure, a lost session and an
+explicit server stop need the separate handling below; do not retry them indefinitely.
 
 Keep the session alive while paused by sending one `status: "PAUSED"` report.
 A paused session holds a concurrent-stream slot, so release it (stop reporting
 and close) when the listener actually leaves, or a forgotten tab can exhaust the
 stream budget and block their next book.
 
-:::danger[A reaped session answers `404` forever]
-If the deck stops reporting for long enough, the server reaps the session, and
-every further progress report against that `playbackSessionId` returns
-`404`; retrying cannot help. Treat it as a distinct outcome from a network
-failure: stop reporting against the dead id, keep playing (a downloaded book's
-audio is local and unaffected), and start a fresh session once the listener
-starts playing again. A generated OpenAPI client may hand you a *typed
-response case* for this `404` rather than a thrown exception: match it
-explicitly. Do not restart from a paused deck on its own; wait for play, since
-starting a session supersedes decks paused elsewhere. Record locally in the
-meantime and let [offline sync](#6-sync-listening-that-happened-offline) carry
-the gap.
+:::caution[Handle a lost session explicitly]
+A progress report can return `200` with `sessionLost: true`, including when the local
+session row still exists but its upstream session is gone. Inspect the body, not just
+the HTTP status. A missing or inaccessible local row returns `404`. Neither outcome is
+repaired by repeatedly reporting to the same id. Stop using that handle and start a
+fresh session when the listener chooses to play again; do not restart a paused deck
+by itself. A `superseded` outcome means another session took ownership.
+
+Keep local audio playing if available, record the gap locally, and use
+[offline sync](#6-sync-listening-that-happened-offline) when connectivity returns.
+A lost session's granted URLs may no longer serve bytes.
 :::
 
 ## 4. Close the session
@@ -139,7 +157,7 @@ the gap.
 ```bash
 curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId} \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{ "positionMs": 1461000, "listenedMs": 38000, "status": "COMPLETED",
+  -d '{ "positionMs": 1461000, "listenedDeltaMs": 38000, "status": "COMPLETED",
         "endReason": "user", "eventSeq": 13, "sessionElapsedMs": 76000 }'
 ```
 
@@ -147,9 +165,9 @@ Closing isn't optional bookkeeping. `status: "COMPLETED"` ends the playback sess
 (`204`), frees the stream slot, revokes the grant and stops the byte proxy serving further
 segments. The body is the same shape as a progress report, and the position you
 send is the listener's final word on where they stopped. Use
-`POST {reporting.href}/beacon` with the same body when you can't issue a normal
-`PUT`, such as on app teardown. To terminate a session at once, call
-`POST /api/v1/play-sessions/{playbackSessionId}/cancel`. There is no
+`POST {reporting.href}/beacon` with the same body and account authentication when
+you can't issue a normal `PUT`. A browser `sendBeacon` can use session cookies; a
+bearer-only client needs an authenticated POST because `sendBeacon` cannot set headers. To terminate a session at once, call
 `DELETE /api/v1/play-sessions/{playbackSessionId}`.
 
 ## 5. Where the resume point actually lives
@@ -162,9 +180,9 @@ move the listener's resume point. It will appear to succeed, and the book will
 start where it did before.
 
 :::caution[Never open a play session just to write a position]
-That path writes only Lumastra's local watch state, never reaching
-AudiobookShelf. Offline listening flushed this way is silently lost. A
-session is also a stream, not a bookkeeping primitive: opening one can be
+Live reports synchronize an actual upstream session. Opening one solely to replay
+old listening can take ownership away from a listener on another device and consumes
+a stream slot. A session is not a bookkeeping primitive: opening one can be
 refused on capacity grounds and supersedes decks paused on the same book
 elsewhere. To write a position with no live playback behind it, use
 [`POST /offline-playback-sessions`](#6-sync-listening-that-happened-offline):

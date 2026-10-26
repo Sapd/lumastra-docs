@@ -17,7 +17,7 @@ with "Live TV access requires permission".
 
 Stations are the stable viewer identity. Feeds identify individual upstream choices.
 `playbackSessionId` identifies one playback lifecycle; it is the `{playbackSessionId}` in
-the lifecycle paths. HLS protocol paths remain feed-addressed.
+the lifecycle paths. Treat every HLS URL as opaque and use the URL returned by the API.
 
 ## The flow
 
@@ -26,7 +26,7 @@ the lifecycle paths. HLS protocol paths remain feed-addressed.
 2. GET    /api/v1/livetv/guide?from=…&to=…                         → airings and nowNext per station
 3. POST   /api/v1/livetv/playback-sessions                         → playbackSessionId, delivery, grant
 4. play   delivery.url                                             → HLS player
-5. POST   delivery.keepaliveHref   every delivery.heartbeatIntervalMs
+5. POST   reporting.href         every reporting.intervalMs
 6. DELETE /api/v1/livetv/playback-sessions/{playbackSessionId}    → on stop or station switch
                                                                    (or POST …/leave from sendBeacon)
 ```
@@ -145,7 +145,7 @@ Content-Type: application/json
 {
   "stationId": "11111111-1111-4111-8111-111111111111",
   "quality": "adaptive",
-  "maxBitrate": 8000000,
+  "maxBitrateBps": 8000000,
   "hevc": "fmp4"
 }
 ```
@@ -156,8 +156,10 @@ Only `stationId` is required. Playback choices belong in this JSON body:
 |---|---|---|
 | `feedId` | Feed UUID | Select a feed belonging to the station |
 | `quality` | `server`, `adaptive`, `original`, `1080p8m`, `720p4m`, `540p2m`, `360p1m` | `server` follows the administrator's default |
-| `maxBitrate` | Positive number | Maximum total mux bitrate in bits per second |
+| `maxBitrateBps` | Positive number | Maximum total mux bitrate in bits per second |
 | `hevc` | `any`, `fmp4`, `none` | HEVC decoding capability: MPEG-TS and fMP4, fMP4 only (such as AVPlayer), or no HEVC support |
+| `castTarget` | Boolean | Request an IP-unpinned grant for another receiver; inspect `grant.ipPinned` for the policy result |
+| `purpose` | `playback`, `preview` | Defaults to `playback`. A preview is a separate low-priority viewer and does not supersede real playback or count a watch |
 
 Omitting `hevc` preserves original-stream behavior. For an HEVC source, the
 server can select fMP4 packaging or an H.264 compatibility encode for the
@@ -168,7 +170,8 @@ A successful start returns **`201`** with the shared playback envelope:
 | Field | Meaning |
 |---|---|
 | `playbackSessionId`, `stationId` | Session handle and the stable station |
-| `delivery` | `kind: "live-hls"`, `url` (the HLS URL, already carrying a `?grant=`), `feedId` (the selected feed), `heartbeatIntervalMs` (how often to send keepalives) and `keepaliveHref`. Also the output details below |
+| `delivery` | `kind: "live-hls"`, `url` (the HLS URL, already carrying a `?grant=`), `feedId` (the selected feed), and the output details below |
+| `reporting` | Keepalive descriptor: `kind: "keepalive"`, `method: "POST"`, `href` and `intervalMs` |
 | `grant` | `{ id, token, param: "grant", ipPinned, expiresAt, renewAfter, renewHref }`, as for every other media kind. Valid for 6 hours |
 
 `delivery` also carries the output details:
@@ -178,9 +181,10 @@ A successful start returns **`201`** with the shared playback envelope:
 | `requiresProxy` | Whether playback must go through the Live TV proxy |
 | `sourceId`, `maxStreams` | Optional: upstream source id, and the concurrent-stream limit when enforced |
 | `rungId` | Selected quality rung, or `null` |
-| `requestedMaxBitrate`, `appliedMaxBitrate`, `appliedMaxHeight` | Requested cap and applied output limits, or `null` |
-| `reason` | Quality decision: `source_within_cap`, `hdr_source`, `unprobeable`, `capacity`, `below_ladder` or `insufficient_ladder`, or `null` |
-| `adaptive` | Optional: `{ rungs: [{ id, height, maxBitrate, codec: "h264" }], includesOriginal }` |
+| `requestedQuality`, `appliedQuality` | Requested quality and the quality actually delivered |
+| `requestedMaxBitrateBps`, `appliedMaxBitrateBps`, `appliedMaxHeight` | Requested cap and applied output limits, or `null` |
+| `reason` | Quality decision: `ladder_disabled`, `source_within_cap`, `hdr_source`, `unprobeable`, `capacity`, `below_ladder` or `insufficient_ladder`, or `null` |
+| `adaptive` | Optional: `{ rungs: [{ id, height, maxBitrateBps, codec: "h264" }], includesOriginal }` |
 | `variant` | Optional: `fmp4` or `h264`, the HEVC compatibility output selected for this player |
 
 Use this information to show the quality actually applied.
@@ -223,10 +227,10 @@ URL.
 ## 4. HLS playback
 
 :::caution[Don't hand-build this URL]
-Play `delivery.url` as returned. HLS manifests and segments still live under
-`/api/v1/livetv/channels/{feedId}/stream/**`; these protocol paths are unchanged.
-Do not replace `channels` with `stations` or substitute a station id into them.
-Fetching a manifest does not start a playback session.
+Play `delivery.url` as returned and follow the URLs in its manifests. The HLS
+protocol path is an implementation detail and can change between releases; do
+not construct it or substitute a station id into it. Fetching a manifest does
+not start a playback session.
 :::
 
 The start response carries a **grant**, the same model as for video, music and
@@ -235,7 +239,9 @@ station and playback session. A grant is valid only while the session is `active
 and only for the feed named in the path, and it lasts 6 hours. The server
 propagates it into every segment URL in the manifest, so header-less players need
 nothing else. `api_key` and `stream_token` query parameters are not accepted. If
-you can send headers, renew with `POST grant.renewHref` and `{ "token": grant.token }`.
+you can send headers, renew with `POST grant.renewHref` and
+`{ "token": grant.token }` while the session is active. An ended Live TV session's grant
+cannot be renewed.
 Media fetches count as activity, but keep sending keepalives (§5) so the slot stays
 yours.
 
@@ -260,7 +266,7 @@ POST /api/v1/livetv/playback-sessions/{playbackSessionId}/keepalive
 Authorization: Bearer <token>
 ```
 
-Send it every **`delivery.heartbeatIntervalMs`**, at `delivery.keepaliveHref`. Success is
+Send it every **`reporting.intervalMs`**, at `reporting.href`. Success is
 `204 No Content`. Without keepalives the session can expire and the proxy can release the
 slot. Players that cannot send keepalives stay alive through media fetches.
 
@@ -315,7 +321,9 @@ session is idempotent. Live TV sessions are stopped with this `DELETE`, not with
 `PUT` to the play-sessions path.
 
 `POST /api/v1/livetv/playback-sessions/{playbackSessionId}/leave` provides the same
-operation for `navigator.sendBeacon` on unload.
+operation for unload. Account authentication is still required: `navigator.sendBeacon`
+can use session cookies but cannot set a bearer header. A bearer-only client should
+send an authenticated POST, using `fetch` with `keepalive: true` when appropriate.
 
 :::caution[Always release the session]
 Skipping cleanup wastes a stream slot until expiry. During that window,
@@ -326,7 +334,7 @@ another viewer can be blocked by the stream limit.
 
 - List stations, then fetch the guide with explicit `from` and `to` times (at most 24 hours apart).
 - Start with `POST …/playback-sessions`; retain `playbackSessionId` and play `delivery.url`.
-- Keepalive every `delivery.heartbeatIntervalMs` at `delivery.keepaliveHref`; `DELETE` the session on stop.
+- Keepalive every `reporting.intervalMs` at `reporting.href`; `DELETE` the session on stop.
 - Stop on `410` and inspect `reason`; never auto-rejoin after eviction.
 - Handle the start errors from the table: retry only when `retryable` is true, and wait `retryAfterMs`.
 

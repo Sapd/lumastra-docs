@@ -12,7 +12,7 @@ client usually needs both:
 
 | | **Original file** | **Rendition** |
 |---|---|---|
-| Endpoint | `GET /media/{id}/download` | `POST /media/{id}/renditions` → poll → download |
+| Endpoint | `GET /media/{id}/download` | `GET /media/{id}/renditions` → `POST` a rung → poll → download |
 | What you get | The untouched source file, byte for byte | A newly encoded H.264/AAC MP4 at a quality you pick |
 | Cost to the server | None: it streams bytes that already exist | CPU-minutes and gigabytes of cache per quality |
 | When to use it | The device can **direct play** the source | It cannot: 4K HEVC/TrueHD on a phone, say |
@@ -30,6 +30,10 @@ affordance when the flag is false. A disabled feature answers **404**, the
 same as a missing item.
 :::
 
+Multipart video groups cannot be downloaded through either path. Only offer a complete
+physical `fileId` from playability; do not save the first part or present an individual
+part as a complete episode. These endpoints do not accept a logical `versionId`.
+
 ## Knowing the size before you commit
 
 Every download decision the user makes is really a decision about bytes on a
@@ -37,9 +41,9 @@ metered connection, so both paths tell you the size up front.
 
 For the **original file**, each entry in `versions[]` from
 `POST /api/v1/media/{id}/playability` carries `sizeBytes`, which is optional: absent
-means the file has not been scanned yet, not zero. The old `GET
-/api/v1/playback/{id}/info` is deprecated for third parties and will be removed in a
-later release; use the probe. For a
+means the file has not been scanned yet, not zero. The old
+`GET /api/v1/playback/{id}/info` has been removed and answers `410 route_retired`;
+use the probe. For a
 **rendition**, the ladder endpoint below returns an estimate per quality
 before anything has been encoded.
 
@@ -50,7 +54,7 @@ GET /api/v1/media/{id}/download
 Authorization: Bearer <token>
 ```
 
-`media:read` scope. Optional `?mediaSourceId=` selects a specific edition; it
+`media:read` scope. Optional `?fileId=` selects a specific edition; it
 defaults to the item's default file. The response is
 `Content-Disposition: attachment` with a filename rebuilt from catalog
 metadata (`Series - S01E19 - Title.mkv`), not the on-disk filename.
@@ -63,7 +67,7 @@ is always **H.264 High 8-bit video in MP4**, whatever the source was: the
 artifact has to decode on the device offline, with no server left to fall back
 to, so it gets the one video combination that plays everywhere. Audio is
 **AAC-LC stereo when the source has an audio track**. A source with no audio
-stream is encoded video-only (`-an`), and its `audio_bitrate` in the ladder
+stream is encoded video-only (`-an`), and its `audioBitrate` in the ladder
 response reports `0` rather than a stereo AAC estimate. HDR sources are
 tone-mapped to SDR during the encode. Renditions are **shared, not per-user**:
 the artifact for a given (file, quality, audio track) is identical no matter
@@ -76,26 +80,33 @@ GET /api/v1/media/{id}/renditions?audioIndex=1
 Authorization: Bearer <token>
 ```
 
+Pass `fileId` to list qualities for a specific version. `audioIndex` is the
+absolute stream index. Omission uses the source's default audio track; a silent source
+produces video-only output. Omission does not mute a source that has audio.
+
 ```jsonc
 {
-  "file_id": "b5e72b98-…", "duration_ms": 300576, "source_height": 1080, "audio_index": 1,
+  "fileId": "b5e72b98-…", "durationMs": 300576, "sourceHeight": 1080, "audioIndex": 1,
   "rungs": [
-    { "id": "1080p", "height": 1080, "estimated_size_bytes": 159425510, "status": "absent" },
-    { "id": "720p",  "height": 720,  "estimated_size_bytes": 100714000, "status": "absent" },
-    { "id": "540p",  "height": 540,  "estimated_size_bytes": 50893528,  "status": "ready",
-      "rendition_id": "4fea7c16-…", "progress_pct": 100, "size_bytes": 50102314 }
+    { "id": "1080p", "label": "1080p", "height": 1080, "videoBitrate": 6000000,
+      "audioBitrate": 192000, "estimatedSizeBytes": 159425510, "status": "absent" },
+    { "id": "720p",  "label": "720p", "height": 720, "videoBitrate": 3800000,
+      "audioBitrate": 192000, "estimatedSizeBytes": 100714000, "status": "absent" },
+    { "id": "540p",  "label": "540p", "height": 540, "videoBitrate": 1800000,
+      "audioBitrate": 192000, "estimatedSizeBytes": 50893528, "status": "ready",
+      "renditionId": "4fea7c16-…", "progressPct": 100, "sizeBytes": 50102314 }
   ]
 }
 ```
 
-- **`estimated_size_bytes`** is bitrate × duration plus container overhead.
+- **`estimatedSizeBytes`** is bitrate × duration plus container overhead.
   It's enough for a picker row reading *"720p · ~1.4 GB"*, within roughly ±10%
   of the finished file. `null` when the source duration is unknown.
 - **`status`** is `absent` until something has been built for that quality;
   after that it mirrors the rendition (`queued` → `encoding` → `ready`, or
   `failed`).
 - The ladder never offers a quality above the source height.
-- **`audio_index`** is the **absolute** stream index, not the display index.
+- **`audioIndex`** is the **absolute** stream index, not the display index.
   It's the same `absoluteIndex` value `POST /api/v1/media/{id}/playability` gives per
   audio track. Renditions are keyed on (file, quality, audio track).
 
@@ -105,12 +116,12 @@ Authorization: Bearer <token>
 POST /api/v1/media/{id}/renditions
 Content-Type: application/json
 
-{ "rung": "720p", "audioIndex": 1 }
+{ "rung": "720p", "fileId": "b5e72b98-…", "audioIndex": 1 }
 ```
 
 ```jsonc
 // 202 Accepted — an encode started, or you joined one already running
-{ "id": "4fea7c16-…", "status": "queued", "progress_pct": 0, "rung_id": "720p" }
+{ "id": "4fea7c16-…", "status": "queued", "progressPct": 0, "rungId": "720p", "audioIndex": 1 }
 ```
 
 `200` means it was already built and is ready to download right now. The call
@@ -124,8 +135,14 @@ retries it.
 GET /api/v1/renditions/{renditionId}
 ```
 
+Automatic series-download candidates advertise `prepareRePostSeconds` on
+`GET /api/v1/series/downloads/candidates`. For that pool workflow, a `queued`
+preparation may need the original rendition POST repeated after that delay; polling
+alone does not restart it. Retain the original request parameters and follow the
+[API reference](/reference/) for the pool contract.
+
 `url` appears only when `status` is `ready`. Don't construct it yourself from
-the id: an encode is only named once complete. On `failed`, `error_code` says
+the id: an encode is only named once complete. On `failed`, `errorCode` says
 why; POST the rendition again to retry.
 
 ```http
@@ -134,7 +151,7 @@ Authorization: Bearer <token>
 ```
 
 Served as an attachment named after the title with the quality appended:
-`Leo the Truck - S01E19 - Roller (360p).mp4`.
+`Example Series - S01E01 - First Episode (360p).mp4`.
 
 ## Resumable transfers
 
@@ -181,9 +198,9 @@ Download) is metered per user. Exceeding it returns **429** with
 `Retry-After`, sized so a person queueing a season by hand never reaches it.
 Unattended, larger sweeps
 (a season or series downloaded in bulk) are instead subject to a per-user
-preparation cap and to global encode-queue backpressure, answering **503**
-with `Retry-After` when the server is saturated. A human tap is always
-admitted; an unattended sweep backs off. Treat both as "come back later," not
+preparation cap when the POST includes `pool` and to global encode-queue backpressure, answering **503**
+with `Retry-After` when the server is saturated. Interactive requests can still hit their rate limit or fail validation. An unattended
+sweep should back off according to the returned response. Treat both as "come back later," not
 as failure.
 
 An operator can also cap bandwidth per response, separately for downloads and

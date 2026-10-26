@@ -19,8 +19,9 @@ not part of `/api/v1`.
 Music uses the same session API as video and audiobooks. You start a track with
 `POST /api/v1/play-sessions`, open the audio URL from the response, and report
 position with `PUT` to `reporting.href`. There is no separate music session.
-The terminal report (`status: "COMPLETED"`) is what records the listen: it
-feeds play counts, listen history, top lists and taste stations. Likes and
+The first positive heard-time report records a play; the terminal report
+(`status: "COMPLETED"`) records completion, duration and skip details for listen
+history, top lists and taste stations. Likes and
 dislikes are separate and explicit. Read [Explicit like and
 dislike](#3-explicit-like-and-dislike) before you decide how your thumbs-up
 button works.
@@ -45,17 +46,16 @@ audio stream:
 curl -X POST https://lumastra.example.com/api/v1/play-sessions \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{ "mediaId": "550e8400-e29b-41d4-a716-446655440000", "deviceId": "my-player-uuid",
-        "audio": { "format": "opus", "bitrate": 160 } }'
+        "audio": { "format": "opus", "bitrateKbps": 160 } }'
 ```
 
 The response is the same envelope as for video (see [Play media from your own
 client](/developers/building-a-player/#play-media-from-your-own-client)):
 `delivery.kind` is `file`, and `delivery.url` is the ready audio URL, already
 carrying a `?grant=` for this one track and session. Music grants last 6 hours.
-Each track gets its own playback session and grant, so for gapless playback
-start the next track a little before the current one ends. Starting a new track on the
-same `deviceId` supersedes the previous session, so a final `COMPLETED` report first is
-good practice.
+Each track gets its own playback session and grant. A normal start on the same
+`deviceId` supersedes the previous session. For overlap, use the prefetch lifecycle
+below rather than starting a second ordinary session.
 
 ```http
 GET <delivery.url>
@@ -68,14 +68,41 @@ Header-less clients (and any player you hand the URL to) need nothing else.
 `api_key` and `stream_token` query parameters are not accepted. With a bearer
 token you can still call `GET /api/v1/music/tracks/{id}/stream` directly.
 
-Optional query parameters:
+The issued `delivery.url` is opaque: do not append or change its query. The following
+parameters apply to a direct bearer-authenticated stream request, not to rewriting a
+session URL. Prefer `audio` options on the start so negotiation and delivery agree.
+`delivery.codec` and `delivery.bitrateKbps` describe the actual output.
+
+Optional query parameters on the direct stream route:
 
 | Param | Meaning |
 |---|---|
 | `format` | Force a transcode target codec instead of the source format |
-| `maxBitRate` | Cap output bitrate (transcoded formats only) |
-| `timeOffset` | Start position for the byte stream (seconds) |
+| `bitrateKbps` | Force an encode at the nearest supported bitrate rung |
+| `maxBitrateKbps` | Output cap in kilobits per second; `0` or omission means uncapped |
+| `startPositionSeconds` | Start position for the byte stream (seconds); forces a transcode |
 ---
+
+### Prepare the next track without replacing the current one
+
+While a track has an admitted `ACTIVE` or `PAUSED` session, start the next track on the
+same user and `deviceId` with `purpose: "prefetch"`. The response has its own granted
+audio URL. Allocation and fetching count no listen, reserve no stream slot, and remain
+hidden until promotion. There is at most one unpromoted prefetch per device; a new one
+replaces it.
+
+The first `ACTIVE` report, or a report with positive position/heard time, promotes it
+with normal stream/IP/method admission. Do not report `ACTIVE` merely to keep a buffer
+alive. Promotion can return a structured `422` refusal such as `stream_limit`.
+`422 prefetch_requires_current_session` at allocation means there is no eligible
+current session; fall back to a normal start. A same-device normal start can also
+promote the prepared track.
+
+An unpromoted prefetch expires after 10 minutes or immediately when the current session
+ends, completes, is killed or reaped. Promote while the current session is still live;
+then send the outgoing track's final report. If preparation or promotion fails, discard
+the prepared handle and use a normal start when ready to play. See the
+[API reference](/reference/) for the complete refusal shape.
 
 ## 2. Report progress
 
@@ -96,7 +123,7 @@ fields:
 
 | Field | Meaning |
 |---|---|
-| `listenedMs` | Audio actually heard since the session began. Defaults to `sessionElapsedMs` |
+| `listenedTotalMs` | Cumulative audio actually heard in this session, excluding pauses, buffering and seeks. Omitted uses `sessionElapsedMs` |
 | `endReason` | On `COMPLETED`: `completion` for a track that played out, `skip` for a user skip. A skip is recorded as a skip |
 | `nextMediaId` | Set-only hint: the track that plays next. `COMPLETED` clears it |
 | `crossfade` | `otherTrackId`, `role` (`incoming` or `outgoing`), `remainingMs` and `durationMs`. Omit it to keep the current fade, send `null` to clear it. `PAUSED` and `COMPLETED` clear it |
@@ -104,9 +131,10 @@ fields:
 Send a report every `reporting.intervalMs` (about 10 seconds) while `ACTIVE`, and on
 pause, resume and seek. When the track ends, send `status: "COMPLETED"` with an
 `endReason`. That closes the session (`204`). For page or app teardown, use
-`POST {reporting.href}/beacon` with the same body (it works with `navigator.sendBeacon`).
-To terminate a session at once, call `POST /api/v1/play-sessions/{playbackSessionId}/cancel`.
-There is no `DELETE /api/v1/play-sessions/{playbackSessionId}`.
+`POST {reporting.href}/beacon` with the same body and account authentication.
+`navigator.sendBeacon` can use browser cookies but cannot attach a bearer header;
+bearer-only clients need an authenticated POST.
+To terminate a session at once, call `DELETE /api/v1/play-sessions/{playbackSessionId}`.
 
 Ownership is enforced: another user's session id answers `404`. Reporting never needs the
 playback grant.
@@ -118,9 +146,9 @@ playback grant.
 Taste signals are explicit and separate from progress. Reports and skips never change them:
 
 ```http
-PUT    /api/v1/user/music/tracks/{id}/feedback   { "feedback": "liked" }      → 204
-PUT    /api/v1/user/music/tracks/{id}/feedback   { "feedback": "disliked" }   → 204
-DELETE /api/v1/user/music/tracks/{id}/feedback                                → 204
+PUT    /api/v1/me/music/tracks/{id}/feedback   { "feedback": "liked" }      → 204
+PUT    /api/v1/me/music/tracks/{id}/feedback   { "feedback": "disliked" }   → 204
+DELETE /api/v1/me/music/tracks/{id}/feedback                                → 204
 ```
 
 `feedback` is `liked` or `disliked`. `DELETE` clears the feedback in either direction and
@@ -132,9 +160,10 @@ dislike, and a finished track never turns into a like.
 
 ## 4. Play counting and offline listens
 
-There is no separate play-count call. The first accepted report of a session counts the
-start once, and the terminal `COMPLETED` report records the listen (duration, completion
-or skip). A retried terminal report never counts twice.
+There is no separate play-count call. A play counts when the server receives the first
+report with positive heard time. Allocating a session, prefetching, downloading or
+cancelling before any audio is heard counts zero. The terminal `COMPLETED` report records
+the listen (duration, completion or skip). Retries are deduplicated.
 
 Listens that finished without a live session (offline playback) are sent later in one
 batch:
@@ -146,8 +175,8 @@ POST /api/v1/play-sessions/replay
 with up to 100 `items[]`. Each item needs `eventId` (a UUID you mint when the play
 starts and keep for every retry), `kind: "music"`, `mediaId`, `startedAt`, `positionMs`,
 `listenedMs` and `endReason`; `endedAt`, `durationMs`, `playContext` and `startReported`
-(default `false`) are optional. Send `startReported: false` when the start never reached
-the server, so the play is counted at the end. Starts may be at most 90 days old or 5
+are optional. `startReported` is advisory; the server deduplicates by `eventId` and counts
+heard time according to the play-report rules above. Starts may be at most 90 days old or 5
 minutes in the future. Each result is `recorded`, `duplicate` or `rejected`, with an open
 `reason` string and a `retryable` flag. Keep the event queued while `retryable` is `true`,
 and drop it only on a terminal result. A retried `eventId` is a `duplicate` and never
@@ -233,8 +262,6 @@ operate on the same session row. You can, for example, start with
 
 ---
 
----
-
 ## Putting it together
 
 **Native `/api/v1`:**
@@ -246,7 +273,7 @@ GET  <delivery.url>                                  → play the audio
 PUT  <reporting.href>   { positionMs, status: "ACTIVE", eventSeq, sessionElapsedMs }   (every ~10 s)
 PUT  <reporting.href>   { positionMs, status: "COMPLETED", endReason, eventSeq, sessionElapsedMs }
 
-PUT  /api/v1/user/music/tracks/{id}/feedback         (explicit like or dislike)
+PUT  /api/v1/me/music/tracks/{id}/feedback         (explicit like or dislike)
 POST /api/v1/play-sessions/replay                    (offline listens, later)
 ```
 
@@ -254,9 +281,9 @@ POST /api/v1/play-sessions/replay                    (offline listens, later)
 
 ```text
 GET /rest/stream.view?id=…
-GET /rest/reportPlayback.view?mediaId=…&positionMs=0&state=starting
-GET /rest/reportPlayback.view?mediaId=…&positionMs=…&state=playing     (periodically)
-GET /rest/reportPlayback.view?mediaId=…&positionMs=…&state=stopped
+GET /rest/reportPlayback.view?mediaId=…&mediaType=music&positionMs=0&state=starting
+GET /rest/reportPlayback.view?mediaId=…&mediaType=music&positionMs=…&state=playing     (periodically)
+GET /rest/reportPlayback.view?mediaId=…&mediaType=music&positionMs=…&state=stopped
 ```
 
 ---
@@ -288,13 +315,13 @@ Send `crossfade: false` if your player hard-cuts.
 An optional `seed` biases the radio: `{ "type": "mood", "mood": "chill" }` (keys from
 `GET /api/v1/music/moods`), or a genre, artist or album seed. A mood seed without a playing track is a
 cold start: `next` is the first track of that mood radio. Explicit likes go to
-`PUT /api/v1/user/music/tracks/{id}/feedback`; skips never change them.
+`PUT /api/v1/me/music/tracks/{id}/feedback`; skips never change them.
 
 **Show a music home.** Every row is one call and every item carries `images.primary.href`:
-recently played (`GET /api/v1/user/music/recently-played`), top artists
-(`GET /api/v1/user/music/top-artists`), taste stations (`GET /api/v1/user/music/taste-stations`, then
+recently played (`GET /api/v1/me/music/recently-played`), top artists
+(`GET /api/v1/me/music/top-artists`), taste stations (`GET /api/v1/me/music/taste-stations`, then
 `…/{id}/tracks`; a station id may be stored and answers `410` once it expired), sonic mixes
-(`GET /api/v1/music/clusters`, then `…/{id}/tracks`, when `/server` reports
+(`GET /api/v1/music/sonic-mixes`, then `…/{id}/tracks`, when `/server` reports
 `capabilities.music.sonicMixes`), and "more like this" on any track, album or artist
 (`GET /api/v1/music/{tracks|albums|artists}/{id}/similar`).
 
