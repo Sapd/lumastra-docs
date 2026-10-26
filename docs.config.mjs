@@ -83,6 +83,7 @@ export const sidebar = [
 					{ slug: 'guides/task-troubleshooting' },
 					{ slug: 'guides/debugging-with-ai' },
 					{ slug: 'guides/library-troubleshooting' },
+					{ slug: 'guides/multipart-episodes' },
 					{ slug: 'guides/homepage-dashboard' },
 					{ slug: 'guides/licensing' },
 				],
