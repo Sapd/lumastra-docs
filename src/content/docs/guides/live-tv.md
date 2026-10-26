@@ -93,6 +93,29 @@ connection limits are still reported. This helps with temporary delivery interru
 it cannot restore missing video, repair corrupt timestamps, or guarantee uninterrupted
 playback when the source itself fails.
 
+## Monitor an active stream
+
+Open **Admin → Users → Sessions** and expand **Stream diagnostics** beneath an active
+Live TV channel. The channel logo appears beside its name when artwork is available.
+
+The diagnostics show the source codecs and resolution, whether FFmpeg copies or
+transcodes each track, failover attempts, and when the latest complete ingest segment
+arrived. Retained video is the sum of segment durations currently held by the relay;
+the viewer's own buffer and bandwidth are shown separately in their playback session.
+
+Video timestamp observations help investigate freezes even when FFmpeg is running.
+Forward jumps greater than one second are counted, with the largest jump and the time
+of the latest observation. Backward jumps and signalled discontinuities are counted as
+clock resets. The scan uses video PES decode timestamps (DTS), falling back to
+presentation timestamps (PTS), in the ingest MPEG-TS output. It does not decode video
+or inspect every viewer's output.
+
+Counters start again when the ingest FFmpeg process restarts. **Not measured yet** means
+no usable measurement is available, including when an older proxy does not supply the
+new diagnostics. A timestamp jump can indicate missing video, but zero jumps or a
+healthy FFmpeg process alone cannot guarantee smooth playback. Deploy the updated app
+and stream proxy together to get all measurements.
+
 ## Add a source
 
 Open **`/admin/settings/livetv`** (Sources tab) and choose **Add Source**, then pick a
