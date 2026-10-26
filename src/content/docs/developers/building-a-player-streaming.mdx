@@ -12,8 +12,9 @@ video is on screen."
 
 ## 1. Start playback and get a grant
 
-A device JWT expires in ~1 h, and AVPlayer/ExoPlayer cannot inject headers into
-HLS segment requests. Start playback with `POST /api/v1/play-sessions` instead. The
+An API access token may expire while a stream is playing, and media pipelines can
+fetch nested resources without your API headers. Start playback with
+`POST /api/v1/play-sessions`. The
 response carries ready-to-open URLs, each with a scoped `grant` already attached:
 
 ```bash
@@ -45,13 +46,15 @@ scope and is limited to 60 requests per minute per user.
   "grant": { "id": "uuid", "token": "…", "param": "grant", "mediaId": "550e8400-…",
              "playbackSessionId": "uuid", "kind": "video", "ipPinned": true,
              "expiresAt": "…", "renewAfter": "…", "renewHref": "/api/v1/playback/grants/{id}/renew" },
-  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "kind": "progress", "method": "PUT", "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
 Every URL in `delivery` (the HLS manifest or file, subtitles, timeline, previews) is
-ready to use and already carries `?grant=`. Don't append your account token or build
-media URLs yourself. The server never puts your account credential into a URL.
+ready to use and already carries `?grant=`. Resolve relative URLs against the
+configured server origin, preserving path and query. Send bearer headers only to your
+configured API origin; never forward them to an arbitrary delivery host. Don't append
+your account token or build media URLs yourself. The server never puts your account credential into a URL.
 
 A **grant** belongs to one item and one playback session, and works only on media URLs,
 never on JSON API calls. The first grant lasts the full limit for its kind: 24 hours for
@@ -62,8 +65,8 @@ headers.
 By default a grant is pinned to the IP address that started the session
 (`grant.ipPinned`). To hand the URL to a cast or AirPlay receiver on another address,
 send `"castTarget": true` in the start request. The server then mints an unpinned grant
-if the operator's policy allows it. Unpinned grants last at most 6 hours, renewals
-included.
+if the operator's policy allows it. Each unpinned grant issuance or renewal extends
+at most 6 hours from that request, within the overall lifetime limit.
 
 **Renewal is optional.** A client that can send headers renews before `grant.renewAfter`:
 
@@ -73,14 +76,15 @@ curl -X POST https://lumastra.example.com{grant.renewHref} \
   -d '{"token":"<grant.token>"}'
 ```
 
-The response is the grant object with the extended expiry. Renewal rechecks the user's
+The response is the grant object with the extended expiry. The grant token stays the
+same, so already-issued media URLs keep working. Renewal rechecks the user's
 access to the item, allows 30 requests per minute per user, and never shortens expiry.
 No grant lives longer than 7 days after its first start. `GET` and `DELETE` on
 `/api/v1/playback/grants/{id}` read and revoke a grant by its `id`; the secret is never
 part of that path.
 
 A grant ends with its playback session. Ending the session with `PUT` `status: "COMPLETED"`
-or `POST …/cancel`, a newer start on the same device, or reaping makes every URL on that
+or `DELETE /api/v1/play-sessions/{id}`, a newer start on the same device, or reaping makes every URL on that
 grant answer `401 invalid_grant` with `reason: session_ended`. Start a new session to
 play again.
 
@@ -101,16 +105,21 @@ Open `delivery.url` exactly as the start returned it. For a file, `delivery.kind
 Stream URLs are **opaque**: their shape depends on how the server serves the stream (a
 source copy, an adaptive ladder, a capped rung, a transcode job) and changes between
 releases without notice. Never build a stream URL from an id, never parse or rewrite
-one, and never rely on a path segment. The quality caps `maxBitrate`, `maxHeight` and
+one, and never rely on a path segment. The quality caps `maxVideoBitrateBps`, `maxHeight` and
 `maxAudioChannels` are pre-filled into the returned URL by the start call.
 
 To start on a given audio or subtitle track, send `audioStreamIndex` (absolute index)
-and `subtitleStreamIndex` (a track's `index`) in the `POST /play-sessions` body; the
+and `subtitleId` (the stable id from `delivery.subtitles[]`, or `"none"` to disable
+subtitles) in the `POST /play-sessions` body; the
 returned `delivery.url` already reflects the choice. Mid-play audio switching uses the
-per-track audio renditions listed in the master playlist: in a `demux` session
-(`delivery.hlsAudioMode`) tracks switch without a restart. Declare
-`capabilities.hlsCopyReload` when your player can reload muxed copy HLS in place on an
-audio switch. Subtitles come from `delivery.subtitles[]` (§4).
+HLS renditions only when `delivery.hlsAudioMode` is `demux`. A `muxed` stream carries
+its audio in the video segments; changing audio requires a reload. Declare
+`capabilities.hlsCopyReload: true` only if your player implements that reload behavior.
+A fresh start with the chosen track and the current position is the portable way to
+change a selection that needs a new server plan. It supersedes the old session on that
+device; use the new URLs and reporting ID. Read `delivery.applied` for the actual
+selection, since a stale audio index may fall back to the default. Subtitles come from
+`delivery.subtitles[]` (§4). Multipart groups currently have no general track switching.
 
 :::note[One session id]
 The `PlaySessionId` on the HLS URL is the `playbackSessionId` the start returned. Use
@@ -118,10 +127,11 @@ that one id for the stream, for progress reports (`reporting.href`) and for tele
 You never generate it yourself. Ending the session frees its stream slot.
 :::
 
-The manifest URL returns an HLS master playlist with per-audio-track
-`#EXT-X-MEDIA` renditions, video `#EXT-X-STREAM-INF` (with `VIDEO-RANGE=PQ` for
-HDR output), WebVTT subtitle tracks, an I-frame playlist for tvOS scrubbing, and
-a trickplay image stream for Roku. Every segment URL already carries the `grant`.
+An HLS master lists the renditions available for that session. Demux audio uses
+`#EXT-X-MEDIA`; video uses `#EXT-X-STREAM-INF`. Subtitles, I-frame and image playlists
+appear only when available. Check `outputHdr` for delivered HDR and `transcodeCodec`
+for the full-transcode target instead of inferring them from the source file. Every
+segment URL already carries the `grant`.
 
 ```javascript
 // HLS.js (browser)
@@ -133,11 +143,18 @@ hls.attachMedia(videoElement);
 
 ## 3. Seeking & errors
 
-The manifest is a full **VOD playlist**, so you can seek freely within the
-timeline. A forward seek of less than ~90 s waits for the transcoder to catch
-up; beyond that (or any backward seek) the server kills and restarts it at the
-new position. A segment that has aged out of the rewind window returns
-`410 Gone`. Reload the manifest from the current position on that response.
+Video HLS presents a **VOD timeline**. Seek using your player's normal time API; the
+server decides whether cached segments can satisfy the request or encoding must restart.
+A backward seek does not always restart encoding. Do not construct a new URL with a
+seek offset or translate segment numbers yourself. On a stale/evicted segment (`410`),
+reload the issued manifest and restore the intended position. On `401 invalid_grant`,
+inspect the grant failure before attempting a reload.
+
+For a file or HLS video delivery, honor `delivery.seek.clientShouldSeek` and seek to
+`delivery.startPositionMs`. A combined multi-episode file uses the full file clock,
+including its entry offset; a multipart episode uses the aggregate episode clock.
+[Resume an episode](/developers/building-a-player/#resume-an-episode) explains the
+difference. Never restart the clock at a part boundary.
 
 | Operation | Timeout |
 |---|---|
@@ -165,20 +182,23 @@ and wait until the cooldown elapses before retrying.
 on the start request and on progress reports). Mixing it up with the
 display-only `index` is the classic "wrong audio language" bug.
 
-**Subtitles: select by `index`.** The start response lists every track in
+**Subtitles: select by stable `id`.** Do not persist a sidecar's synthetic `index`,
+which can change when sidecars are added. Playability distinguishes `ass` in its
+track format; delivery descriptors classify it as `text`. The start response lists tracks in
 `delivery.subtitles[]`:
 
 ```jsonc
 {
-  "id": "uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440001:3",
   "index": 3,
-  "kind": "external",              // embedded | external
+  "kind": "embedded",              // embedded | external
   "codec": "srt",
   "language": "eng",
   "title": "English (SDH)",        // optional
   "default": false,
   "forced": false,
   "format": "text",                // text | bitmap
+  "method": "external_vtt",        // external_vtt | client_render | burn_in | none
   "hrefs": {
     "text": "/api/v1/playback/550e8400-…/subtitles/3?grant=…"
   }
@@ -190,16 +210,19 @@ display-only `index` is the classic "wrong audio language" bug.
   Bitmap sidecar files have no hrefs.
 - Every href is an `/api/v1` URL that already carries `?grant=`, so it works for
   header-less players and for bearer clients alike.
-- Pass `index` back as `subtitleStreamIndex` in the start request to select or burn in
-  a track. Tracks you cannot render are burned in.
-- `delivery.recommended` gives `audioStreamIndex` and `subtitleStreamIndex` from the
+- Pass `id` back as `subtitleId` in the start request to select or burn in a track.
+  Send `"none"` to disable subtitles. Inspect `method`: `external_vtt` supplies text,
+  `client_render` requires your renderer, `burn_in` is already encoded into the video,
+  and `none` cannot be selected. Unsupported sidecars are not automatically burned in.
+- `delivery.recommended` gives `audioStreamIndex` and `subtitleId` from the
   user's language preferences. It is absent when the server has no opinion. The
   `default` and `forced` flags on each track are the file's own.
 
 ### Bitmap subtitles (PGS / VobSub)
 
 Blu-ray (PGS) and DVD (VobSub) subtitles are pictures, not text. Use `hrefs.rendered`
-for pre-rendered images, which need no client decoder. Or fetch `hrefs.raw` and decode
+for pre-rendered images, which still require an overlay renderer in your client. Or
+fetch `hrefs.raw` and decode
 the bitmaps yourself, for example with `libpgs-js`. Burn-in forces a full transcode. The
 first request for a track is slow (a minute or two on a two-hour remux, since nothing is
 pre-rendered); afterwards it is served in well under a second and kept long-term. DVBSub
@@ -221,9 +244,10 @@ never moves the resume position.
 # Create — mediaId is the only required field
 curl -X POST https://lumastra.example.com/api/v1/playback/previews \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{ "mediaId": "0f8b…" }'
-# → 201 { "id": "…", "streamUrl": "…/index.m3u8", "hlsStartPosition": 0 }
+# → 201 { "id": "…", "streamUrl": "…/index.m3u8", "hlsStartPosition": 0,
+#        "reporting": { "kind": "keepalive", "method": "POST", "href": "…", "intervalMs": 10000 } }
 
-curl -X PATCH .../api/v1/playback/previews/{id}   # keep alive, every ~10 s while focused → 204
+curl -X POST <reporting.href> -H "Authorization: Bearer $TOKEN"  # every reporting.intervalMs → 204
 curl -X DELETE .../api/v1/playback/previews/{id}  # release the moment focus moves away → 204
 ```
 
@@ -246,7 +270,7 @@ and re-creating it re-downloads bytes the device already has.
 | Limit | Default | Behaviour |
 |---|---|---|
 | Concurrent previews per user | 6 | Creating one more evicts the coldest |
-| Heartbeat timeout | 30 s | No `PATCH` → reaped |
+| Heartbeat timeout | 30 s | No keepalive `POST` → reaped |
 | Absolute session TTL | 5 min | Reaped regardless of heartbeats |
 | Clip length | 60 s | Server-capped |
 
@@ -303,6 +327,10 @@ carries:
 - `segments[]`: `type` is `intro`, `outro`, `recap`, `preview` or `commercial`, with
   `startMs` and `endMs`.
 - `trickplay`: `state` and `variants[]` (`width`, `manifestHref`).
+
+The timeline link is optional. Multipart video currently omits it and provides no
+part-local chapters, subtitles or trickplay. Do not fetch the first part's timeline as
+a substitute.
 
 All times are integer **milliseconds** on the selected file's clock. `trickplay.state` is
 `ready`, `pending` (`variants` is empty; ask again later), `unavailable` (retry later) or

@@ -20,7 +20,7 @@ authoritative record of resume position. The start response names it in
 `reporting`:
 
 ```jsonc
-"reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+"reporting": { "kind": "progress", "method": "PUT", "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 ```
 
 `playbackSessionId` is the one id for this play. It is also the `PlaySessionId` on
@@ -36,13 +36,16 @@ curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId
   -d '{ "positionMs": 2760000, "status": "ACTIVE", "eventSeq": 7, "sessionElapsedMs": 120000, "bufferHealthMs": 12000 }'
 ```
 
-- **`positionMs`** is the playback position in milliseconds.
+- **`positionMs`** is the playback position in milliseconds on the selected delivery
+  clock: whole-file time for combined episodes, aggregate time for multipart video,
+  and whole-book time for audiobooks. Never reset it at a part boundary.
 - **`sessionElapsedMs`** is required: cumulative milliseconds actually played since the
   session started, excluding pauses, seeks and buffering.
 - **`eventSeq`** is required: a per-session, monotonically increasing integer starting at
   1. A stale sequence number is acknowledged and ignored, so retries are safe.
 - **`status`:** `ACTIVE` | `PAUSED` | `COMPLETED`. `COMPLETED` ends the session (`204`).
-  Add `endReason` to it: `completion` | `skip` | `user` | `unload` | `error` | `switch`.
+  A terminal outcome can instead return `200`; inspect its body. Add `endReason`:
+  `completion` | `skip` | `user` | `unload` | `error` | `switch`.
 - Optional fields include `audioStreamIndex`, `subtitleStreamIndex`, `bitrateBps`,
   `resolution`, `playMethod`, `audioLanguage`, `subtitleLanguage`, `subtitleMethod`,
   `bufferHealthMs` and `adaptive`.
@@ -53,7 +56,14 @@ timestamp (ISO 8601, or `null`) to advance your resume cache with. `superseded: 
 means another device's session now owns this item's watch state: playback continues, but
 progress no longer persists, so surface a one-time notice. `action: "kill"` means the
 server terminated this session, so stop playback. Ignore `transcode` if you do not show
-progress.
+progress. `sessionLost: true` means the session can no longer accept this report; stop
+using that reporting ID and create a fresh session for a new playback attempt.
+
+`progressSaved: false` also occurs before the engagement gate opens: moving the
+playhead alone does not prove the viewer watched. Keep reporting honest cumulative
+`sessionElapsedMs`; do not fabricate it from the resume position or seek distance.
+Use `resumeAnchorAt` only when non-null, and never replace a newer cached anchor with
+an older acknowledgement.
 
 :::note[Multi-device ownership: newest session wins]
 If a user resumes on a second device while the first is still paused, the new
@@ -65,12 +75,15 @@ device reclaims ownership.
 ### Ending a session
 
 Send a `PUT` with `status: "COMPLETED"` and an `endReason` for a normal end (`204`).
-Use `POST /api/v1/play-sessions/{id}/cancel` to terminate a session at once and free its
-stream slot. There is no `DELETE /api/v1/play-sessions/{id}`.
+Use `DELETE /api/v1/play-sessions/{id}` to terminate a session at once and free its
+stream slot.
 
 On page or app teardown, where you cannot issue a `PUT`, use
 `POST /api/v1/play-sessions/{id}/beacon`. It takes the same body and works with
-`navigator.sendBeacon`.
+`navigator.sendBeacon` when a browser session cookie authenticates the request.
+A bearer-only client must use an authenticated POST (for example `fetch` with
+`keepalive: true` in a browser); `sendBeacon` cannot set an Authorization header.
+Serialize reports per session so a delayed older request cannot overtake the final one.
 
 Each play session has its own SSE channel (`GET /api/v1/play-sessions/{id}/events`,
 owner only) for `kill`, `session_terminated`, `admin_message`, and maintenance frames.
@@ -93,18 +106,19 @@ retrying a `404`: open a fresh session instead.
 
 ## 2. Watch state
 
-`GET/PUT /api/v1/watch-state/{id}` is the unified per-user watch state node:
-watched/unwatched, resume position, favorites, and rating in one call.
+`GET/PATCH /api/v1/watch-state/{id}` is the unified per-user watch state node:
+watched/unwatched, resume position and favorites. Ratings use the separate
+`/api/v1/media/{id}/rating` resource.
 
 ```bash
 curl https://lumastra.example.com/api/v1/watch-state/550e8400-… -H "Authorization: Bearer <token>"
 # → { "watched": false, "positionMs": 2760000, "resumeAnchor": "…", "favorite": false, "rating": null }
 
-curl -X PUT .../api/v1/watch-state/550e8400-… -d '{"watched": true, "rating": 8}'
+curl -X PATCH .../api/v1/watch-state/550e8400-… -d '{"watched": true, "favorite": true}'
 ```
 
 :::caution[`position` is read-only here]
-`PUT /watch-state/{id}` accepts `watched`, `favorite`, and `rating` only. During
+`PATCH /watch-state/{id}` accepts `watched` and `favorite` only. During
 live playback, position is set by the play-session heartbeats above. For a
 bookkeeping write with no live playback behind it, use
 [offline playback sync](#4-offline-playback-sync) instead of opening a session
@@ -121,20 +135,22 @@ Watching.
 quality-of-experience metrics for the admin dashboard only; nothing here
 affects resume position. Include the `playbackSessionId`. Batch events
 (`bandwidth_estimate`, `rebuffer_event`, `quality_switch`, `delivery_window`, …) and send
-them every 10–30 s, max 100 per request, with `navigator.sendBeacon()` on unload.
+them every 10–30 s, max 100 per request. Account authentication is required on unload
+too; use a cookie-authenticated beacon or a bearer-authenticated POST.
 
 **Active sessions**: `GET /api/v1/play-sessions?scope=mine|all` lists currently
 active play sessions, useful for "already playing on another device" UX. `scope=all`
 requires an administrator.
 
-**Incidents**: `POST /api/v1/playback/incidents` is a higher-detail,
-one-report-per-event surface (an error, a reconnect, a session ending
-unrecoverably), each carrying a short lead-up `timeline[]` so an admin can
-reconstruct what happened. Key fields: `attemptId` (stable across a reconnect,
-unlike `playSessionId`, which rotates), `triggerType` (`error`/`reconnect`/`terminal`),
-and `stage` (`manifest`/`init-segment`/`media-segment`/`unknown`). Rate-limited
-to 20/minute per user. `PATCH /api/v1/playback/incidents { attemptId }`
-resolves every unresolved incident for that attempt once it self-heals.
+**Incidents** are sent as `playback_incident` events in batches to
+`POST /api/v1/diagnostics/events`; each event can carry a short lead-up
+`timeline[]` so an admin can reconstruct what happened. Key fields include
+`attemptId` (stable across a reconnect, unlike `playbackSessionId`, which
+rotates), `triggerType` (`error`/`reconnect`/`terminal`) and `stage`
+(`manifest`/`init-segment`/`media-segment`/`unknown`). Resolve an attempt with
+`PATCH /api/v1/diagnostics/events/resolve` and `{ "attemptId": "…" }`.
+These endpoints share a limit of 60 requests per minute per user; see
+[Client diagnostics](/developers/client-diagnostics/) for the batch contract.
 
 ## 4. Offline playback sync
 
@@ -179,6 +195,9 @@ needed.
 | `too_old` | `false` | `endedAt` is past the 90-day acceptance window. |
 | `too_far_future` | `true` | `endedAt` is more than 5 minutes ahead of server time; succeeds once server time catches up. |
 | `write_failed` | `true` | A server-side write failed and rolled back. Nothing was stored. |
+| `not_found` | `false` | The item is gone or inaccessible to this user. |
+| `unsupported_media_type` | `false` | This endpoint cannot record that kind, including music tracks. |
+| `not_processed` | `true` | No terminal result was produced; retain the record and retry. |
 
 | Limit | Value |
 |---|---|
@@ -239,7 +258,7 @@ returns `404 not_found` when no next episode is available.
 ### Next-episode prompt
 
 Show the next-episode card from two playback preferences, read from
-`GET /api/v1/user/playback-preferences`.
+`GET /api/v1/me/playback-preferences`.
 
 - `nextEpisodePromptLeadSeconds` (−60 to 120) is the number of seconds before
   the start of the credits, which is the `Outro` media segment. A negative value

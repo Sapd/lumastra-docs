@@ -22,7 +22,8 @@ Lumastra's own native apps use.
 The single source of truth for exact request/response shapes is the interactive
 [**API reference**](/reference/) (vendored from the app's OpenAPI spec). Target
 endpoints marked `x-stability: stable`. The field lists below name the ones a
-player needs; treat the spec as authoritative for the rest.
+player needs. An instance's own `/api-docs?format=yaml` describes its installed release;
+check it when the hosted reference and an older server differ.
 
 ## The model in one paragraph
 
@@ -48,7 +49,9 @@ the keyboard-free TV flow. The full handshake is documented in
 4. Send `Authorization: Bearer <token>` on every `/api/v1/*` request.
 
 For headless or server integrations, use a **personal access token (PAT)**
-(`pat_…`) instead. Create it in the Lumastra UI or with `POST /api/v1/user/pats`.
+(`pat_…`) instead. Create it in the Lumastra UI or with an interactive browser session
+at `POST /api/v1/me/pats`. Choose the `write` scope alias for playback. A read-only
+PAT or `media:read` device token can probe but cannot start or report playback.
 
 Requires `FEATURE_DEVICE_AUTH` (on by default) and `JWT_SECRET` on the server; your reverse
 proxy must let `/oauth/*` and `/api/v1/*` bypass forward-auth middleware.
@@ -72,28 +75,29 @@ curl -X POST https://lumastra.example.com/oauth/token \
 ```
 
 :::caution[Refresh token rotation]
-Each successful refresh returns a **new** `refresh_token`. Store it before you make
-any other call. Presenting a refresh token that was already rotated is treated as a
-theft signal: the whole device session is revoked and the user must authorize again.
+Persist the `refresh_token` returned by every successful refresh. Share one in-flight
+refresh among concurrent API requests. Current servers allow recovery from a lost
+refresh response: the predecessor remains usable until its successor is used, and a
+short replay window can return the same replacement. Do not rely on that recovery as
+normal token storage. A terminal `invalid_grant` on refresh requires reauthorization.
 :::
 
 ### Conventions that apply everywhere
 
 | Convention | Rule |
 |---|---|
-| IDs | `id` is an opaque handle: pass it back as `{id}` and never parse it. `catalogId` is the library row UUID, or `null` for titles outside your library. Every `{id}` also accepts an external handle such as `tmdb:653:movie`; `GET /media/{id}` also takes it as `?externalId=tmdb:653:movie`. |
+| IDs | `id` is an opaque handle: pass it back as `{id}` and never parse it. `catalogId` is the library row UUID, or `null` for titles outside your library. Catalog detail can resolve external handles such as `tmdb:653:movie`. Playback start requires a library UUID in `mediaId`; playability requires that UUID in its path. Do not assume every route resolves external handles. |
 | Media type | Canonical discriminator is `type`, a closed enum: `movie \| series \| season \| episode \| track \| album \| artist \| audiobook`. Ignore or filter types your client does not render. Legacy `tv`/`show` are retired. |
-| Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. `total` is returned only with `?includeTotal=true`. Limit-only lists return `truncated` instead of `hasMore`. Cursor-based endpoints replace `offset` with `cursor`. |
+| Pagination | Collections return `{ items, page }`, `page = { limit, offset, hasMore, total? }`. `total` is returned only with `?includeTotal=true`. Limit-only lists return `truncated` instead of `hasMore`. Cursor-based endpoints return `page.nextCursor`; send it back as the `cursor` query parameter. |
 | Images | Read `images.<role>.href` from the item, or pick a size from `variants` (`thumb`, `card`, `hd`, `wide`, `full`). Never build an image URL. |
-| Errors | Resource errors use `application/problem+json`; HLS startup has a JSON exception documented in [Streaming](/developers/building-a-player-streaming/). Switch on `code` for problem responses. |
+| Errors | Resource errors, including HLS startup failures, use `application/problem+json`. Switch on `code`, then any documented `reason`. |
 | Header-less players | Use the `delivery` URLs from `POST /play-sessions`: each carries a `?grant=` for that one item and session. The server does not accept `api_key` or `stream_token` query parameters. |
-| Time units | Milliseconds everywhere: `positionMs`, `durationMs`, `startPositionMs`, and `/api/v1/playback/{id}/timeline`. |
+| Time units | Fields ending in `Ms` use milliseconds. Some specialized routes use explicitly named seconds fields; Watch Together positions use seconds. |
 
 ## Errors
 
-Resource errors from `/api/v1/*` are `application/problem+json`, including bearer and grant
-failures (the one exception is the HLS startup JSON in
-[Streaming](/developers/building-a-player-streaming/)):
+Resource errors from `/api/v1/*` are `application/problem+json`, including bearer, grant
+and HLS startup failures:
 
 ```jsonc
 // 422 response body
@@ -111,14 +115,21 @@ The `code`s a player branches on:
 
 - `unauthorized` or `invalid_token` (401): sign in again.
 - `invalid_grant` (401): the playback grant cannot be used. `reason` says why.
-  `session_ended` means the session finished; start a new session.
+  `session_ended` means the session finished; start a new session. An expired or
+  revoked grant also needs a fresh start; renewal must happen before expiry.
+- `gone` (410) with `reason: session_restarted`: the old media binding did not survive
+  a server restart. Start a fresh session at the current position; do not retry its URL.
 - `forbidden` (403): a grant used on a URL that is not one of its media URLs answers
   `reason: wrong_scope`.
 - `ip_mismatch` (403): the grant is pinned to another network address. Start the
   session with `castTarget: true` for a receiver on another network.
 - `not_found` (404): also what a disabled feature returns, not `403`.
-- `dependency_unavailable` (503): always sent with `Retry-After`. Never a `200` with an
-  empty array.
+- `validation_failed` (422): correct the request fields before retrying.
+- `stream_limit`, `transcode_not_allowed`, `source_incompatible`, `ip_restricted` or
+  `plugin_denied` (422) on a start: show the structured playback refusal. Its `details`
+  is an object; validation errors instead carry a list of field issues.
+- `rate_limited` (429) or `dependency_unavailable` (503): back off and honor
+  `Retry-After` when present. A probe does not reserve a stream slot.
 
 See [API & tokens → Errors](/developers/api/#errors-applicationproblemjson) for the full
 closed taxonomy.
@@ -149,6 +160,7 @@ curl https://lumastra.example.com/api/v1/server \
   "capabilities": {
     "playback": { "direct": true, "remux": true, "transcode": true },
     "liveTv": { "available": true },
+    "audiobooks": { "available": false },
     "music": { "available": true, "clustering": false, "sonicSimilarity": false, "sonicMixes": false },
     "features": { "watchTogether": true, "videoPreviews": true, "topShelfPreviews": false,
                   "mediaDownload": false, "downloadRenditions": false },
@@ -224,7 +236,8 @@ A series node additionally embeds traversal links (`seasons`, `episodes`, `nextE
 
 `POST /api/v1/media/{id}/playability` answers "what would a start decide?" without
 starting anything: no session, no grant, no transcode, no watch history. Send the same
-optional `capabilities` as a start, and an optional `fileId` to probe one version. Each
+optional `capabilities` as a start, and an optional `fileId` or `versionId` to probe one
+version (see multipart support below). Each
 entry in `versions[]` carries `playable` and `blockedBy`, the `playMethod` a start would
 choose for your capabilities, the tracks, and `sizeBytes` (on-disk size; absent means
 unknown, not zero) — enough for a version picker, a track picker, a "this will
@@ -235,29 +248,121 @@ and age checks as a start. It is for movies, episodes and videos; music, audiobo
 Live TV and series answer `422`.
 
 Then start with the pick: `POST /api/v1/play-sessions` with `fileId`, `audioStreamIndex`
-(an audio track's `absoluteIndex`) and `subtitleStreamIndex` (a subtitle track's
-`index`). The start response carries the tracks, the subtitles and the resume point.
+(an audio track's `absoluteIndex`) and `subtitleId` (the selected subtitle's stable
+`id`, or `"none"` to disable subtitles). The start response carries the tracks, the
+subtitles and the resume point.
 
-`GET` and `POST /api/v1/playback/{itemId}/info` are **deprecated** for third parties:
-the first-party player's internal decision record (snake_case), kept for older app
-builds and removed in a later release.
+`GET` and `POST /api/v1/playback/{itemId}/info` have been removed. Older clients
+receive `410 route_retired`; use this playability probe and `POST
+/api/v1/play-sessions` instead.
+
+### Multipart video episodes
+
+Multipart support is optional. Send `capabilities.multipartVideo: true` on **both**
+the probe and the start only when your integration supports a logical version and one
+aggregate playback clock. Omission and `false` mean unsupported. This client declaration
+is separate from the server feature flags returned by `/server`.
+
+A complete physical release has `fileId`. A logical multipart release has `versionId`
+and `versionKind: "multipart_video"`, with no `fileId`. Use those fields to identify a
+version picker row. `activeVersionId` identifies an active group; `activeFileId` identifies
+a physical selection. Pass either `versionId` or `fileId`, never both.
+
+```http
+POST /api/v1/media/550e8400-e29b-41d4-a716-446655440000/playability
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "capabilities": { "multipartVideo": true } }
+```
+
+```jsonc
+// 200, abridged: a logical release in versions[]
+{
+  "mediaId": "550e8400-e29b-41d4-a716-446655440000",
+  "activeVersionId": "6f5a4d32-b101-4abd-8000-000000000001",
+  "resumePositionMs": 900000,
+  "isWatched": false,
+  "versions": [{
+    "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
+    "versionKind": "multipart_video",
+    "playable": true, "blockedBy": [],
+    "playMethod": "full_transcode", "durationMs": 2400000
+  }]
+}
+```
+
+```http
+POST /api/v1/play-sessions
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "mediaId": "550e8400-e29b-41d4-a716-446655440000",
+  "deviceId": "my-player-installation",
+  "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
+  "capabilities": { "multipartVideo": true }
+}
+```
+
+The server returns **one aggregate HLS stream** (`delivery.kind: "hls"`), currently
+using `full_transcode`. Open the issued URL unchanged. The server joins the parts; your
+client does not concatenate files or start a session per part. An abridged delivery
+looks like this:
+
+```jsonc
+"delivery": {
+  "kind": "hls",
+  "url": "/api/v1/…?PlaySessionId=…&grant=…",
+  "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
+  "versionKind": "multipart_video",
+  "playMethod": "full_transcode",
+  "durationMs": 2400000,
+  "startPositionMs": 900000,
+  "seek": { "clientShouldSeek": true, "streamStartPositionMs": 0 },
+  "subtitles": []
+}
+```
+
+`durationMs`,
+`startPositionMs`, seeking and progress reports all use milliseconds from the beginning
+of the complete logical episode.
+
+Complete alternate releases remain separate picker choices. Group parts cannot be
+selected as complete releases. A client that omits multipart support gets a complete
+physical alternative when one exists; when only multipart content exists, probe/start
+returns `422` instead of playing the first part.
+
+Current limits: group downloads, part-local subtitles, chapters and trickplay are
+unavailable. Do not derive them from the first part. There is no general audio-track
+switching across parts; use the group default. Trimmed or nonzero part windows cannot
+be activated. Watch Together currently selects complete physical releases and does not
+negotiate groups. Operators configure groups through
+[Multipart episodes](/guides/multipart-episodes/).
+
+For older servers, a compatibility retry must be narrow: only an exact single `422`
+validation issue whose field identifies `capabilities` and whose message identifies
+only the unrecognized key `multipartVideo` may trigger
+one retry with that field omitted, for an ordinary physical selection. Never drop an
+explicit `versionId`, select a part, or downgrade authentication, policy, network or
+unrelated validation errors.
 
 ## Play media from your own client
 
 Every recipe below needs only the server address and a bearer token with the
 `media:write` scope. `POST /api/v1/play-sessions` starts playback for video, music and
-audiobooks and returns the same envelope each time:
+audiobooks. For example, an abridged video start returns:
 
 ```jsonc
 {
   "playbackSessionId": "uuid",
   "mediaId": "uuid",
-  "kind": "video | music | audiobook",
-  "delivery": { "kind": "file | hls | multipart-audio", "url": "/api/v1/…?grant=…", "startPositionMs": 0 },
+  "kind": "video",
+  "delivery": { "kind": "hls", "url": "/api/v1/…?grant=…", "startPositionMs": 0 },
   "grant": { "id": "uuid", "token": "…", "param": "grant", "mediaId": "uuid",
              "playbackSessionId": "uuid", "kind": "video", "ipPinned": true,
              "expiresAt": "…", "renewAfter": "…", "renewHref": "/api/v1/playback/grants/{id}/renew" },
-  "reporting": { "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
+  "reporting": { "kind": "progress", "method": "PUT", "playbackSessionId": "uuid", "href": "/api/v1/play-sessions/{id}", "intervalMs": 10000, "unit": "ms" }
 }
 ```
 
@@ -268,19 +373,21 @@ audiobooks and returns the same envelope each time:
   The first grant lasts 24 hours for video and audiobooks, and 6 hours for music and Live
   TV. Renewing is optional: `POST grant.renewHref` with your bearer token and
   `{ "token": grant.token }` returns the grant with the extended expiry. Renewal never
-  shortens expiry.
+  shortens expiry. Live TV grants can be renewed only while their session is active.
 - A grant ends with its playback session. Ending the session (a `COMPLETED` report, or a
   cancel), a newer start on the same device, or reaping makes every URL on that grant
   answer `401 invalid_grant` with `reason: session_ended`. Start a new session to play
   again.
-- Positions and durations are milliseconds everywhere.
+- Use `reporting.kind` and `reporting.method` to choose the reporting protocol.
+  `progress` uses `PUT` with a body; `keepalive` uses a bodyless `POST`.
+- Positions and durations in this envelope are milliseconds. For `multipart-audio`,
+  read the URLs from `delivery.tracks[]`; there is no top-level `delivery.url`.
 
 ### Ending a playback session
 
 End a video or audiobook session with `PUT /api/v1/play-sessions/{id}` and
 `status: "COMPLETED"` (a normal end, `204`). To terminate a session at once and free its
-stream slot, call `POST /api/v1/play-sessions/{id}/cancel`. There is no
-`DELETE /api/v1/play-sessions/{id}`. Live TV sessions are different: stop them with
+stream slot, call `DELETE /api/v1/play-sessions/{id}`. Live TV sessions are different: stop them with
 `DELETE /api/v1/livetv/playback-sessions/{playbackSessionId}`, or `POST …/leave` from
 `sendBeacon`.
 
@@ -305,32 +412,66 @@ Send a field when your player differs from the default:
   "hdr": ["hdr10", "dovi"], "maxAudioChannels": 6 }
 ```
 
-Vocabularies are open lower-case tokens. Unknown tokens are ignored. Tracks you cannot
-render are burned in. `maxVideoBitrate` (bits per second), `maxHeight` (pixels) and
+Codec lists use open lower-case tokens; unknown tokens in those lists are ignored.
+Unknown capability **fields** are rejected. Declaring a subtitle format does not select
+a subtitle. Unsupported selected embedded subtitles may require burn-in; unsupported
+sidecars can instead be unavailable. `hlsCopyReload` and `multipartVideo` default to
+false. `maxVideoBitrateBps` (bits per second), `maxHeight` (pixels) and
 `maxAudioChannels` are optional.
 
 ### Play a movie
 
-1. `POST /api/v1/play-sessions` with `{ "mediaId": "<movie id>", "deviceId": "<stable id>", "capabilities": { … } }`.
+1. `POST /api/v1/play-sessions` with `{ "mediaId": "<movie id>", "deviceId": "<stable id>", "entry": "explicit", "capabilities": { … } }`.
 2. Give `delivery.url` to your player (`delivery.kind` is `hls` or `file`). Subtitles are
-   in `delivery.subtitles[]`, the timeline is at `delivery.timeline.href`, and
+   in `delivery.subtitles[]`, an available timeline is at `delivery.timeline.href`, and
    `delivery.recommended` names the suggested audio and subtitle tracks.
 3. Every `reporting.intervalMs`, `PUT` the position to `reporting.href`. Finish with
    `status: "COMPLETED"`. A player that can't report skips this step.
 
 ### Resume an episode
 
-The same call. `delivery.startPositionMs` is the saved resume point; send
+The same call. `delivery.startPositionMs` is the effective resume/entry position; send
 `startPositionMs` in the request to override it. Seek to it before showing the first
-frame.
+frame when `delivery.seek.clientShouldSeek` is true. For a combined file representing
+several episodes, positions remain on the **whole file clock**;
+`delivery.seek.streamStartPositionMs` is the episode entry point. It is not a new time
+origin or a stop boundary. For multipart video, the whole logical episode is the clock.
+Do not subtract an entry offset from progress reports.
+
+Set `entry` to `continue` when the viewer chose a Continue Watching item, or
+`resume` when continuing the current item from its saved position. Use `next_up` for
+the next episode and `autoplay` for an automatically started item. These values let
+the server recognize a linear viewing chain for cross-device handoff. Use `explicit`
+for a direct item/episode/chapter selection or a Watch Together start; omit `entry`
+when the origin is unknown. Explicit and omitted entries do not continue a handoff
+chain.
+
+### Follow playback from another device
+
+When a paused player returns to the foreground, or is about to resume, it can ask
+whether the same user continued elsewhere:
+
+```http
+GET /api/v1/me/resume-handoff?mediaId=<current-media-id>&positionMs=<playhead-ms>&deviceId=<this-device-id>&idleMs=<time-since-own-action-ms>
+Authorization: Bearer <token>
+```
+
+Call this only while paused. If the response has no `handoff`, stay where you are.
+For `relation: "same_media"`, seek to `handoff.positionMs`. For
+`relation: "later_episode"`, open `handoff.mediaId` and start at that position,
+unless `sameFileAsFrom` is `true`; then seek within the current combined file.
+Remember `chainId`: after the viewer undoes a handoff, ignore later answers with
+that same chain id. The server returns `serverNow` and `updatedAt` so the client can
+account for how old the other device's position is.
 
 ### Play an album
 
 For each track, in queue order, `POST /api/v1/play-sessions` with
-`{ "mediaId": "<track id>", "deviceId": "…", "audio": { "format": "opus", "bitrate": 160 } }`.
+`{ "mediaId": "<track id>", "deviceId": "…", "audio": { "format": "opus", "bitrateKbps": 160 } }`.
 `delivery.kind` is `file` and `delivery.url` streams the audio. Each track has its own
-session and grant, so start the next track a little before the current one ends for
-gapless playback. See [Music playback](/developers/music-playback/).
+session and grant. Use `purpose: "prefetch"` to prepare the next track while the
+current track is playing; a normal start on the same device supersedes the old one.
+See the prefetch lifecycle in [Music playback](/developers/music-playback/).
 
 ### Play an audiobook
 
@@ -339,25 +480,30 @@ gapless playback. See [Music playback](/developers/music-playback/).
 (`startMs`, `durationMs`). Media URLs always start at 0, so seek to
 `delivery.startPositionMs` yourself. When the server transcodes, `tracks[]` holds one
 HLS playlist for the whole book. Report progress against the `playbackSessionId`, as for
-video. See [Audiobook playback](/developers/audiobook-playback/).
+video. Convert the book resume position to an offset within the selected track before
+seeking. See [Audiobook playback](/developers/audiobook-playback/).
 
 ### Watch a channel
 
 `POST /api/v1/livetv/playback-sessions` with a station id returns the same envelope with
-`delivery.kind` `live-hls`, `delivery.heartbeatIntervalMs` and `delivery.keepaliveHref`.
-Play `delivery.url` and keep the session alive as described in
+`delivery.kind` `live-hls` and `delivery.url`. The separate `reporting` object carries
+`kind: "keepalive"`, `method: "POST"`, `href` and `intervalMs`. Keep the session alive as described in
 [Live TV playback](/developers/live-tv-playback/).
 
 ### Play in an external player (VLC, Kodi, cast)
 
-One URL is enough. Start the session, then open `delivery.url` in the player, for
-example `vlc "https://lumastra.example.com<delivery.url>"`. VLC, Kodi, mpv, Infuse,
-AVPlayer given a URL, and cast and AirPlay receivers can't send headers, report or
-renew, and don't need to: media fetches count as activity, so the session isn't reaped
-while the stream is being read. The URL stays valid until the session ends or the grant
-expires. For a cast or AirPlay receiver on another network address, add
-`"castTarget": true` to the start request (the server may disable this by policy; check
-`grant.ipPinned`).
+An integrating app or script authenticates, probes when needed, and starts a session.
+It resolves a relative `delivery.url` against the server origin and hands the resulting
+URL to VLC, mpv or another URL-capable player. Those players can render an already-issued
+HLS stream, including aggregate multipart HLS, without implementing the negotiation API.
+An existing Jellyfin/Subsonic client instead uses its compatibility protocol.
+
+Media fetches keep a URL-only session active while it is being read, but do not report
+an accurate playhead or heard time. The integrating client should report progress when
+it can measure it, renew before expiry for long sessions, and close the session on exit.
+A grant is a secret: avoid logging or sharing the URL. Keep bearer credentials on the
+configured server origin. For a cast receiver on another address, request
+`"castTarget": true` and inspect `grant.ipPinned`; operator policy may keep it pinned.
 
 ## Putting it together
 
@@ -368,7 +514,7 @@ browse        → continue-watching, trending, search, GET /media/{id}
 start         → POST /play-sessions → delivery.url
 stream        → see Streaming a player  (§ next page)
 track         → see Progress & state    (§ next page)
-stop          → PUT status COMPLETED, or POST /play-sessions/{id}/cancel
+stop          → PUT status COMPLETED, or DELETE /play-sessions/{id}
 ```
 
 The two linked pages below cover the rest: grants, progress heartbeats,
