@@ -177,6 +177,13 @@ and episodes as well as the series. A forced metadata refresh can overwrite manu
 edits and unlock the item. Processing history shows completed, pending, and failed
 steps; an expired run record means its detailed logs are no longer retained.
 
+For an episode, provider refreshes are managed through its parent series. The episode
+page links to that series rather than queuing an unsupported child refresh.
+**Review two-episode TMDB ID exchange** previews two active episodes from the same
+series. Confirm only after checking their actual content identities. The operation
+exchanges both IDs together; files, metadata, artwork, locks and watch data remain
+attached to their existing episode IDs. Changed evidence requires a fresh preview.
+
 Segment analysis waits for an eligible local video file with a usable duration.
 If the default version is unavailable but an alternate qualifies, the page names
 the version analysis will use. A completed pass that finds no segments is different
@@ -190,6 +197,18 @@ if a refresh fails, retained rows are marked stale. Health lists physical files,
 including files without a title link. For an episode mapping warning on an unlinked
 file, use **Review episode mapping**, select the intended series, and review the
 episode list before saving through the same guarded editor.
+
+Audio-tail measurements describe observed packets and decoded channels, not proof
+that a file is complete. Streams that demonstrably end before the post-video
+interval count toward the measured stream total. Contradictory endpoints, missing
+packet evidence, decoding errors or measurement limits keep the result inconclusive.
+Expand **Measurement details** for the recorded evidence. Existing warnings remain.
+
+In **Library → Quarantine**, **Review current matches** compares a bounded page of
+historical proposals with current metadata. Select only the exact matches you
+reviewed, then confirm closing those warnings. This acknowledgement does not verify
+physical file identity, change title binding or remap media. Ineligible proposals
+show why they remain; changed evidence requires another review.
 
 Delete remains available under the title's **More** actions and requires confirmation.
 
@@ -250,6 +269,20 @@ writes keep a retry action visible; if only the list refresh fails, retry the
 refresh separately. Names containing conjunctions are review hints, not evidence
 of multiple artists. Genuine collaboration repair remains a separate review.
 
+
+#### Resolve a collaboration
+
+Use **Resolve collaboration** in the combined-artist review queue. Choose the
+ordered artist identities explicitly, inspect the source evidence and proposed
+track credits, then select the eligible tracks to repair. Protected or uncertain
+tracks stay visible for manual review. Album ownership is shown separately and
+stays unchanged.
+
+After every track is resolved, acknowledge the retained album owners and mark the
+collaboration reviewed to remove it from the queue. This differs from marking a
+single act: it does not set `no_split`. **Return to review queue** restores the
+review classification without undoing saved credits. Changes to relevant source
+evidence reopen review automatically.
 
 #### Review an album merge
 

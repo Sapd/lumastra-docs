@@ -66,6 +66,14 @@ replacement for its episodes. Follow the task result before assuming every episo
 was updated. Automatic scans preserve curated choices; these explicit extraction
 actions replace the selections in their requested scope.
 
+A series or season's **Artwork** tab also lists **Shared episode thumbnails**.
+It shows selected images reused by episodes, source files and playback windows,
+and manual choices or protection flags. Sharing is a review hint, not proof of a
+wrong image or its owner. Use **Extract and select** only for an episode you
+intend to replace. If its source, window or artwork changes during extraction,
+the result is skipped; refresh the review before trying again. Existing candidates
+and their bytes are retained.
+
 Environment defaults are WebP and AVIF enabled (`IMAGE_AVIF_ENABLED=true`), thumbnail
 quality `75`, full-image quality `85`, and cache retention `30` days
 (`IMAGE_WEBP_ENABLED`, `IMAGE_THUMB_QUALITY`,
