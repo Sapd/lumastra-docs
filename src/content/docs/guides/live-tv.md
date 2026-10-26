@@ -336,6 +336,18 @@ For a home setup, choose which household accounts can watch the configured sourc
 Assign access only to viewers covered by your source’s viewing and sharing permissions;
 Lumastra groups are application access controls, not broadcaster or provider authorization.
 
+### Live TV in Active Streams
+
+Active Streams shows each Live TV viewer separately, including the station logo,
+current and next programme, guide progress, client, and available codec, resolution,
+and adaptive-quality details. Clicking the card opens the station; stopping your
+own stream releases that viewer's connection without interrupting other viewers.
+
+You need Live TV permission to see someone else's Live TV stream, including when
+you are an administrator. Stream privacy and device-detail visibility still apply.
+Previews and ended or expired viewers are excluded. A missing programme guide or
+a brief failure to read proxy details does not hide an otherwise live viewer.
+
 ### How stream limits are counted
 
 Per-source **Max streams** counts distinct upstream channels, not viewers. For example,
