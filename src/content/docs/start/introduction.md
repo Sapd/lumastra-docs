@@ -45,6 +45,46 @@ Lumastra is an early release (v0.1). These docs describe it as of commit `347946
   TV apps, Home Assistant and scripts. See [API & tokens](/developers/api/) or
   [Building a player](/developers/building-a-player/).
 
+## Live TV built and tested for reliable viewing
+
+- **Bring your own sources.** M3U, Xtream and HDHomeRun, with a programme guide,
+  automatic channel grouping and numbering.
+- **Share the upstream stream.** The default Rust proxy reuses one connection for
+  viewers of the same channel; heartbeats manage active viewer sessions.
+- **Use backup feeds.** Automatic failover tries alternate feeds; exhausted feeds
+  produce a clear playback failure and a choice to try another channel.
+- **Adapt quality to the connection.** Optional GPU encoding provides multiple
+  qualities from 1080p down to 360p for the player to switch between.
+- **Keep viewing simple.** Simple mode offers large controls, personal channel
+  numbers, now/next information and an optional helper PIN.
+- **Exercise the real pipeline.** End-to-end tests use a synthetic provider for
+  imports, decoded playback, stream limits and upstream failures through the app and proxy.
+
+Start with [Live TV setup](/guides/live-tv/) and
+[simple mode](/guides/live-tv-simple-mode/), or read about the
+[proxy and failover](/architecture/live-tv/). Recording (DVR) isn't available yet.
+
+## Media management with review built in
+
+- **Trace artwork choices.** Inspect image candidates and their recorded sources,
+  select the image to use and protect curated choices. Unknown origins stay explicit.
+- **Preview identity repairs.** A reviewed two-episode TMDB ID exchange preserves
+  internal episode IDs, file links and watch data on their existing episodes.
+- **Review album merges.** Inspect the kept album, tracks, artwork and user-data
+  policies before confirming; duplicate track candidates keep their separate files.
+- **Match episodes to actual files.** Review boundaries in combined multi-episode
+  files, or compose several files as one multipart episode with its identity and
+  progress intact. Multipart playback needs a supported player and transcoding.
+- **Inspect file health.** Stream and audio-tail measurements support bounded
+  rechecks; inconclusive results keep their warnings.
+- **Resolve uncertain matches in quarantine.** Compare historical proposals with
+  current files and metadata, then preview eligible changes before accepting a batch.
+
+See [media enrichment](/guides/media-enrichment/),
+[administration](/guides/administration/),
+[multipart episodes](/guides/multipart-episodes/) and
+[library troubleshooting](/guides/library-troubleshooting/) for the detailed workflows.
+
 ## The stack
 
 | Layer            | Technology                                              |
