@@ -54,7 +54,8 @@ curl -X POST https://lumastra.example.com/oauth/device \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "my-tv-app",
-    "device_name": "Living Room Apple TV",
+    "device_name": "Living Room TV",
+    "device_id": "550e8400-e29b-41d4-a716-446655440000",
     "scope": "media"
   }'
 ```
@@ -64,9 +65,9 @@ curl -X POST https://lumastra.example.com/oauth/device \
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `client_id` | string | Yes | A free-form identifier for your app (e.g. `"apple-tv-app"`). No registration needed. |
-| `device_name` | string | No | Human-readable device name shown to the user during approval. |
-| `device_id` | UUID | No | Persisted per-install identifier; lets reauthorization reuse the device session. |
-| `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback (`403 scope_required`). See [What your token can do](#what-your-token-can-do). Max 256 characters. |
+| `device_name` | string | No | Human-readable device name shown during approval. |
+| `device_id` | string | No | Generate and persist a stable identifier per physical device (a UUID works). Reauthorization can reuse that user/device’s server session; use the same identifier as playback `deviceId`. |
+| `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback (`403 forbidden`, `reason: scope_insufficient` for device JWTs). See [What your token can do](#what-your-token-can-do). Max 256 characters. |
 
 **Response (200 OK):**
 
@@ -90,7 +91,11 @@ curl -X POST https://lumastra.example.com/oauth/device \
 | `expires_in` | Seconds until both codes expire (default 600). |
 | `interval` | Minimum seconds your client must wait between polling requests. |
 
-This endpoint is rate-limited to **10 requests per minute per IP**.
+Both endpoints accept JSON and `application/x-www-form-urlencoded`, with a 256 KiB
+body cap and `Cache-Control: no-store` responses. `/oauth/device` allows 10 requests
+per minute per IP and at most 10 pending codes per `client_id`; `429 slow_down`
+includes `Retry-After: 60`. `HEAD /oauth/device` returns `200` when enabled and
+`400` when unavailable.
 
 ---
 
@@ -135,9 +140,8 @@ libraries that assume it.
 - Wait at least `interval` seconds between requests.
 - Stop polling once `expires_in` seconds have elapsed since Step 1. Restart
   the flow from scratch if you need a new code.
-- Handle every response below; don't treat unrecognized errors as fatal
-  or deciding whether they require reauthorization. Use `error` and the optional stable
-  `code`, and display `error_description` as prose.
+- Branch on `error` and, when supplied, the stable `code` extension.
+  `error_description` is display text; never parse it to make decisions.
 
 **Responses:**
 
@@ -148,7 +152,9 @@ libraries that assume it.
 | 400 | `slow_down` | Polling too frequently for this device code | Add 5 seconds to your interval and keep polling. |
 | 429 | `slow_down` | Per-IP rate limit (30 requests/minute on `/oauth/token`) | Honour `Retry-After` (60 s) before polling again. |
 | 400 | `access_denied` | User rejected the request | Stop polling; offer to restart the flow. |
-| 400 | `expired_token` | The device code expired | Stop polling; request a new device code. |
+| 400 | `expired_token` | An expired device-code record was found | Stop polling; request a new device code. |
+| 400 | `invalid_grant` | Unknown, cleaned-up expired, or consumed code; mismatched client | Stop polling; check `code` and restart authorization if needed. |
+| 500 | `server_error` | Transient server failure | Retry with backoff within the code’s lifetime. |
 
 Example pending / success bodies:
 
@@ -177,19 +183,20 @@ names.
 
 | Token | Lifetime | Purpose |
 |---|---|---|
-| `access_token` | ~1 hour (`JWT_ACCESS_TOKEN_TTL_SECONDS`, instance-configurable) | Bearer credential for `/api/v1/*` requests. Device-session revocation can invalidate it before expiry; use `expires_in` rather than assuming one hour. |
+| `access_token` | ~1 hour (`JWT_ACCESS_TOKEN_TTL_SECONDS`, instance-configurable) | Bearer credential for `/api/v1/*` requests. Signed JWT; device-session revocation and account disable can invalidate it before expiry. |
 | `refresh_token` | 90 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`), rotated on every use | Used to mint a new access token without re-running the device flow. |
 
 - Store both in secure, platform-appropriate storage (Keychain,
   `EncryptedSharedPreferences`, or equivalent), never in plain application
   preferences or logs.
-- Serialize refresh requests so callers share one in-flight refresh. Persist the
-  returned refresh token securely before allowing waiting requests to continue.
-- Current servers supersede the presented token rather than immediately revoking it.
-  It remains usable until its own successor is used; a short replay cache can return
-  the identical replacement after a lost response. An older predecessor can then be
-  rejected with `invalid_grant`. There is no automatic whole-session revocation for a
-  refresh race. Keep the latest returned token rather than depending on recovery.
+- Persist each returned access/refresh pair atomically before considering refresh complete.
+- Serialize refresh calls per device. The presented token is superseded rather than
+  immediately revoked so a lost response can be retried. A 90-second replay cache can
+  return the same replacement; a cache miss can issue another valid replacement. A later
+  rotation retires older superseded tokens. Reusing an old token does **not** revoke the
+  entire device session.
+- `POST /api/v1/auth/logout` revokes the current device session. Account disable and
+  explicit device revocation also end access. Do not rely on JWT expiry alone.
 
 ---
 
@@ -225,6 +232,7 @@ curl -X POST https://lumastra.example.com/oauth/token \
   -H "Content-Type: application/json" \
   -d '{
     "grant_type": "refresh_token",
+    "client_id": "my-tv-app",
     "refresh_token": "a1b2c3d4e5f6..."
   }'
 ```
@@ -241,30 +249,34 @@ curl -X POST https://lumastra.example.com/oauth/token \
 }
 ```
 
-Save the returned refresh token for the next refresh. A replay can return the same
-replacement, so do not assume every response has a different value. A transport
-failure or `server_error` is retryable with backoff; retain your token. A refresh
-`invalid_grant` with `code: refresh_token_invalid`, `refresh_token_revoked` or
-`refresh_token_expired` is terminal: ask the user to authorize again. Never infer
-recovery from an `error_description` string.
+Save the returned refresh token and use it for the next refresh. `client_id` is optional
+for older clients; send it so the server can verify the binding. A mismatch returns
+`400 invalid_grant`, `code: client_mismatch`.
+
+On the refresh path, `invalid_grant` with `refresh_token_invalid`,
+`refresh_token_revoked` or `refresh_token_expired` is terminal: request device approval
+again. Refresh expiry uses `invalid_grant`, **not `expired_token`**. Keep stored credentials
+on a network failure, `429 rate_limited` or `500 server_error`; retry with backoff and
+honour `Retry-After` (seconds). Never loop indefinitely after an API `401`, and never
+refresh in response to a `403` permission failure.
 
 ---
 
 ## Complete example (TypeScript)
 
-This example bounds polling and retries and shares an in-flight refresh. Add durable
-secure token storage before using it in an app: `setTokens` below holds tokens in
-memory only. Await your storage write before releasing waiting API requests.
+This example handles code expiry, polling backoff, one refresh at a time, and one
+retry after `401`. Supply a secure store that persists both tokens together. `RequestInit`
+bodies must be replayable strings or buffers; do not use a consumed stream as a body.
+Use your generated types or validate response JSON at your app’s boundary.
 
 ```typescript
-interface TokenResponse {
+interface Tokens {
     access_token: string;
     refresh_token: string;
     expires_in: number;
     token_type: string;
 }
-
-interface DeviceCodeResponse {
+interface DeviceCode {
     device_code: string;
     user_code: string;
     verification_uri: string;
@@ -272,179 +284,154 @@ interface DeviceCodeResponse {
     expires_in: number;
     interval: number;
 }
+interface OAuthError {
+    error: string;
+    error_description?: string;
+    code?: string;
+}
+interface SecureStore {
+    load(): Promise<Tokens | undefined>;
+    save(tokens: Tokens): Promise<void>; // atomically, in platform secure storage
+}
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 class LumastraClient {
-    private baseUrl: string;
-    private clientId: string;
-    private accessToken?: string;
-    private refreshToken?: string;
-    private tokenExpiry?: Date;
-    private refreshInFlight?: Promise<void>;
+    private refreshing?: Promise<void>;
+    constructor(
+        private origin: string,
+        private clientId: string,
+        private store: SecureStore,
+    ) {}
 
-    constructor(baseUrl: string, clientId: string) {
-        this.baseUrl = baseUrl;
-        this.clientId = clientId;
-    }
-
-    // Step 1: start device authorization
-    async startDeviceAuth(deviceName: string): Promise<DeviceCodeResponse> {
-        const response = await fetch(`${this.baseUrl}/oauth/device`, {
+    private oauth(path: string, fields: Record<string, string>): Promise<Response> {
+        return fetch(new URL(path, this.origin), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: this.clientId,
-                device_name: deviceName,
-                scope: 'media',
-            }),
+            body: new URLSearchParams(fields),
         });
-        return response.json();
     }
 
-    // Step 3: poll for token
-    async pollForToken(deviceCode: string, interval: number, expiresIn: number): Promise<TokenResponse> {
-        const deadline = Date.now() + expiresIn * 1000;
-        while (Date.now() < deadline) {
-            await this.sleep(interval * 1000);
-            if (Date.now() >= deadline) break;
-
-            const response = await fetch(`${this.baseUrl}/oauth/token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+    async authorize(
+        deviceId: string,
+        showCode: (code: DeviceCode) => void,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        const issuedAt = Date.now();
+        const issued = await this.oauth('/oauth/device', {
+            client_id: this.clientId, device_id: deviceId,
+            device_name: 'Living Room TV', scope: 'media',
+        });
+        if (!issued.ok) throw new Error(`Device authorization failed: ${issued.status}`);
+        const code: DeviceCode = await issued.json();
+        showCode(code); // Display only user_code / verification URIs.
+        const deadline = issuedAt + code.expires_in * 1000;
+        let intervalMs = code.interval * 1000;
+        let waitMs = intervalMs;
+        while (Date.now() + waitMs < deadline) {
+            signal?.throwIfAborted();
+            await sleep(waitMs);
+            signal?.throwIfAborted();
+            let response: Response;
+            try {
+                response = await this.oauth('/oauth/token', {
                     grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-                    device_code: deviceCode,
-                    client_id: this.clientId,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (data.error === 'authorization_pending') {
-                continue; // keep polling
-            } else if (data.error === 'slow_down') {
-                if (response.status === 429) {
-                    // Per-IP rate limit — honour Retry-After (60 s) rather than
-                    // nudging the interval, which would keep tripping the limit.
-                    const retryAfter = Number(response.headers.get('Retry-After')) || 60;
-                    await this.sleep(retryAfter * 1000);
-                } else {
-                    interval += 5; // per-device-code: back off a little
-                }
+                    device_code: code.device_code, client_id: this.clientId,
+                });
+            } catch {
+                waitMs = Math.min(Math.max(waitMs * 2, intervalMs), 60000);
                 continue;
-            } else if (data.error) {
-                throw new Error(data.error_description || data.error);
             }
-
-            if (!response.ok) throw new Error(`Token request failed: ${response.status}`);
-            this.setTokens(data);
-            return data;
+            if (response.ok) {
+                await this.store.save(await response.json());
+                return;
+            }
+            const failure: OAuthError = await response.json();
+            if (response.status === 429) {
+                waitMs = Math.max(intervalMs,
+                    (Number(response.headers.get('Retry-After')) || 60) * 1000);
+            } else if (response.status >= 500) {
+                waitMs = Math.min(Math.max(waitMs * 2, intervalMs), 60000);
+            } else if (failure.error === 'authorization_pending') {
+                waitMs = intervalMs;
+            } else if (failure.error === 'slow_down') {
+                intervalMs += 5000;
+                waitMs = intervalMs;
+            } else {
+                throw new Error(failure.code ?? failure.error);
+            }
         }
-        throw new Error('Device code expired; start authorization again');
+        throw new Error('Device code expired; request a new code');
     }
 
-    // Step 6: refresh
-    async refreshAccessToken(): Promise<void> {
-        if (!this.refreshInFlight) {
-            this.refreshInFlight = this.performRefresh().finally(() => {
-                this.refreshInFlight = undefined;
+    private refresh(): Promise<void> {
+        if (this.refreshing) return this.refreshing;
+        this.refreshing = (async () => {
+            const tokens = await this.store.load();
+            if (!tokens) throw new Error('Device approval required');
+            const response = await this.oauth('/oauth/token', {
+                grant_type: 'refresh_token', client_id: this.clientId,
+                refresh_token: tokens.refresh_token,
             });
-        }
-        return this.refreshInFlight;
+            if (!response.ok) {
+                // Let the caller distinguish terminal invalid_grant from retryable
+                // network/429/5xx errors. Do not erase credentials here.
+                const failure: OAuthError = await response.json();
+                throw Object.assign(new Error(failure.code ?? failure.error), {
+                    status: response.status, oauth: failure,
+                    retryAfter: response.headers.get('Retry-After'),
+                });
+            }
+            await this.store.save(await response.json());
+        })().finally(() => { this.refreshing = undefined; });
+        return this.refreshing;
     }
 
-    private async performRefresh(): Promise<void> {
-        if (!this.refreshToken) throw new Error('No refresh token');
-
-        const response = await fetch(`${this.baseUrl}/oauth/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                grant_type: 'refresh_token',
-                refresh_token: this.refreshToken,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Token refresh failed');
-        }
-
-        const data = await response.json();
-        this.setTokens(data);
-    }
-
-    // JSON resource helper. Replays at most once, only with a newer token.
-    async api<T>(path: string, options: RequestInit = {}): Promise<T | undefined> {
-        const target = new URL(`${this.baseUrl}/api/v1${path}`);
-        if (!path.startsWith('/') || target.origin !== new URL(this.baseUrl).origin) {
-            throw new Error('API path must stay on the configured server');
-        }
-        if (this.tokenExpiry && new Date() >= this.tokenExpiry) {
-            await this.refreshAccessToken();
-        }
-        for (let attempt = 0; attempt < 2; attempt++) {
-            const usedToken = this.accessToken;
+    async api(path: string, options: RequestInit = {}): Promise<Response> {
+        const previous = await this.store.load();
+        if (!previous) throw new Error('Device approval required');
+        const send = (tokens: Tokens) => {
             const headers = new Headers(options.headers);
-            headers.set('Authorization', `Bearer ${usedToken}`);
-            const response = await fetch(target, { ...options, headers });
-            if (response.status === 401 && attempt === 0) {
-                // A parallel caller may already have refreshed this token.
-                if (this.accessToken === usedToken) await this.refreshAccessToken();
-                continue;
-            }
-            if (!response.ok) throw new Error(`API request failed: ${response.status}`);
-            if (response.status === 204) return undefined;
-            return response.json() as Promise<T>;
-        }
-        throw new Error('Authentication failed after refresh');
+            headers.set('Authorization', `Bearer ${tokens.access_token}`);
+            return fetch(new URL(`/api/v1${path}`, this.origin), { ...options, headers });
+        };
+        const response = await send(previous);
+        if (response.status !== 401) return response; // caller handles 204 and errors
+        const latest = await this.store.load();
+        // A concurrent call may already have refreshed this credential.
+        if (latest?.access_token === previous.access_token) await this.refresh();
+        const refreshed = await this.store.load();
+        if (!refreshed) throw new Error('Device approval required');
+        return send(refreshed); // one retry only; never recurse on another 401
     }
-
-    private setTokens(data: TokenResponse) {
-        this.accessToken = data.access_token;
-        this.refreshToken = data.refresh_token; // Persist the returned value before releasing callers
-        this.tokenExpiry = new Date(Date.now() + (data.expires_in - 60) * 1000);
-    }
-
-    private sleep(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-}
-
-// Usage
-async function main() {
-    const client = new LumastraClient('https://lumastra.example.com', 'my-tv-app');
-
-    const deviceAuth = await client.startDeviceAuth('Living Room TV');
-    console.log(`Go to: ${deviceAuth.verification_uri}`);
-    console.log(`Enter code: ${deviceAuth.user_code}`);
-
-    await client.pollForToken(deviceAuth.device_code, deviceAuth.interval, deviceAuth.expires_in);
-    console.log('Authorized!');
-
-    const playing = await client.api('/play-sessions?scope=mine');
-    console.log('Playing now:', playing);
 }
 ```
+
+Pass only a trusted server origin and relative API paths to this client. For a server
+mounted below a path prefix, resolve the discovery links returned by `/server` instead
+of using these root-relative example paths. Production apps should also refresh before
+expiry using the issuance time plus `expires_in`, and bound requests with timeouts.
 
 ---
 
 ## Error reference
 
-All `/oauth/*` errors share the same shape:
+OAuth errors use this envelope; `/oauth/token` also supplies a stable `code` extension:
 
 ```json
-{ "error": "error_code", "error_description": "Human readable message" }
+{ "error": "invalid_grant", "error_description": "Invalid or expired refresh token",
+  "code": "refresh_token_invalid" }
 ```
 
 | `error` | HTTP | Meaning |
 |---|---|---|
-| `invalid_request` | 400 | Missing or malformed required parameter. |
-| `invalid_grant` | 400 | Unknown, revoked or expired refresh token, or invalid/consumed device code. Inspect the optional stable `code` for the refresh-specific reason. |
+| `invalid_request` | 400 | Invalid device request, or disabled device authorization. |
+| `invalid_request` | 413 | Body exceeds 256 KiB (`code: payload_too_large` on `/oauth/token`). |
+| `invalid_grant` | 400 | Invalid/consumed device code, client mismatch, or invalid/expired/revoked refresh token. Inspect `code`. |
 | `authorization_pending` | 400 | User hasn't approved yet. Keep polling. |
 | `slow_down` | 400 | Polling too fast for this device code. Increase your interval. |
 | `slow_down` | 429 | Per-IP rate limit exceeded. Back off for `Retry-After` seconds (60). |
 | `access_denied` | 400 | User denied the request. |
-| `expired_token` | 400 | The device code expired. Refresh-token expiry uses `invalid_grant`. |
-| `unsupported_grant_type` | 400 | `grant_type` isn't one of the two supported values. |
+| `expired_token` | 400 | Device-code expiry when an expired record is found. Refresh-token expiry uses `invalid_grant`. |
+| `unsupported_grant_type` | 400 | No valid grant body matched; this also covers missing required token-grant fields. |
 | `server_error` | 500 | Internal error. Safe to retry with backoff. |
 
 ---
@@ -457,7 +444,7 @@ never off who approved it. Two closed-form grants exist:
 | Requested `scope` | Resulting grant |
 |---|---|
 | `"media"` (or omitted, or anything unrecognized) | Read **and** write |
-| `"media:read"` | Read **only**. Cannot start playback (`403 scope_required`) |
+| `"media:read"` | Read **only**. Cannot start playback (`403 forbidden`, `reason: scope_insufficient` for device JWTs) |
 
 A device-flow token from either grant carries:
 
@@ -470,7 +457,9 @@ A device-flow token from either grant carries:
 
 If your client only ever reads (a companion "now playing" display, a read-only
 dashboard), request `"media:read"`. The resulting token cannot write even if the
-approving account could.
+approving account could. The read-only method gate allows GET/HEAD only, so it
+also rejects POST probes such as `/media/{id}/playability`, even though that endpoint
+declares a read scope. A player should request `media`.
 
 ### A device token is never an admin token
 
@@ -509,7 +498,7 @@ could from the web UI.
 When it is denied you get:
 
 ```json
-403 { "code": "forbidden",
+{ "code": "forbidden", "status": 403,
       "error": "You do not have permission to submit media requests. Contact an administrator." }
 ```
 
@@ -520,8 +509,8 @@ as a device or session problem. `?scope=all` on `GET /requests` is the only
 part of this area that is scope-gated (`requests:admin`), and a
 device token will never have it.
 
-**Treat these failures as permanent.** They are a property of the credential
-kind, not a transient state: do not retry, and do not trigger re-authorization.
+**Treat administrative capability failures as permanent for this credential.**
+Per-user permissions can change when the operator updates the account: do not retry, and do not trigger re-authorization.
 If your app needs an administrative action, it needs a different credential (a
 `pat_` or `svc_` token), not a different scope on this one.
 
@@ -537,7 +526,7 @@ So you can rely on the split:
 - **`401` `invalid_token`**: the token is bad or expired. Refresh it
   (step 6), and only sign the user out if the refresh also fails.
 - **`403`**: the credential is fine and the user is who they say they are. This
-  action is not available to a device token. Never sign the user out on it.
+  action is denied by scope, account permission, ownership or policy. Never sign the user out on it.
 :::
 
 `GET /api/v1/events` is **not** an admin endpoint despite delivering some
