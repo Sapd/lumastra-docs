@@ -443,7 +443,7 @@ All `/oauth/*` errors share the same shape:
 | `slow_down` | 400 | Polling too fast for this device code. Increase your interval. |
 | `slow_down` | 429 | Per-IP rate limit exceeded. Back off for `Retry-After` seconds (60). |
 | `access_denied` | 400 | User denied the request. |
-| `expired_token` | 400 | The device or refresh token expired. |
+| `expired_token` | 400 | The device code expired. Refresh-token expiry uses `invalid_grant`. |
 | `unsupported_grant_type` | 400 | `grant_type` isn't one of the two supported values. |
 | `server_error` | 500 | Internal error. Safe to retry with backoff. |
 
