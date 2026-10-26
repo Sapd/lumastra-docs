@@ -6,41 +6,41 @@ description: >
   buffer-gated resume, and drift correction.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
 import WatchTogetherResumeDiagram from '../../../components/diagrams/WatchTogetherResumeDiagram.astro';
-import DriftCalibrationDiagram from '../../../components/diagrams/DriftCalibrationDiagram.astro';
 
 Watch Together synchronizes playback across devices for developers building a
 **native client or player**: one **host** seeks and moves the party between
 items, any participant can pause or resume, and all participants stay aligned
 through a server-coordinated protocol over **Server-Sent Events**. The server fans events out across replicas via Valkey
-pub/sub, prevents the sender from receiving its own events, and computes a
-clock offset so everyone resumes at the same instant.
+pub/sub. Clients estimate the server clock and schedule coordinated resumes.
+Some commands exclude the sender; barriers and host-position frames reach the host too.
 
 This builds on the normal [player](/developers/building-a-player/) flow. Each
 participant still streams the media itself; Watch Together only coordinates
-*when* everyone plays. Each participant must start its own authorized play session
-and report progress independently. Never share one participant's delivery grant.
-
-Watch Together currently negotiates complete physical `fileId` releases. It does not
-negotiate multipart video `versionId` groups; require a complete alternative or explain
-that the episode is unavailable for a party.
-
-Party `currentTime` and `position` are **seconds**; `serverTime`, `timestamp` and
-`resumeAt` are epoch **milliseconds**. Convert between those and the millisecond
-positions on the separate play-session reporting API.
+*when* everyone plays.
 
 :::note[Feature gate]
 Watch Together requires `FEATURE_WATCH_TOGETHER=true` on the server. Check
 `capabilities.features.watchTogether` in [`GET /server`](/developers/api-routes/#server-discovery-and-capabilities)
-before attempting to create or join a session.
+using a valid user token before attempting to create or join a session.
+Anonymous discovery omits capabilities. The administrator can also disable the
+watch-parties widget, which blocks creation even if the feature flag is enabled.
 :::
 
 ## You'll need
 
-A bearer token, a per-device `clientId` you generate, and an SSE client that
+A user bearer token, a per-device `clientId` you generate, and an SSE client that
 can set an `Authorization` header (the browser's built-in `EventSource` cannot,
 so a browser client needs a `fetch`-based streaming reader instead).
+
+Watch Together endpoint handlers require an authenticated user and have no dedicated
+party scope. PATs and service tokens also pass the `/api/v1` method gate: POST
+requires the literal `write` or `admin` scope; a fine-grained grant alone does not
+replace it. Prefer `write` for a party-capable PAT. Playback separately requires
+`media:write` for each participant’s own play session.
+Service-token path/method restrictions and media library/age restrictions still apply.
+Use [OAuth clients](/developers/oauth-clients/) for authentication. The protocol is
+currently beta; use your instance’s `/api-docs?format=yaml` for its installed contract.
 
 ## Start here: the smallest correct integration
 
@@ -68,27 +68,6 @@ Implement these four steps first; the rest of this page explains each part.
   session end.
 :::
 
-### Create the party
-
-```http
-POST /api/v1/watch-together/parties
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "itemId": "550e8400-e29b-41d4-a716-446655440000",
-  "mediaType": "movie",
-  "title": "Nosferatu",
-  "clientId": "my-player-installation",
-  "visibility": "unlisted"
-}
-```
-
-The response is `201 { party: { … } }`. Retain `party.code` and read the authoritative
-party state. Guests must join before opening the SSE channel. `fileId` optionally selects
-a complete physical release; `currentTime` optionally supplies seconds. Visibility
-defaults to `unlisted`.
-
 ## Protocol reference
 
 ### Transport: one channel for everything
@@ -100,7 +79,7 @@ POST /api/v1/watch-together/{code}/events
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "clientId": "client_1704891234567_k8m3x9f2q", "type": "seek", "payload": { "currentTime": 142.5 } }
+{ "clientId": "client_1704891234567_k8m3x9f2q", "type": "seek", "payload": { "currentTime": 142.5, "isPlaying": true } }
 ```
 
 | Event type | Status | Body |
@@ -117,8 +96,10 @@ GET /api/v1/watch-together/{code}/events?clientId=<clientId>[&lastEventId=<seq>]
 Authorization: Bearer <token>
 ```
 
-`clientId` is required: the server uses it for echo prevention (you never
-receive your own events). The server keeps a capped replay ring of the last 50
+`clientId` is required and must belong to the authenticated user in this party.
+Create or join first; opening SSE does not enroll a device. `sync`, `navigate`, and
+`version_change` exclude their sender, while barriers, stalls, reactions, and host
+positions can return to it. Apply your own accepted command locally too. The server keeps a capped replay ring of the last 50
 events per session (4-hour TTL). On reconnect, pass the last sequence you saw
 either as the standard `Last-Event-ID` header or as `?lastEventId=`. The
 header wins if you send both.
@@ -136,19 +117,20 @@ API. Do not put a bearer token in the URL.
 | `userId` | the person (account) | `"user-uuid-abc123"` |
 | `clientId` | a specific device / tab | `"client_1704891234567_k8m3x9f2q"` |
 
-**The host is a `clientId`, not a `userId`.** The same user on a phone and a
+**The host role belongs to one `clientId`.** The same user on a phone and a
 TV are two separate participants, and only the host *device* can seek or
 navigate: `amIHost = party.hostClientId === myClientId`.
 
 ### Session lifecycle
 
 ```text
-1. Host:  POST /api/v1/watch-together/parties        → 201 { party: { code, … } }
-2. Guest: POST .../events {type:"join"}               → 200 {party} + buffer_check to all
+1. Host:  POST /api/v1/watch-together/parties        → 201 { party }
+2. Guest: POST .../events {type:"join"}               → 200 {party}; barrier scheduled after ~1 s
 3. All:   GET  .../events?clientId=…                  (SSE)
 4. Any:   POST .../events {type:"sync"}  (play/pause) · Host: {type:"seek"}
 5. All:    POST .../events {type:"position"} every ~10 s · Host: {type:"heartbeat"} every ~5 s
-6. Drift: server broadcasts buffer_check → clients POST ready → server broadcasts all_ready
+6. Seek/join: buffer_check → clients POST ready → server broadcasts all_ready
+   Drift: each guest corrects locally; position reports do not pause the group
 7. Stall: POST {type:"stall"} → all pause · POST {type:"stall-ready"} → resume
 8. End:   host POST {type:"disband"} · guest POST {type:"leave"}
           (disband is how a session ends; there is no DELETE on the public API)
@@ -188,8 +170,8 @@ participant, so any participant can pause or resume the party.
 |---|---|---|---|
 | `seek` | host-only | `{ currentTime, isPlaying }` | `buffer_check` → `all_ready` |
 | `sync` | any | `{ currentTime, isPlaying, playbackRate? }` | `sync` |
-| `position` | any | `{ position }` | `buffer_check` if drift detected |
-| `navigate` | host-only | `{ itemId, mediaType, title, posterUrl?, fileId? }` | `navigate` |
+| `position` | any | `{ position }` | none; diagnostic drift evidence, no group barrier |
+| `navigate` | host-only | `{ itemId, mediaType, title, posterUrl?, fileId? }` | `navigate` (frame omits mediaType; refresh party) |
 | `version` | host-only | `{ fileId }` | `version_change`: switch to another file (version) of the current item |
 | `visibility` | host-only | `{ visibility: "listed" or "unlisted" }` | `visibility_changed`: list or unlist the party |
 | `activity` | host-only | `{ activity, message? }` | `host_activity`: tell guests what the host is doing (`watching`, `searching`, or `browsing`) |
@@ -214,11 +196,12 @@ re-anchor your drift reference to the `all_ready` position (see
 [Re-anchor after every barrier](#re-anchor-after-every-barrier)).
 :::
 
-**`heartbeat` vs `position`:** `heartbeat` silently updates the server's record
-of where this client is: no broadcast, no drift check. `position` also
-triggers drift detection; when drift is large the server broadcasts
-`buffer_check`. Use `position` for the periodic 10-second report; use
-`heartbeat` every 5 seconds. **A host heartbeat must carry the host's live
+**`heartbeat` vs `position`:** a host heartbeat updates party position and
+broadcasts `host_position` to everyone, including the host. A guest heartbeat
+refreshes the party without changing its position or play state. `position` records
+drift evidence; even persistent large drift currently does not trigger a group barrier.
+Its `resyncing: true` means a barrier is already pending, not that your report started
+one. Use `position` for the periodic 10-second report; use `heartbeat` every 5 seconds. **A host heartbeat must carry the host's live
 `isPlaying`.** The server persists it (host-only), so the play state a joining
 guest is told to adopt self-heals to the host's reality every few seconds.
 Build the heartbeat from the live player state each time. Never send a cached
@@ -234,13 +217,29 @@ later, still corrects a play state that a missed `sync` left wrong.
 | Event type | Data fields |
 |---|---|
 | `connected` | `party`, `lastEventId`, `serverTime` (ms), `requestReceivedAt`, `bufferCheck` (see below) |
-| `sync` | `state: {currentTime, isPlaying, playbackRate, timestamp}`, `userId` |
+| `sync` | `state: {currentTime, isPlaying, playbackRate, timestamp, fileId?}`, `author`, `clientId?` |
 | `buffer_check` | `checkId`, `currentTime`, `initiator`, `isPlaying`, `seekInitiated` |
 | `all_ready` | `checkId`, `currentTime`, `resumeAt` (ms), `isPlaying`, `serverTime` (ms) |
-| `stall` / `resume` | `userId`, `username`, `clientId` / *(empty)* |
+| `stall` / `resume` | `author`, `clientId?` / no fields beyond `type` |
 | `host_position` | `position`, `timestamp` (ms), `isPlaying`, `playbackRate` |
-| `session_ended` | `hostUserId`, `hostUsername` |
+| `session_ended` | `host` (public author) |
+| `participant_joined` | `participant: {userId, displayName, images, joinedAt, clientId}` |
+| `participant_left` | `author`, `clientId?` |
+| `host_changed` | `newHost`, `newHostClientId?` |
+| `navigate` | `itemId`, `title`, `fileId?`, `author`, `clientId?` |
+| `version_change` | `fileId`, `author`, `clientId?` |
+| `visibility_changed` | `visibility` |
+| `host_activity` | `activity`, `message?` |
+| `reaction` / `screen_effect` | `emoji`, `author` / `effect`, `author` |
 | `resync` | `reason: "gap" | "ahead"`, `lastEventId` |
+
+Positions (`currentTime`, `position`) are seconds; `resumeAt`, `serverTime`,
+`requestReceivedAt`, `timestamp`, `joinedAt`, `createdAt`, and `lastSync` are Unix
+milliseconds. `playbackRate` is a multiplier (0.25–4, default 1 on `sync`). Public
+authors contain `userId`, nullable `displayName`, and `images`; do not read the old
+`username`, `hostUserId`, or `newHostUserId` fields from server frames. The latter
+remains the **request** field for host transfer. `activity.message` is at most 200
+trimmed characters. Nonnegative positions and required booleans are validated.
 
 #### The `connected` snapshot
 
@@ -298,7 +297,7 @@ play/pause, a remote `sync`, or an `all_ready` that ends paused.
 
 ```
 event: error
-data: {"code":"dependency_unavailable","error":"Cache service unavailable"}
+data: {"type":"error","error":"Stream write error"}
 ```
 
 On a transient `error` frame, close the stream and reconnect with your current
@@ -307,97 +306,334 @@ last event id. There is one exception. When the session ends, the server sends
 `Session disbanded by host`. Treat that as the end: close cleanly, leave the
 party UI, and do not reconnect.
 
-## Complete JavaScript reference
+## JavaScript reference: authenticated transport and coordination
+
+This module runs in a browser with `fetch`, streams, and `crypto.randomUUID()`.
+Pass your existing player as an adapter; stream negotiation remains the normal player
+flow described below. The adapter must implement these asynchronous operations:
+
+- `load(party)`: stop the previous local play session, start this item/file with the
+  viewer's token, attach delivery, and leave it paused. Reusing an unchanged selection
+  is allowed. Resolve once metadata and seeking are available.
+- `position()`: return seconds on the **whole-file party clock**.
+- `seek(seconds)`: map the party clock to the local player clock and resolve when done.
+- `ready(seconds)`: resolve only at that position with future media data buffered;
+  reject after a bounded wait. Both `seek` and `ready` take an AbortSignal as their
+  second argument and must stop promptly on cancellation. Never resolve merely
+  because a timer elapsed.
+- `playing()` returns actual playback state; `active()` is false while backgrounded,
+  navigating, or otherwise unable to report reliable positions.
+- `pause()`, `play()`, `rate(multiplier)`, `close()`: control or end local playback.
+  `play()` must surface autoplay refusal; `close()` stops local reporting and releases
+  the local play session/grant. All adapter changes suppress matching media-event echoes.
+
+This reference handles party commands, barriers, generation cancellation, SSE parsing,
+reconnects, and teardown. Optional calibrated drift, device commands, background OS
+integration, and the adapter's playback/progress implementation remain application work.
+Use explicit UI/OS action handlers for the returned control methods; do not wire every
+raw `pause` or `playing` media event to a party command.
 
 ```js
-const clientId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+export function watchParty({ base, token, code, clientId, player,
+  onParty = () => {}, onError = console.error }) {
+  // base is your instance URL, including any deployment subpath, ending in '/'.
+  const root = new URL('api/v1/', base);
+  const path = `watch-together/${encodeURIComponent(code)}`;
+  let party, cursor, snapshotSeq = 0, offset = 0;
+  let started = false, stopped = false, online = false, loading = false, stalled = false, recovering = false;
+  let generation = 0, barrier = null, resuming = false, resumePlan = null;
+  let controller, heartbeat, positionTimer;
+  const sleep = (ms, signal) => new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
+  const headers = () => ({ Authorization: `Bearer ${token()}` });
+  const host = () => party?.hostClientId === clientId;
+  let operation = new AbortController();
+  const cancel = () => {
+    operation.abort(); operation = new AbortController();
+    generation++; resuming = false; player.pause();
+  };
 
-function connectSSE(code, lastEventId) {
-	const params = new URLSearchParams({ clientId });
-	if (lastEventId) params.set('lastEventId', String(lastEventId));
-	const requestStartedAt = Date.now();
-	const es = openAuthenticatedSSE(`/api/v1/watch-together/${code}/events?${params}`,
-		{ headers: { Authorization: `Bearer ${token}` } });
+  async function request(suffix, body) {
+    const response = await fetch(new URL(suffix, root), {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { ...headers(), ...(body === undefined ? {} :
+        { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      throw Object.assign(new Error(problem.error || `HTTP ${response.status}`),
+        { status: response.status, problem });
+    }
+    return response.json();
+  }
+  const send = (type, payload = {}) =>
+    request(`${path}/events`, { clientId, type, payload });
+  async function refresh() {
+    party = (await request(path)).party;
+    onParty(party);
+  }
+  async function load() {
+    cancel(); resumePlan = null; loading = true;
+    try { await player.load(party); player.rate(party.playbackRate); }
+    finally { loading = false; }
+  }
+  function prepare(check) {
+    cancel(); resumePlan = null; barrier = check.checkId;
+    const mine = generation, signal = operation.signal;
+    // Do not block the SSE reader while buffering: newer commands must cancel this.
+    void (async () => {
+      await player.seek(check.currentTime, signal);
+      await player.ready(check.currentTime, signal);
+      if (stopped || mine !== generation) return;
+      await send('ready', { checkId: check.checkId,
+        ...(host() ? { currentTime: player.position() } : {}) });
+    })().catch((e) => { if (e.name !== 'AbortError') onError(e); });
+  }
+  function schedule(target, resumeAt, playing) {
+    cancel(); resumePlan = { target, resumeAt }; resuming = true; const mine = generation, signal = operation.signal;
+    void (async () => {
+      await player.seek(target, signal);
+      await player.ready(target, signal);
+      await sleep(Math.max(0, resumeAt - offset - Date.now()), signal);
+      if (stopped || mine !== generation || stalled) return;
+      // The adapter verifies target/readiness again after the scheduled wait.
+      await player.ready(target, signal);
+      if (!stopped && mine === generation && !stalled && playing) {
+        await player.play();
+      }
+    })().catch((e) => { if (e.name !== 'AbortError') onError(e); })
+      .finally(() => {
+        if (mine === generation) { resuming = false; if (!stalled) resumePlan = null; }
+      });
+  }
+  async function receive(data, seq, sentAt) {
+    if (data.type === 'connected') {
+      const receivedAt = Date.now();
+      offset = ((data.requestReceivedAt - sentAt) +
+        (data.serverTime - receivedAt)) / 2;
+      snapshotSeq = data.lastEventId;
+      party = data.party; onParty(party);
+      stalled = false; barrier = null; recovering = party.isPlaying;
+      await load();
+      if (data.bufferCheck) prepare(data.bufferCheck);
+      // Re-enroll an existing client after the stream opens. When playing, the
+      // server schedules a fresh barrier; this avoids playing stale replay state.
+      else if (party.isPlaying) await send('join');
+      return;
+    }
+    if (data.type === 'resync') {
+      cursor = String(data.lastEventId); // replace even an ahead cursor
+      cancel(); await refresh(); await load();
+      onError(new Error('Replay unavailable; explicitly rejoin to recover playback'));
+      await close();
+      return;
+    }
+    // The bootstrap is newer than historical playback commands. Keep cursor
+    // progress, but do not let replayed seeks/navigation replace that snapshot.
+    // Stall/resume remain transient and must be processed in replay order.
+    if (seq && Number(seq) <= snapshotSeq &&
+        !['stall', 'resume', 'session_ended'].includes(data.type)) return;
+    switch (data.type) {
+      case 'buffer_check': prepare(data); break;
+      case 'all_ready':
+        if (barrier && barrier !== data.checkId) break;
+        barrier = null; recovering = false;
+        party.currentTime = data.currentTime; party.isPlaying = data.isPlaying;
+        // A drift estimator would reset here, with its anchor time = resumeAt.
+        schedule(data.currentTime, data.resumeAt, data.isPlaying);
+        break;
+      case 'sync':
+        recovering = false;
+        party.isPlaying = data.state.isPlaying;
+        party.playbackRate = data.state.playbackRate;
+        player.rate(party.playbackRate);
+        if (barrier) break; // readiness continues even if intent changes to paused
+        schedule(host() ? player.position() : data.state.currentTime,
+          Date.now() + offset, party.isPlaying);
+        break;
+      case 'stall':
+        stalled = true;
+        if (barrier) player.pause(); // retain the barrier's readiness task
+        else cancel(); // retain resumePlan while cancelling its timer
+        break;
+      case 'resume': {
+        stalled = false;
+        const plan = resumePlan;
+        if (!barrier && !recovering) schedule(plan?.target ?? player.position(),
+          Math.max(plan?.resumeAt ?? 0, Date.now() + offset), party.isPlaying);
+        break;
+      }
+      case 'navigate':
+        barrier = null; await refresh(); await load(); break;
+      case 'version_change': {
+        const target = player.position();
+        barrier = null; await refresh(); await load();
+        schedule(target, Date.now() + offset, party.isPlaying); break;
+      }
+      case 'host_changed': case 'participant_joined': case 'participant_left':
+      case 'visibility_changed': await refresh(); break;
+      case 'session_ended': await close(); break;
+      // host_position is input for optional guest-local drift correction.
+    }
+  }
 
-	let clockOffset = 0, clockUncertainty = 0, lastSeq = lastEventId ? Number(lastEventId) : 0;
-	let resumeGeneration = 0, ended = false;
-
-	async function resumeWhenReady(target, resumeAt, generation) {
-		await new Promise((r) => setTimeout(r, Math.max(0, (resumeAt - clockOffset) - Date.now())));
-		const deadline = Date.now() + 10_000;
-		while (generation === resumeGeneration && Date.now() < deadline) {
-			const atTarget = Math.abs(video.currentTime - target) <= 1;
-			if (atTarget && !video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-				return video.play();
-			}
-			await new Promise((r) => setTimeout(r, 200));
-		}
-	}
-
-	function enterBarrier(check) {
-		resumeGeneration += 1; // cancels any stale all_ready resume task
-		video.pause();
-		checkBufferAt(check.currentTime).then(() =>
-			sendEvent('ready', { checkId: check.checkId, currentTime: check.currentTime }));
-	}
-
-	es.onmessage = (event) => {
-		if (event.lastEventId) lastSeq = Math.max(lastSeq, Number(event.lastEventId));
-		const data = JSON.parse(event.data);
-		switch (data.type) {
-			case 'connected':
-				const receivedAt = Date.now();
-				const serverWorkMs = data.serverTime - data.requestReceivedAt;
-				const networkRoundTripMs = Math.max(0, receivedAt - requestStartedAt - serverWorkMs);
-				clockOffset = ((data.requestReceivedAt - requestStartedAt) +
-					(data.serverTime - receivedAt)) / 2;
-				clockUncertainty = Math.min(1000, networkRoundTripMs / 2);
-				lastSeq = Math.max(lastSeq, Number(data.lastEventId));
-				if (data.bufferCheck) enterBarrier(data.bufferCheck); // same handling as buffer_check
-				break;
-			case 'resync':
-				lastSeq = Math.max(lastSeq, Number(data.lastEventId));
-				// Re-read GET /watch-together/{code}; the server skipped incomplete replay.
-				break;
-			case 'sync': data.state.isPlaying ? video.play() : video.pause(); break;
-			case 'buffer_check': enterBarrier(data); break;
-			case 'all_ready':
-				video.currentTime = data.currentTime;
-				if (data.isPlaying) resumeWhenReady(data.currentTime, data.resumeAt, resumeGeneration);
-				break;
-			case 'stall': video.pause(); break;
-			case 'resume': video.play(); break;
-			case 'session_ended': ended = true; es.close(); break;
-		}
-	};
-	es.addEventListener('error', () => {
-		es.close();
-		if (!ended) setTimeout(() => connectSSE(code, lastSeq), 2000); // never after session_ended
-	});
-	return es;
+  async function stream(signal) {
+    const params = new URLSearchParams({ clientId });
+    if (cursor !== undefined) params.set('lastEventId', cursor);
+    const sentAt = Date.now();
+    const response = await fetch(new URL(`${path}/events?${params}`, root),
+      { headers: headers(), signal });
+    if (!response.ok) throw Object.assign(new Error(`SSE HTTP ${response.status}`),
+      { status: response.status });
+    if (!response.body) throw new Error('Missing SSE body');
+    online = true;
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (!stopped) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let end;
+        // Lumastra emits LF-delimited frames; chunks may split anywhere.
+        while ((end = buffer.indexOf('\n\n')) >= 0) {
+          const raw = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+          let name = 'message', id, lines = [];
+          for (const line of raw.split('\n')) {
+            if (line.startsWith('id:')) id = line.slice(3).trim();
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            if (line.startsWith('data:')) lines.push(line.slice(5).trimStart());
+          }
+          // Cursor-only frames advance replay without dispatching a message.
+          if (id !== undefined) cursor = id;
+          if (!lines.length) continue; // includes ': ping' keepalives
+          const data = JSON.parse(lines.join('\n'));
+          if (name === 'error') {
+            if (data.error === 'Session disbanded by host') await close();
+            else throw new Error(data.error);
+          } else await receive(data, id, sentAt);
+          if (stopped) break;
+        }
+      }
+    } finally { online = false; await reader.cancel().catch(() => {}); }
+  }
+  async function run() {
+    while (!stopped) {
+      controller = new AbortController();
+      try { await stream(controller.signal); }
+      catch (error) {
+        if (stopped) break;
+        onError(error);
+        // Refresh authentication in your token provider before starting again.
+        if ([401, 403, 404].includes(error.status)) { await close(); break; }
+      }
+      if (!stopped) { cancel(); await sleep(2000); }
+    }
+  }
+  async function close() {
+    if (stopped) return;
+    stopped = true; cancel(); controller?.abort();
+    clearInterval(heartbeat); clearInterval(positionTimer);
+    await player.close();
+  }
+  const reportable = () => online && party && player.active() &&
+    !loading && !barrier && !stalled && !recovering && !resuming;
+  return {
+    async start() {
+      if (started || stopped) throw new Error('Create a new controller to restart');
+      started = true;
+      party = (await send('join')).party;
+      heartbeat = setInterval(() => {
+        if (reportable() && host()) void send('heartbeat', {
+          currentTime: player.position(), isPlaying: player.playing(),
+        }).catch(onError);
+      }, 5000);
+      positionTimer = setInterval(() => {
+        if (reportable()) void send('position', { position: player.position() }).catch(onError);
+      }, 10000);
+      void run(); // start() enrolls; onParty observes stream bootstrap
+    },
+    async setPlaying(isPlaying) {
+      await send('sync', { currentTime: player.position(), isPlaying,
+        playbackRate: party.playbackRate });
+      party.isPlaying = isPlaying; // sender will not receive its own sync
+      if (barrier) return; // all_ready carries the revised intent
+      schedule(player.position(), Date.now() + offset, isPlaying);
+    },
+    async seek(currentTime) {
+      if (!host()) throw new Error('Only the host device can seek');
+      // Keep intended play state while the barrier pauses the physical player.
+      await send('seek', { currentTime, isPlaying: party.isPlaying });
+    },
+    async navigate(selection) {
+      if (!host()) throw new Error('Only the host device can navigate');
+      loading = true; cancel();
+      try { await send('navigate', selection); barrier = null; await refresh(); await load(); }
+      finally { loading = false; }
+    },
+    async changeVersion(fileId) {
+      if (!host()) throw new Error('Only the host device can change version');
+      const target = player.position();
+      loading = true; cancel();
+      try {
+        await send('version', { fileId }); barrier = null;
+        await refresh(); await load();
+        schedule(target, Date.now() + offset, party.isPlaying);
+      } finally { loading = false; }
+    },
+    stall: (stallId) => send('stall', { stallId }),
+    recovered: (stallId) => send('stall-ready', { stallId }),
+    async exit(endForEveryone = false) {
+      try { await send(endForEveryone ? 'disband' : 'leave'); }
+      finally { await close(); }
+    },
+    close, // local shutdown; use exit() for an intentional departure
+  };
 }
 ```
+
+Provide `token` as a function returning the current access token. Keep `clientId`
+stable across reconnects, unique per active tab/device; persist the same value used at
+creation. Call `start()` once. A native client can implement the same adapter and state
+machine using its HTTP streaming API. A browser must handle an autoplay denial by
+showing a user gesture control; keep the party paused locally until playback is allowed.
+
+The example deliberately waits for a fresh barrier after reconnecting to a playing
+party. Replay still updates the cursor, including sender-excluded frames. A gap has no
+complete transient stall snapshot: the reference closes local playback and reports
+that a fresh explicit rejoin is needed. Construct a new controller to rejoin without
+the stale cursor; do not guess that every participant is ready. Production clients
+should also honor `Retry-After` with backoff on `429`/capacity errors and fence overlapping local control requests in action order.
 
 ## Create a session (host)
 
 ```http
-POST /api/v1/watch-together
+POST /api/v1/watch-together/parties
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "itemId": "550e8400-…", "mediaType": "movie", "title": "Casablanca", "currentTime": 0, "clientId": "client_…", "visibility": "unlisted" }
+{ "itemId": "550e8400-e29b-41d4-a716-446655440000", "mediaType": "movie", "title": "Nosferatu (1922)", "currentTime": 0, "clientId": "living-room-player", "visibility": "unlisted" }
 ```
 
 `mediaType` is one of `movie`, `episode`, `series`. A series id has no
 playable item of its own, so resolve it to an episode first and create the
 party for the concrete movie or episode that Play would start. Treat `series`
-as "resolve to an episode first". Response is a bare
-`{ party: WatchTogetherPartyOutput }`. `party.code` is the shareable session
+as "resolve to an episode first". Response is `201` with a bare
+`{ party: WatchTogetherParty }`. `party.code` is the shareable session
 code (e.g. `"MOVIE-7X3K"`) used in all subsequent requests, and carries
 `hostClientId` (the host device, see `clientId` vs `userId` above),
 `visibility` (`listed` or `unlisted`), `participants[]`, and `createdAt`/`lastSync`.
 Omit `visibility` to create an unlisted party. A host can change it later with
 the `visibility` event.
+
+Creation starts paused with rate 1 and `currentTime` defaulting to 0. `fileId` is
+optional; an ID that does not belong to the item is dropped, so inspect the returned
+party. Supplied `posterUrl` is ignored at creation; the server derives artwork.
 
 If the user is already in another party, creating one first ends that party
 when the user is its host, or leaves it when the user is a guest there.
@@ -412,29 +648,51 @@ POST /api/v1/watch-together/MOVIE-7X3K/events
 { "clientId": "client_…", "type": "join", "payload": {} }
 ```
 
-Response is `200 { party }`. The server simultaneously broadcasts
-`buffer_check` to **all** current participants, including the joiner, so
+Response is `200 { party }`. The server pauses the stored party state, broadcasts
+`participant_joined`,
+and schedules a barrier after about 1 second so the new SSE stream can connect.
+`buffer_check` then reaches **all** current participants, including the joiner, so
 everyone pauses and synchronizes before the new guest starts playing. If the
 guest's SSE stream connects after that broadcast, it picks the barrier up from
 `connected.bufferCheck`. If a barrier never completes, the server resolves it
-after a timeout of about 5 seconds, so a guest may wait up to ~5 s on join.
+after about 5 seconds, with a further 1.5-second resume lead time. Startup and
+local buffering can take longer; this is not a five-second join deadline. An exact
+rejoin with the same user/client pair is idempotent and schedules a barrier if the
+party is playing. A client ID already owned by another user is refused.
+
+A code is an invitation, not a media-access grant. Join checks the viewer’s library
+and age access and returns `404` on refusal. The current participant cap is 100; a
+full party also returns `404`. `GET {code}` requires account membership; the SSE
+stream and every non-join command require the exact owned client ID. A listed party
+is discoverable, not automatically joined. The listing returns `{items, page}` and
+filters library/age access; `?includePrivate=true` includes unlisted parties only
+for an admin principal.
 
 ### Reconnect when the replay cursor is stale
 
 The SSE replay ring keeps the newest 50 business frames. The unnumbered
-`connected` frame includes the current `party` snapshot and `lastEventId`. If the
+`connected` frame arrives **before** replay and includes the current `party` snapshot and `lastEventId`. If the
 cursor is older than the ring, the server sends `resync` with reason `gap`; a
 cursor ahead of the server counter gets reason `ahead`. Malformed cursors, or a
 cursor received while Valkey is unavailable, also produce `gap`. In each case
 replay is skipped. Re-read `GET /api/v1/watch-together/{code}` and continue from
-the current snapshot; do not apply an incomplete replay.
+the current snapshot; do not apply an incomplete replay. Replace an `ahead` cursor
+with the server value (taking `max(old, new)` would repeat the error forever).
+Keep the replay cursor separate from the snapshot watermark: setting it to the
+bootstrap counter before processing replay would wrongly discard missed frames.
+Apply historical frames in sequence without letting old playback commands overwrite
+the newer bootstrap selection/barrier. Business frames normally have increasing
+`id:` values; replay-storage failure can produce live frames without an ID. Handle
+those without resetting the cursor. A sender-excluded replay entry can contain
+only `id:` and no data; advance the cursor without dispatching a command. Keepalive
+comments (`: ping`) are not business events.
 
 ## Barrier details: buffer-gated resume
 
-On a seek, a join, or large drift the server broadcasts `buffer_check`. Every
+On a host seek or join/rejoin the server broadcasts `buffer_check`. Every
 client pauses, seeks to the target position, buffers, verifies it has actually
-reached the target, and only then sends `ready`. Once **all** participants
-have reported ready, the server broadcasts `all_ready` with a **`resumeAt`
+reached the target, and only then sends `ready`. Once the expected live clients
+have reported ready (or the five-second server timeout expires), the server broadcasts `all_ready` with a **`resumeAt`
 timestamp about 1.5 seconds ahead of the server clock** so everyone un-pauses
 together.
 
@@ -461,7 +719,8 @@ compensator.** This matters because a **host seek arrives only as the
 barrier**: it carries no fresh `host_position`. Skip the re-anchor and your
 next drift tick extrapolates from the stale pre-seek anchor, sees a phantom
 drift, and hard-seeks the guest right back off the position everyone just
-synced to.
+synced to. Anchor playing time at `resumeAt`, rather than at receipt or at
+`all_ready.serverTime`; the scheduled 1.5-second pause must not count as playback.
 
 ### Navigating between items (host)
 
@@ -469,7 +728,16 @@ On `navigate` the server sets the party to `currentTime` 0 and `isPlaying`
 false, with no barrier. The `navigate` frame goes to every participant except
 the sender. Guests switch to the new item and wait. The host does not start
 the next item locally either. The party waits at the start of the new item
-until someone presses Play, and that `sync` starts everyone.
+until someone presses Play, and that `sync` starts everyone. Refresh `GET {code}`
+to obtain the full media type and selection because the navigate frame omits them.
+The sender also loads the accepted item locally. Navigation is refused with `403`
+if any participant cannot access the target; host access alone is insufficient.
+An inaccessible target for the host returns `404`. Invalid foreign `fileId` is
+dropped on navigation; `version` instead refuses an invalid file with `403`.
+
+A version change keeps the party clock and does not start a barrier. Each client
+reopens its own stream at that clock using the accepted physical `fileId`. Suspend
+reports during replacement, then restore the current intended play state.
 
 When the host moves to another item (`navigate`) or ends playback, **stop
 position/heartbeat reporting and drift correction the instant navigation
@@ -487,6 +755,10 @@ only if it is at most 1 s behind or up to 10 s ahead of the host's last
 heartbeat. Otherwise it keeps the host's position, so a guest whose player
 still sits at 0 cannot rewind the party. For `isPlaying: true` from a guest,
 the position is ignored. In every other case only the host sets the position.
+
+The host applies a guest’s `sync` play state/rate without seeking backwards to
+the echoed server position, which may be based on an older heartbeat. Keep
+position changes authoritative through host seeks and their barriers.
 
 Play and Pause from the lock screen, a headset, a remote, media keys or the
 OS "Now Playing" controls are user actions like the on-screen button: send
@@ -516,7 +788,9 @@ for it. Make sure your heartbeat does not report it either:
   "paused" heartbeat would mark the party paused while the guests keep
   playing.
 - On return, if the party is still playing (`GET /api/v1/watch-together`), seek
-  **your own** player to the remembered position plus the elapsed time and play.
+  **your own** player to the current authoritative host-position estimate and play.
+  A saved background anchor plus elapsed seconds × playbackRate is only a fallback
+  when no seek, navigation, pause, or host transfer occurred while away.
   The guests never stopped, so do not move them with a party-wide `seek`.
 - A pause the user made on the lock screen while in the background is a real
   pause: send `sync` for it (see above) and do not catch up afterwards.
@@ -536,12 +810,82 @@ host has gone away, the server ends the party after about 10 minutes (see
 [When the server ends a party](#when-the-server-ends-a-party)), so a guest never waits
 forever.
 
+## Each participant owns a local playback session
+
+Joining a party does not start playback, share the host's grant, or bypass admission.
+Every device calls `POST /api/v1/play-sessions` with its own bearer token,
+`mediaId: party.itemId`, its own `deviceId`, optional `fileId: party.fileId`, and
+`startPositionMs: Math.round(party.currentTime * 1000)`. Use `entry: "explicit"` for a
+party start. Pass the actual player capabilities and use the returned `delivery` URLs,
+`playbackSessionId`, `grant`, and `reporting` block. Keep the stream paused until the
+party authorizes playback. A full local start recipe is in
+[Building a player](/developers/building-a-player/#play-media-from-your-own-client).
+
+Use each viewer's own `reporting.href`, bearer authentication and `intervalMs` for
+progress; Watch Together's `heartbeat` and `position` do not renew that local lease or
+record watched progress. Convert party seconds to progress milliseconds. Stream URLs
+carry the local playback grant; do not copy them to guests or put account tokens in
+URLs. On navigation, version replacement, leave, or terminal party shutdown, stop local
+reporting, end the old play session, cancel stream requests/timers, and release the
+old player before opening a replacement. See
+[Playback state](/developers/building-a-player-state/) for statuses and cleanup.
+
+### Physical releases, episode windows, and multipart video
+
+Watch Together carries a physical `fileId`, with no multipart `versionId`, part list,
+or multipart capability negotiation. Select a complete physical release for the
+concrete movie/episode and use the same release on every participant. A `version`
+command changes that physical file only. Do not advertise `multipartVideo` for party
+playback, pass a logical group ID as a `fileId`, or silently play just one part. If an
+episode is available only as a multipart group, refuse party playback and explain that
+a complete release is required. The Watch Together create/join handler does not itself
+validate this player-level limitation; successful membership is not proof of playability.
+
+Preserve ordinary multi-episode-file support. Its party positions and progress remain
+on the **whole physical file clock**. `delivery.seek.streamStartPositionMs` selects an
+episode's entry point; it does not create a zero-based episode clock or a stop boundary.
+When creating a party for a later episode in such a file, initialize `currentTime`
+from the negotiated whole-file entry position (or the host's actual position).
+Do not replace it with episode-relative zero.
+For an HLS player whose local media time restarts at a seek base, map both directions
+using the negotiated stream base. Do not subtract the episode start from party reports,
+add it twice, or clamp playback at an episode window's end. This differs from opt-in
+multipart video's logical episode clock in the normal player API.
+
+### Host handoff and departure
+
+Read `party.host.userId` for the account and `hostClientId` for the controlling device.
+`transfer-host` takes another participant's **user UUID**, not a client ID. The server
+chooses that user's first matching participant; this API cannot target another device
+of your own account. On `host_changed`, use `newHost` and `newHostClientId` (or refresh
+the party) and switch seek/navigation controls and heartbeat ownership immediately.
+
+A host device's `leave` hands control to its oldest surviving same-account device, or
+to the oldest remaining participant if none exists. The last departure ends the party.
+`disband` ends it for everyone and is host-device-only on this event surface. Losing
+SSE is not an intentional leave; reconnect with the same identity. Background guests
+can be pruned after stale connection evidence and a grace period; if reconnect returns
+`403`, explicitly join again before opening SSE. Never silently replace your client ID
+to bypass an ownership refusal.
+
+### Stall generations
+
+For a real mid-playback rebuffer, generate a fresh `stallId`, send `stall`, then send
+`stall-ready` with the **same** ID when recovered. The recovery cannot clear a newer
+stall generation, and an overtaken stall cannot revive an already recovered one. The
+server resumes only after every active stall clears, or abandoned entries age out
+(about 30 seconds, with a failsafe timer). `resume` has no position or play-state
+payload: preserve the party's intended `isPlaying` and any newer pause/barrier. Do not
+unconditionally play a paused party. The `connected` snapshot contains a pending
+buffer check, but no complete active-stall snapshot; gap recovery needs conservative
+paused handling and a fresh join when state is uncertain.
+
 ## Reference state machine
 
 | State | Meaning | Entered on |
 |---|---|---|
 | `IDLE` | Not in a session | Initial, or after `leave`/`session_ended` |
-| `PAUSED` | In session, not playing | `sync` with `isPlaying: false` |
+| `PAUSED` | In session, not playing | `sync` or `all_ready` with `isPlaying: false` |
 | `PLAYING` | In session, playing | `sync`, or `all_ready` once the local target is ready |
 | `BUFFERING` | Waiting for every participant to be ready | `buffer_check` received |
 | `STALLED` | Group paused for a slow participant | `stall` received |
@@ -561,26 +905,23 @@ guestRate = originalRate × (syncTime + drift) / syncTime
 A 10-second lag over a 5-minute window produces a ~3.3% rate change:
 imperceptible, but enough to catch up. Reserve a hard seek for large drift or
 an explicit host seek, and stop adjusting in the last minute of the media.
-Lumastra's web client hard-seeks beyond 3 s of drift and the Apple clients
-beyond 8 s. Below that, the playback rate is capped at ±5%, so on an Apple
-client a 5 s gap takes about 100 s to close. That is expected behavior. **Reset the estimator on every `all_ready`** (see
+Choose and test your own hard-seek threshold (for example, 3 s) and cap rate
+correction to ±5% of the party rate. At a 1× baseline, a 5 s gap takes about
+100 s to close at the maximum nudge. **Reset the estimator on every `all_ready`** (see
 [Re-anchor after every barrier](#re-anchor-after-every-barrier)).
 
 ### Advanced: calibrated drift compensation
 
-Lumastra's own clients use a calibrated variant instead of a fixed dead-zone,
-moving through three states per participant:
+The web player uses a calibrated variant, moving through three states per participant:
 
-<DriftCalibrationDiagram />
-
-- **MEASURING**: gather drift samples for the first 5 s after join (≥3 samples).
+- **MEASURING**: the web integration gathers samples for 3 s (at least 3 samples).
 - **CALIBRATING**: compute the target-sync-time rate from those samples.
 - **LOCKED**: rate is applied. Recalibrates on an exponential backoff
-  (10 s → 20 s → 40 s → 60 s max) rather than continuously, and returns to
+  (web integration: 30 s → 60 s max) rather than continuously, and returns to
   MEASURING on a drift past the hard-seek threshold or a host seek.
 
-Simpler clients can skip this and use the fixed-rate dead-zone above. Both
-converge on the same outcome; this variant just changes rate less often.
+Simpler clients can skip this and use the fixed-rate dead-zone above. The calibrated
+variant changes rate less often; either needs a fresh anchor after every barrier.
 
 ## What a third-party player must send
 
@@ -593,7 +934,8 @@ converge on the same outcome; this variant just changes rate less often.
 - `stall` and `stall-ready` around real rebuffering, not startup buffering.
 - Never broadcast state you did not cause (see
   [Echo suppression](#echo-suppression)).
-- An explicit `leave` (or `disband` for the host) when the user exits. Send
+- An explicit `leave` when this device exits, or `disband` when the host ends
+  the party for everyone. Send
   nothing when the app goes to the background or the user switches apps, and
   no heartbeat while the system keeps a host paused there (see
   [The host's app goes to the background](#the-hosts-app-goes-to-the-background)).
@@ -607,46 +949,30 @@ participant.
 
 ## Device remote control
 
-Any Lumastra device of the user's account can be controlled from another one: start
-media, pause, seek, pick tracks, tune a channel, join a party or show a message. This
-replaces the earlier `/devices/{id}/actions` endpoints, which no longer exist. For the
-user view, see [Remote control](/using/remote-control/).
+Party membership and device command delivery are separate protocols. Use
+`party.join` through the device command API to invite a supported device; that
+device must authenticate, join with its own `clientId`, start its own playback,
+and connect SSE. See [Remote control](/using/remote-control/) and the
+[API reference](/reference/) for command delivery and device-session IDs.
 
-:::note[`{id}` is the device *session*, not the device-code id]
-`{id}` in the endpoints below is the `device_session_id` claim from your JWT,
-not the `device_id` you generated for the device-code request. PAT and service
-tokens lack the claim and cannot report a device's own state or read its inbox.
-:::
+## Errors and refusal behavior
 
-```http
-POST /api/v1/devices/{id}/heartbeat
-{ "deviceName": "Living Room TV", "deviceType": "tv", "capabilities": { "commands": { "playback.pause": {} } } }
-```
+HTTP failures use `application/problem+json` with `code`, `error`, and `status`.
+Do not infer success from a delivered request alone; check the HTTP response.
 
-Send every 2-3 minutes while foregrounded; online status expires 10 minutes after the last
-heartbeat. `capabilities` lists the command types the device handles.
-`GET /api/v1/devices?scope=mine` lists the caller's devices with their capabilities and
-a summary of what each plays.
+| Status | What to do |
+|---|---|
+| `401` | Refresh/re-authorize the account token; do not retry with a media grant. |
+| `403` | Check `scope_required`, membership/client ownership, and host role; navigation may also be blocked by another viewer's access. |
+| `404` | Feature disabled, missing/expired party, or inaccessible media/join refusal; do not expose private title details. |
+| `422 validation_failed` | Fix the payload, required fields, or enum; do not strip policy or identity fields and retry. |
+| `429` | Back off using `Retry-After`; join/connect and concurrent SSE limits apply. |
+| `503 stream_limit` | SSE capacity is exhausted; retry later with backoff. |
+| `503` / `500` | Dependency/startup failure; bounded retry, then show a recoverable error. Some mutation failures currently collapse to `403`/`404` or `500`. |
 
-- **Send:** `POST /api/v1/devices/{id}/commands` with `{ "type": "playback.seekBy",
-  "args": { "seconds": 10 } }`. The answer is `202` with the command.
-- **Follow:** `GET /api/v1/devices/{id}/commands/{commandId}`. The status moves from
-  `pending` to `delivered`, then `applied` or `rejected`. `DELETE` cancels a command
-  that has not been applied.
-- **State:** `GET /api/v1/devices/{id}/state` returns the device, its capabilities and
-  what it plays now, including `availableCommands`.
-- **Events:** on `GET /api/v1/events`, `device.command_status` reports each status change
-  and `device.state` reports new state. The target device receives `device.command`.
-
-Command types are namespaced, for example `media.play`, `playback.pause`,
-`livetv.tune`, `queue.add`, `party.join` and `ui.message`. Commands that only matter now
-expire after seconds and are never applied late. Commands that may wait for the device
-live for minutes. Errors use stable codes such as `device_unsupported`,
-`device_unreachable` and `simple_mode_locked`.
-
-A user can control only their own devices, and the devices of users who allowed it
-through a household grant. The API reference lists every type, its arguments and the
-errors: see the [API reference](/reference/).
+Playback negotiation can separately refuse admission or file compatibility even after
+joining. Keep the local player paused and explain that failure; never bypass it with
+a host's grant, another identity, or another release selected without agreement.
 
 ## Endpoint reference
 
@@ -654,12 +980,10 @@ errors: see the [API reference](/reference/).
 |---|---|---|---|
 | `GET` | `/api/v1/watch-together` | user | Current user's active party (or `null`) |
 | `GET` | `/api/v1/watch-together/parties` | user | List parties the host chose to make visible; admins can request unlisted parties |
-| `POST` | `/api/v1/watch-together/parties` | user | Create a session (host) |
+| `POST` | `/api/v1/watch-together/parties` | user | Create a paused party (`201 {party}`) |
 | `GET` | `/api/v1/watch-together/{code}` | user | Get a party by code |
 | `POST` | `/api/v1/watch-together/{code}/events` | user | Send an event |
 | `GET` | `/api/v1/watch-together/{code}/events?clientId=` | user | SSE event stream |
-| `POST` | `/api/v1/devices/{id}/heartbeat` | user | Report device online status |
-| `POST` | `/api/v1/devices/{id}/commands` | user | Send a command to a device (see [Device remote control](#device-remote-control)) |
 
 All Watch Together endpoints require a valid bearer token. The SSE endpoint
 additionally returns `403` if the caller is not a participant, and `404` if
@@ -670,13 +994,15 @@ the feature is off or the session does not exist.
 - Generate a stable per-device `clientId`; pass it on the SSE URL and in every
   `POST /events` body.
 - Check `capabilities.features.watchTogether` before showing the feature.
-- Compute `clockOffset = serverTime - Date.now()` from the `connected` frame.
+- Estimate clock offset using both handshake timestamps and the local send/receive
+  times; retain half the network round trip as uncertainty (capped at 1 s).
 - Implement `buffer_check → ready → all_ready`; treat `seekInitiated: true` as
   target-authoritative, including on the host.
 - Cancel a pending `all_ready` resume on a newer `buffer_check`; never use an
   unconditional timeout resume.
-- Correct small drift via `playbackRate` (±5% at most); hard seek only for
-  large drift (3 to 8 s depending on the client).
+- Correct drift locally; periodic position reports never pause the group. Use
+  `playbackRate` (±5% at most); hard seek only for
+  large drift according to your tested client threshold.
 - Re-anchor your host-position estimate on every `all_ready`.
 - Stop position/heartbeat reporting the moment you start navigating away.
 - Reconnect with `Last-Event-ID` (or `?lastEventId=`) on SSE disconnect, but
