@@ -7,45 +7,61 @@ description: >
   concurrency limits.
 ---
 
-There are two ways to put a title on a device for offline playback, and a
-client usually needs both:
+For a movie or episode, choose between the original physical file and a
+server-encoded rendition. Both routes below use the `/api/v1` prefix:
 
 | | **Original file** | **Rendition** |
 |---|---|---|
 | Endpoint | `GET /media/{id}/download` | `GET /media/{id}/renditions` → `POST` a rung → poll → download |
 | What you get | The untouched source file, byte for byte | A newly encoded H.264/AAC MP4 at a quality you pick |
-| Cost to the server | None: it streams bytes that already exist | CPU-minutes and gigabytes of cache per quality |
+| Server work | Read and transfer the existing bytes | Encode and cache each requested quality |
 | When to use it | The device can **direct play** the source | It cannot: 4K HEVC/TrueHD on a phone, say |
 | Availability | `capabilities.features.mediaDownload` | `capabilities.features.downloadRenditions` |
 
-Downloading a source the device cannot decode leaves the user with an
-unplayable multi-gigabyte file. That's the failure this whole surface exists
-to prevent.
+Check that your local player can decode the original container, video and audio before
+saving it. A rendition provides H.264 High, 8-bit SDR video and AAC-LC stereo audio in
+MP4; a source without audio produces a video-only MP4. Test that combination on your
+target device too. For music and audiobooks, use the [audio flows below](#music-and-audiobooks).
 
-:::caution[Gate on capabilities, not on optimism]
-Both features are **off by default**; turning them on is a self-hoster's
-decision, since raw file egress and per-user transcoding cost real bandwidth
-and CPU. Check `capabilities.features.mediaDownload` and `downloadRenditions` in `GET /api/v1/server` once at startup and hide the
-affordance when the flag is false. A disabled feature answers **404**, the
-same as a missing item.
+:::caution[Check server features and caller permissions]
+Call authenticated `GET /api/v1/server` and check
+`capabilities.features.mediaDownload` and `capabilities.features.downloadRenditions`.
+The independent operator switches `FEATURE_MEDIA_DOWNLOAD` and
+`FEATURE_DOWNLOAD_RENDITIONS` both default to false. Hide each unavailable action;
+a disabled route answers `404`. Refresh discovery after sign-in or an account change.
+There is no separate caller download feature flag: check your credential scopes and
+handle the access result as well as the server switch.
+
+The original-file, rendition list/create, status and rendition-file routes require
+`media:read`. Probe also needs `media:read`; playback starts and playback-state sync
+need `media:write`. Feature flags do not grant scopes or library access. Each request
+checks the caller's access; inaccessible titles answer `404`.
 :::
 
-Multipart video groups cannot be downloaded through either path. Only offer a complete
-physical `fileId` from playability; do not save the first part or present an individual
-part as a complete episode. These endpoints do not accept a logical `versionId`.
+Multipart video groups cannot be downloaded through either path. Choose an independent,
+complete physical release with a `fileId` from playability. A logical multipart version
+has `versionId` and `versionKind: "multipart_video"`; never submit it to these routes or
+save one part as the full episode. Independent complete releases remain downloadable
+even when the same episode also has a multipart version.
 
 ## Knowing the size before you commit
 
-Every download decision the user makes is really a decision about bytes on a
-metered connection, so both paths tell you the size up front.
+Show an exact size when known and label estimates explicitly. Unknown size is not zero;
+your client must decide whether to ask the user or defer the transfer.
 
 For the **original file**, each entry in `versions[]` from
 `POST /api/v1/media/{id}/playability` carries `sizeBytes`, which is optional: absent
 means the file has not been scanned yet, not zero. The old
 `GET /api/v1/playback/{id}/info` has been removed and answers `410 route_retired`;
-use the probe. For a
-**rendition**, the ladder endpoint below returns an estimate per quality
-before anything has been encoded.
+use the probe. For a **rendition**, the ladder endpoint below returns an estimate per quality
+before anything has been encoded. `durationMs` is in milliseconds; `sizeBytes` and
+`estimatedSizeBytes` are bytes. A ready rendition reports its actual `sizeBytes`.
+
+For a successful full original/rendition byte response, `Content-Length` is the full
+file length. For `206`, it is only that response's range length; read the full length
+from `Content-Range`. The original-file route fails if it cannot obtain a usable file
+size. These guarantees do not extend to live audio encodes or upstream audiobook
+responses, where length can be unknown. An absent length needs indeterminate progress.
 
 ## The original file
 
@@ -54,74 +70,84 @@ GET /api/v1/media/{id}/download
 Authorization: Bearer <token>
 ```
 
-`media:read` scope. Optional `?fileId=` selects a specific edition; it
-defaults to the item's default file. The response is
+Send `?fileId=<physical file UUID>` to pin the exact release the user chose. Omission
+selects the default eligible complete file. An explicit invalid, foreign or grouped-part
+`fileId` returns `404` on this route; it does not silently download another edition.
+`mediaSourceId` belongs to the Jellyfin compatibility adapter and is not a v1 selector.
+The response is
 `Content-Disposition: attachment` with a filename rebuilt from catalog
-metadata (`Series - S01E19 - Title.mkv`), not the on-disk filename.
+metadata, for example `Example Series - S01E01 - First Episode.mkv`. The original
+container and every embedded track remain unchanged. No play session or playback grant
+is needed for this transfer, and fetching bytes does not record watching.
 
 ## Renditions
 
-A **rendition** is a server-produced progressive MP4 of one title, at one
-quality, with at most one audio track: a single file you can save, not HLS. It
-is always **H.264 High 8-bit video in MP4**, whatever the source was: the
-artifact has to decode on the device offline, with no server left to fall back
-to, so it gets the one video combination that plays everywhere. Audio is
-**AAC-LC stereo when the source has an audio track**. A source with no audio
-stream is encoded video-only (`-an`), and its `audioBitrate` in the ladder
-response reports `0` rather than a stereo AAC estimate. HDR sources are
-tone-mapped to SDR during the encode. Renditions are **shared, not per-user**:
-the artifact for a given (file, quality, audio track) is identical no matter
-who asked, so two users requesting the same thing share one encode.
+A rendition is one progressive MP4, at one quality, with at most one audio track.
+HDR sources are tone-mapped to SDR. Subtitles and attachments are omitted; source
+chapters are copied. For a silent source, `audioIndex` is null and `audioBitrate` is 0.
+Renditions are shared: requests for the same file, rung and audio track join the same
+encode and cached artifact. Access is checked separately for each caller.
 
 ### 1. List the qualities
 
 ```http
-GET /api/v1/media/{id}/renditions?audioIndex=1
+GET /api/v1/media/{id}/renditions?fileId=b5e72b98-2c43-4b7c-8d21-5ae7af7ca343&audioIndex=1
 Authorization: Bearer <token>
 ```
 
-Pass `fileId` to list qualities for a specific version. `audioIndex` is the
-absolute stream index. Omission uses the source's default audio track; a silent source
-produces video-only output. Omission does not mute a source that has audio.
+Pass the physical `fileId` on both GET and POST. Check the listing's returned `fileId`
+against your selection: the current rendition handlers can fall back to the default
+complete file when an explicit selection no longer resolves. Stop and refresh
+playability on a mismatch; never assume it encoded the requested edition. The POST
+response does not echo `fileId`, so a file-selection change between listing and creation
+cannot be verified from that response alone. Refresh rather than retrying a stale selector.
 
-```jsonc
+```json
 {
-  "fileId": "b5e72b98-…", "durationMs": 300576, "sourceHeight": 1080, "audioIndex": 1,
+  "fileId": "b5e72b98-2c43-4b7c-8d21-5ae7af7ca343",
+  "durationMs": 300000,
+  "sourceHeight": 720,
+  "audioIndex": 1,
   "rungs": [
-    { "id": "1080p", "label": "1080p", "height": 1080, "videoBitrate": 6000000,
-      "audioBitrate": 192000, "estimatedSizeBytes": 159425510, "status": "absent" },
-    { "id": "720p",  "label": "720p", "height": 720, "videoBitrate": 3800000,
-      "audioBitrate": 192000, "estimatedSizeBytes": 100714000, "status": "absent" },
-    { "id": "540p",  "label": "540p", "height": 540, "videoBitrate": 1800000,
-      "audioBitrate": 192000, "estimatedSizeBytes": 50893528, "status": "ready",
-      "renditionId": "4fea7c16-…", "progressPct": 100, "sizeBytes": 50102314 }
+    { "id": "720p", "label": "720p", "height": 720,
+      "videoBitrate": 2500000, "audioBitrate": 128000,
+      "estimatedSizeBytes": 100521000, "status": "absent" },
+    { "id": "540p", "label": "540p", "height": 540,
+      "videoBitrate": 1200000, "audioBitrate": 128000,
+      "estimatedSizeBytes": 50796000, "status": "absent" },
+    { "id": "360p", "label": "360p", "height": 360,
+      "videoBitrate": 600000, "audioBitrate": 96000,
+      "estimatedSizeBytes": 26622000, "status": "absent" }
   ]
 }
 ```
 
-- **`estimatedSizeBytes`** is bitrate × duration plus container overhead.
-  It's enough for a picker row reading *"720p · ~1.4 GB"*, within roughly ±10%
-  of the finished file. `null` when the source duration is unknown.
-- **`status`** is `absent` until something has been built for that quality;
-  after that it mirrors the rendition (`queued` → `encoding` → `ready`, or
-  `failed`).
-- The ladder never offers a quality above the source height.
-- **`audioIndex`** is the **absolute** stream index, not the display index.
-  It's the same `absoluteIndex` value `POST /api/v1/media/{id}/playability` gives per
-  audio track. Renditions are keyed on (file, quality, audio track).
+- `videoBitrate` and `audioBitrate` are **bits per second**. Estimates use their sum
+  × duration ÷ 8, plus 2% container overhead. Actual encoded size can vary; do not treat
+  an estimate as a hard storage bound. Unknown duration gives a null estimate.
+- Rungs normally fit the source height. For a source shorter than 360 pixels the
+  smallest rung is still offered and encoding keeps the source height. Unknown height
+  offers the full ladder. Use returned rung IDs instead of assuming a fixed list.
+- `status` is `absent` before a row exists, then `queued`, `encoding`, `ready` or
+  `failed`. Existing rungs include `renditionId` and `progressPct`; ready ones can include
+  `sizeBytes`.
+- `audioIndex` is the **absolute** stream index (`tracks.audio[].absoluteIndex` in
+  playability), not the display `index`. Omission selects the default audio track when
+  audio exists; it does not request mute. Each audio selection has its own rendition.
 
 ### 2. Request one
 
 ```http
 POST /api/v1/media/{id}/renditions
+Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "rung": "720p", "fileId": "b5e72b98-…", "audioIndex": 1 }
+{ "rung": "720p", "fileId": "b5e72b98-2c43-4b7c-8d21-5ae7af7ca343", "audioIndex": 1 }
 ```
 
 ```jsonc
 // 202 Accepted — an encode started, or you joined one already running
-{ "id": "4fea7c16-…", "status": "queued", "progressPct": 0, "rungId": "720p", "audioIndex": 1 }
+{ "id": "4fea7c16-dd56-40a3-9a05-507e6494e089", "status": "queued", "progressPct": 0, "rungId": "720p", "audioIndex": 1 }
 ```
 
 `200` means it was already built and is ready to download right now. The call
@@ -133,6 +159,7 @@ retries it.
 
 ```http
 GET /api/v1/renditions/{renditionId}
+Authorization: Bearer <token>
 ```
 
 Automatic series-download candidates advertise `prepareRePostSeconds` on
@@ -142,8 +169,9 @@ alone does not restart it. Retain the original request parameters and follow the
 [API reference](/reference/) for the pool contract.
 
 `url` appears only when `status` is `ready`. Don't construct it yourself from
-the id: an encode is only named once complete. On `failed`, `errorCode` says
-why; POST the rendition again to retry.
+the id. On `failed`, inspect `errorCode` (for example `encode_failed` or
+`encode_stalled`) and offer a bounded retry by repeating the original POST. An encode
+failure is a rendition state, distinct from an HTTP refusal of the POST.
 
 ```http
 GET /api/v1/renditions/{renditionId}/file
@@ -155,10 +183,13 @@ Served as an attachment named after the title with the quality appended:
 
 ## Resumable transfers
 
-Both download endpoints support byte-range resume with a strong `ETag`:
+The original-file and rendition-file routes support a single byte range and return
+`Accept-Ranges: bytes`, a strong `ETag` and normally `Last-Modified`. Save the ETag with
+the partial file and send it back verbatim:
 
 ```http
 GET /api/v1/renditions/{id}/file
+Authorization: Bearer <token>
 Range: bytes=10485760-
 If-Range: "17b8824-19ff17949d5"
 ```
@@ -170,58 +201,137 @@ If-Range: "17b8824-19ff17949d5"
 | `Range` + stale `If-Range` | `200` with the whole file |
 | `Range` past the end | `416` with `Content-Range: bytes */<size>` |
 
-A stale `If-Range` means the file changed since you started. The server
-refuses a partial you'd splice onto stale bytes, so discard what you have and
-take the full response. This is the contract `URLSessionDownloadTask` resume
-data relies on; nothing here is single-use in the URL, so a transfer that
-outlives its access token can be retried against the same URL with a freshly
-minted bearer token.
+Only append a `206` whose `Content-Range` begins at the requested offset and whose
+validator matches your saved representation. A `200` replaces the partial file in full.
+For `416`, reconcile the reported length and validator before treating a local file as
+complete. The ETag is derived from size and modification time; it is not a content hash.
+
+Fence asynchronous completion locally too: associate each transfer with its media ID,
+physical file ID, rendition/audio choice and a local attempt generation. A completion
+from a cancelled or replaced attempt must not mark the current selection downloaded.
+There is no download `generation` request parameter. A smart-pool rescore's `generation`
+identifies a ranking snapshot, not the byte representation.
+
+These URLs have no single-use token or fixed expiry. Every request needs the bearer
+credential, scope and current title access. Refresh an expired access token and retry
+the same URL with the saved `If-Range`. Playback `?grant=` credentials do not authorize
+these download routes. A receiver that cannot send bearer headers cannot use them;
+never give it your account token to work around that. Use the separate
+[casting flow](/developers/building-a-player/#play-in-an-external-player-vlc-kodi-cast) for
+network playback.
 
 ## Eviction, and why a URL can go 404
 
 Finished renditions live in a cache with a byte budget, not an expiry: the
 coldest artifacts are evicted, and eviction removes the rendition entirely.
-Every status poll and byte range you fetch marks a rendition as recently used,
-so something you're actively downloading won't be evicted underneath you, but
-a rendition downloaded weeks ago may be gone: its quality reads `absent` again
-and its file URL answers `404`. Treat that `404` as "ask for it again" (a
-`POST` re-encodes it), not as an error. That includes mid-transfer: an
-artifact evicted between your status poll and byte request answers `404`
-rather than a `5xx`.
+Status polls and byte requests refresh its last-used time, reducing eviction risk;
+this does not reserve the artifact. An evicted quality reads `absent` again and its file
+URL answers `404`, including between a status poll and the next range request. Refresh
+discovery/access and the ladder before requesting it again: `404` can also mean access
+was revoked or the feature disabled. If still offered, POST to rebuild. Saved local bytes
+remain local; cache eviction does not remove a completed device download.
 
 ## Concurrency and rate limits
 
-Renditions are built by a bounded worker pool, so operator-side settings cap
-how many encodes run at once and how many a single user can have in flight or
-queued. An interactive `POST /media/{id}/renditions` (a person tapping
-Download) is metered per user. Exceeding it returns **429** with
-`Retry-After`, sized so a person queueing a season by hand never reaches it.
-Unattended, larger sweeps
-(a season or series downloaded in bulk) are instead subject to a per-user
-preparation cap when the POST includes `pool` and to global encode-queue backpressure, answering **503**
-with `Retry-After` when the server is saturated. Interactive requests can still hit their rate limit or fail validation. An unattended
-sweep should back off according to the returned response. Treat both as "come back later," not
-as failure.
+A bounded worker pool limits active rendition encodes. Interactive POSTs omit `pool`
+and are rate-limited per user. Automatic sweeps must send a nonempty `pool` lane name;
+those POSTs instead face a per-user pending-preparation cap and global queue
+backpressure. Either capacity check can return `503` with `Retry-After`. Interactive
+requests bypass these pool checks, but still face validation and request-rate limits.
+Back off according to the response rather than retrying a season in a tight loop.
 
 An operator can also cap bandwidth per response, separately for downloads and
 for transcoded streams. When a limit is set your transfer is just slower:
 there's no header advertising it and nothing for a client to do differently.
 
-:::note[These are operator-configured, not client-visible]
-The concurrency, queue, and cache-size settings above live in server
-configuration (env vars), not in the client-facing API. A client only ever
-sees their effects (`429`/`503`, or a slower transfer), never the numbers
-themselves. Self-hosters configure them in
+For automatic series pools, `/api/v1/series/downloads/candidates` advertises
+`maxConcurrentDownloads` (0 means start no byte transfers),
+`maxConcurrentPreparations`, `prepareRePostSeconds` and `prepareQueueDepth`. Honor these
+separately: preparing an encode is not a byte transfer. Other worker, queue, bandwidth
+and cache settings remain operator configuration; see
 [Integrations](/guides/integrations/).
-:::
+
+### Handle refusals separately from encode failures
+
+| Response | Client action |
+|---|---|
+| `401` (`unauthorized` / `invalid_token`) | Obtain a valid account credential, then retry. |
+| `403 scope_required` | Request the required scope; repeated byte retries cannot fix it. |
+| `404 not_found` | Refresh discovery, access and selection; it can also mean a disabled feature or evicted rendition. |
+| `422 validation_failed` on rendition GET/POST | Inspect `details[].field`: a missing audio track, unknown rung or rung unavailable for the source needs a new selection. |
+| `429 rate_limited` on interactive rendition POST | Wait for `Retry-After`, in seconds. The current limit is 60 requests per user per 60-second window. |
+| `503 dependency_unavailable` | Back off; pool capacity refusals include `Retry-After`. A dependency failure may need server recovery. |
+
+Read the problem response's `code` and structured details, rather than matching its
+human-readable `error`. This download validation is separate from playback-start
+refusals such as `source_incompatible`, `transcode_not_allowed` and `stream_limit`.
+Do not silently fall back to an original file your device cannot decode.
 
 ## Subtitles
 
-Renditions do **not** have subtitles burned in, and carry only the one audio
-track you asked for. Subtitles stay sidecar files: fetch them from
-`delivery.subtitles[].hrefs` from the playback start response, or the subtitle endpoints in
-[Streaming a player](/developers/building-a-player-streaming/#4-audio--subtitle-tracks),
-store them next to the media, and render them client-side.
+Renditions omit subtitle tracks. The original file retains embedded subtitles, but
+external sidecars need their own download. Fetch the selected file's subtitle links
+while online, store them with the media and render them locally. A playback start's
+`delivery.subtitles[].hrefs` provides `text` (WebVTT), `raw` (original format) and, where
+available, `rendered` links. Bitmap rendering may require a descriptor and image assets;
+saving only a descriptor URL does not make it usable offline. ASS can need fonts. Prefer
+a format your offline player actually renders; no rendition request burns subtitles in.
+
+Issued subtitle URLs can carry session-bound grants. Complete those downloads before
+closing the session or letting its grant expire, and never persist a remote URL as a
+substitute for local subtitle bytes. See
+[audio and subtitle tracks](/developers/building-a-player-streaming/#4-audio--subtitle-tracks).
+
+## Music and audiobooks
+
+| Kind | Download bytes | Record actual offline playback later |
+|---|---|---|
+| Movie / episode | Original or rendition routes above; no playback session required | `POST /api/v1/offline-playback-sessions` |
+| Music | Bearer `GET /api/v1/music/tracks/{id}/stream?download=1` | `POST /api/v1/play-sessions/replay` |
+| Audiobook | `POST /api/v1/play-sessions` with `audio: { "download": true }`, then its issued track URLs | `POST /api/v1/offline-playback-sessions` |
+
+Music's transfer flag suppresses listening-session creation and leaves existing
+listening sessions alone. For a complete file, omit `startPositionSeconds`. Optional
+`format=mp3&bitrateKbps=128` selects an encode; `format=m4a` produces AAC in MP4 for
+players that need that container. Raw `aac` is ADTS and may fail from disk on Apple
+players. Audio bitrate controls are **kilobits per second**, unlike the video rendition
+ladder's bits per second. Music's download route is separate from the two video download
+switches; transcoding depends on the server's music-transcode feature. It can return
+`429` with `Retry-After` (currently 300 download GETs per user per 600-second fixed window)
+or capacity `503`. A live encode may not provide a final size or resumable bytes; do not
+apply the video-file resume guarantee to every audio response. See
+[Music playback](/developers/music-playback/) for negotiation and replay.
+
+Audiobook download starts require `media:write` and create a real session without
+superseding the user's listening sessions. They remain subject to stream policy and
+require the user's AudiobookShelf link. Save every required track, its book offset and
+duration; a book may have several files. Follow issued URLs unchanged and inspect the
+delivery kind rather than assuming one progressive file. Audiobook grants normally last
+up to 24 hours, or up to 6 hours when unpinned for casting; use the returned `expiresAt`,
+`renewAfter` and `renewHref`. Renewal needs account authentication. Session termination
+revokes byte access. `castTarget: true` requests access from another IP only when server
+policy allows it; a download flag itself grants no casting permission. See
+[Audiobook playback](/developers/audiobook-playback/) for session closure and track clocks.
+
+## Record playback, not transfers
+
+Downloading bytes is not heard or watched time. When playing saved video or audiobooks
+without a live session, retain a UUID `eventId` per playback stretch and upload up to 50
+`sessions` to `/api/v1/offline-playback-sessions` with `media:write`. Records carry
+`mediaId`, `startedAt`, `endedAt`, `positionMs`, `runtimeMs`, `sessionElapsedMs` and
+`endReason` (`stopped` or `completion`), plus `knownAsOf` when tracked. Set `knownAsOf`
+to when you last incorporated server state, so stale offline work cannot overwrite a
+newer resume point from another device. All durations are milliseconds; active time excludes pauses and buffering. Positions for a combined
+multi-episode physical file are file-absolute; the server applies episode windows.
+Audiobook positions are book-absolute.
+
+Use occurrence time, not upload time. Records older than 90 days or more than five
+minutes in the future are refused individually. Follow each result's `retryable` flag;
+`accepted` and `duplicate` are terminal. `applied: false` on an accepted record means it did not determine current resume
+state, so re-read state rather than resubmitting it. Music uses replay
+instead: `/offline-playback-sessions` rejects tracks as `unsupported_media_type`. Keep
+actual online playback on its returned reporting contract; never send transfer progress
+as listening. See [offline playback sync](/developers/building-a-player-state/#4-offline-playback-sync).
 
 ## Next
 
@@ -230,4 +340,5 @@ store them next to the media, and render them client-side.
   audiobooks specifically.
 - [Integrations](/guides/integrations/): operator-side download and cache
   settings.
-- [API reference](/reference/): exact request/response shapes.
+- [API reference](/reference/): hosted contract snapshot; use your instance's
+  `/api-docs?format=yaml` for its installed release.
