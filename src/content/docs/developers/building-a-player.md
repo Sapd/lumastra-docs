@@ -19,11 +19,14 @@ Lumastra's own native apps use.
   Those speak their own protocols and aren't part of `/api/v1`.
 :::
 
-The single source of truth for exact request/response shapes is the interactive
-[**API reference**](/reference/) (vendored from the app's OpenAPI spec). Target
-endpoints marked `x-stability: stable`. The field lists below name the ones a
-player needs. An instance's own `/api-docs?format=yaml` describes its installed release;
-check it when the hosted reference and an older server differ.
+For exact request/response shapes, use your instance's `/api-docs?format=yaml`, which
+matches its installed release. The hosted [**API reference**](/reference/) is a vendored
+snapshot and can lag newly shipped fields. Target endpoints marked `x-stability: stable`.
+The field lists below explain the contracts a player needs.
+
+The hosted reference currently omits multipart video's `multipartVideo` and `versionId`
+fields. Use the [multipart recipe below](#multipart-video-episodes) and your instance's
+schema for that opt-in contract.
 
 ## The model in one paragraph
 
