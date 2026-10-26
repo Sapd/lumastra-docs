@@ -3,7 +3,7 @@ title: Writing a plugin
 description: >
   Build a Lumastra plugin: installing the SDK, the eleven contract families,
   multi-contract bundles, receiving host events and webhooks, testing, signing,
-  and the constraints that will bite you.
+  and compatibility limits.
 ---
 
 import PluginOAuthDiagram from '../../../components/diagrams/PluginOAuthDiagram.astro';
@@ -20,9 +20,12 @@ plugin into.
 ## 1. Install the SDK
 
 ```bash
-npm install --save-dev @sapd/lumastra-plugin-sdk
-npm install --save-dev @sapd/lumastra-plugin-sdk-testing   # optional, for tests
+npm install --save-dev --save-exact @sapd/lumastra-plugin-sdk@0.2.0-alpha.2
+npm install --save-dev --save-exact @sapd/lumastra-plugin-sdk-testing@0.1.0-alpha.1
 ```
+
+These are the versions in the current host source. Match your target host before
+upgrading. The testing package is optional.
 
 The SDK is a dev-time dependency only. Your plugin must never `import` it at
 runtime: the host loads plugins with the SDK marked external, so a runtime import
@@ -35,13 +38,7 @@ Use it for types:
 import type { TaskDefinition, PluginContext } from '@sapd/lumastra-plugin-sdk';
 ```
 
-…or in plain JavaScript, with JSDoc:
-
-```js
-/** @type {import('@sapd/lumastra-plugin-sdk').FeatureDefinition} */
-const myFeature = { id: 'my-feature' /* … */ };
-export default myFeature;
-```
+For plain JavaScript, use the JSDoc annotation shown in the complete feature below.
 
 You do **not** need the `defineX()` helpers at runtime. The host runs those same
 validators over your definition when it loads you, so you get identical checking
@@ -55,7 +52,7 @@ Eleven families. A plugin ships one, or several at once (§3).
 
 | Contract | For |
 | -------- | --- |
-| `defineTask` | Background/scheduled work. Resource classes, budgets, drains |
+| `defineTask` | Background/scheduled work. Resource classes, budgets, batched processing |
 | `defineProvider` | Metadata + artwork from an external source |
 | `defineTrickplayProvider` | Scrubbing thumbnails |
 | `defineWatchSync` | Two-way watch-state sync with an external service |
@@ -67,12 +64,13 @@ Eleven families. A plugin ships one, or several at once (§3).
 | `defineLyricsProvider` | Find lyrics for a track (§6d) |
 | `defineAuthProvider` | Verify a login against an external directory (§6e) |
 
-The smallest possible plugin:
+Save this complete feature as `hello/index.js`:
 
 ```js
 /** @type {import('@sapd/lumastra-plugin-sdk').FeatureDefinition} */
 export default {
     id: 'hello',
+    version: '1.0.0',
     capabilities: {},
     routes: [
         {
@@ -85,20 +83,30 @@ export default {
 ```
 
 Drop it in `$PLUGINS_EXTERNAL_DIR/hello/index.js` and it answers at
-`GET /api/plugins/hello/ping`.
+`GET /api/plugins/hello/ping` for a signed-in user; an anonymous request gets 401.
+Plugin routes use `/api/plugins/`, without a `/v1` prefix. They are separate from the
+versioned API described by [the API guide](/developers/api/).
+
+Handlers receive `(ctx, request, params)`, where `params` contains matched `:name`
+segments. Return a `Response` and validate request data yourself. The host requires a
+signed-in user; it does **not** apply page permissions to your routes. Check
+`ctx.user.isAdmin`, groups, and resource ownership in each sensitive handler. Unmatched
+routes return 404, bodies over 256 KiB return 413, and a throw or a non-`Response` return
+becomes a 500 JSON error. Core routes already using `/api/plugins/` can reserve names;
+choose a distinct plugin id and verify every route after loading it.
 
 TypeScript works without a build step, for a drop-in plugin directory. For a
 hand-placed directory under `PLUGINS_EXTERNAL_DIR` (no registry entry), the loader
 resolves `package.json#main`, then `index.js`, then `index.ts`, and the host runs
-Node 24, which strips types on import. `index.js` is tried before `index.ts` on
+a Node version with built-in type stripping. `index.js` is tried before `index.ts` on
 purpose: if you ship a build alongside your source, the build is what runs, since
 that is the artifact your signature and tree digest were taken over.
 
-This fallback chain is not how a registry-installed (managed) plugin loads. For
-those, the loader reads exactly `<dir>/index.js` and ignores `package.json#main`
-on purpose: every load path re-verifies that file's sha256 against the registry's
-stored checksum, so there is nothing else it could safely run. Ship a build
-(`index.js`) if you plan to distribute through the registry.
+Registry-installed (managed) plugins use a different entry rule. Managed
+single-file installs load exactly `<dir>/index.js`, verified against the stored
+checksum. Multi-file bundles load the manifest's `entry` after verifying the whole
+extracted tree. Both ignore `package.json#main`. Ship compiled ESM for managed installs;
+copying a TypeScript source directory is the drop-in development path.
 
 Strip-only has a real limit. Anything that needs code *generated* rather than
 removed, such as `enum`, `namespace`, parameter properties or decorators, throws
@@ -115,14 +123,30 @@ files get served: they are fetched from your own routes under
 
 ## 3. One plugin, several contracts
 
-Export an aggregate instead of a single definition:
+Export an aggregate instead of a single definition. This complete `hello` bundle
+registers a feature and an event integration with separate ids:
 
 ```js
 export default {
-    watchSyncs: [{/* id: 'trakt' */}],
-    tasks: [{/* id: 'trakt-backfill' */}],
+    features: [{
+        id: 'hello', version: '1.0.0', capabilities: {},
+        routes: [{ method: 'GET', path: '/ping',
+            handler: async () => Response.json({ ok: true }) }],
+    }],
+    integrations: [{
+        id: 'hello-events', version: '1.0.0', capabilities: {},
+        subscribes: ['org.lumastra.media.item.added'],
+        async sendNotification(ctx, event) {
+            ctx.logger.info('Received host event', { type: event.type });
+        },
+    }],
 };
 ```
+
+The aggregate keys are `tasks`, `providers`, `trickplayProviders`, `watchSyncs`,
+`features`, `integrations`, `mediaSources`, `externalServices`, `subtitleProviders`,
+`lyricsProviders`, and `authProviders`. Each array contains definitions, not factory
+names. For signing, use `kinds: ['feature', 'integration']` for the example above.
 
 Two rules, both enforced at load:
 
@@ -131,6 +155,8 @@ Two rules, both enforced at load:
 - **Anchor**: exactly one contract must be named after the plugin itself. That id
   is how the host answers "is this plugin loaded?", so a bundle without it is
   refused.
+
+Each contract also needs a unique id, including across families.
 
 Validation is all-or-nothing: if any contract in the bundle is invalid, none of
 them register. There is no unload, so a half-registered bundle would be
@@ -146,30 +172,43 @@ Both `TaskContext` and `PluginContext` carry:
 | ------- | ----- |
 | `ctx.sql` | Postgres handle. Requires `capabilities.database` |
 | `ctx.logger` | Structured logging |
-| `ctx.http` | Rate-limited, SSRF-guarded fetch. Honours `allowedDomains` |
+| `ctx.http` | Optional `get(url, opts?)` / `post(url, body, opts?)`; see limits below |
 | `ctx.cache` | Namespaced cache |
-| `ctx.secrets` | Encrypted, scoped to your plugin id |
+| `ctx.secrets` | Read encrypted operator secrets with `get`, `getOptional`, `getUser` |
 | `ctx.userCredentials` | Per-user encrypted credentials (OAuth tokens etc.) |
-| `ctx.catalog` / `ctx.mediaItems` | Composite-key-safe catalog access, preferred over raw SQL |
+| `ctx.catalog` / `ctx.mediaItems` / `ctx.mediaFiles` | Typed catalog and file access |
 | `ctx.signal` | Cancellation. Pass it to `fetch()` |
 
-Tasks additionally get `ctx.input`, `ctx.reportProgress()`, `ctx.spend()`, `ctx.drain()`
-and `ctx.softSignal` (a soft deadline you can wind down on and still return success).
+Tasks additionally get `ctx.input`, `ctx.scope`, `ctx.reportProgress()`, `ctx.spend()`,
+`ctx.reportFailure()` / `ctx.reportSuccess()`, `ctx.dep(name).fetch()`, and
+`ctx.softSignal` (a soft deadline you can wind down on and still return success).
+`ctx.drain()` is declared in the SDK but currently throws a permanent task error.
+Implement bounded batches inside `execute()` instead. Optional `ctx.checkpoint` supports
+resumable manual runs; guard its presence and make repeated work safe.
 
-There is no `ctx.ffmpeg` and no `ctx.dataDir` on the SDK's `PluginContext` /
-`TaskContext`, the shape your plugin actually receives. Both were declared on that
-context at one point and never implemented: the host handed back a runner that
-threw on first call and a temp path that did not exist. So they're gone rather
-than left as a promise you only discover is empty at runtime. A task that needs
-ffmpeg shells out to it directly. The `ffmpeg` and `dataDir` *capability flags*
-remain, as a truthful disclosure of what your task does. (A separate,
-internal-only `PluginContext` type used solely by Lumastra's own built-in native
-tasks still declares `ffmpeg`/`dataDir` fields for historical reasons. It is not
-exported by `@sapd/lumastra-plugin-sdk`, and no third-party plugin ever receives
-it.)
+A task receives `http` and `cache` only when it declares those capabilities. Its HTTP
+client applies a configurable default rate limit; use declared `externalDeps` with
+`ctx.dep(name).fetch()` for an upstream-specific budget. For non-task contexts, HTTP
+rate limiting and `allowedDomains` are currently wired from **metadata-provider**
+definitions only. Other non-task contracts receive HTTP/cache wrappers, but their
+`allowedDomains` declarations are not currently passed into that wrapper. Do not rely
+on them to contain an auth provider, integration, lyrics, or subtitle provider.
+
+The shared HTTP wrapper rejects private/loopback destinations, pins DNS, rechecks
+redirects, and has a default 30-second request timeout. An absent or empty
+`allowedDomains` list imposes no hostname allowlist. These checks cover the wrapper;
+plugins can call Node APIs directly. Capabilities do not sandbox trusted code.
+`ctx.cache.set(key, value, ttlMs)` uses milliseconds; cache keys are namespaced by the
+calling contract id.
+
+There is no `ctx.ffmpeg` or `ctx.dataDir`. A task needing a subprocess manages it
+itself, including cancellation and temporary-file cleanup. The capability flags remain
+as disclosures.
 
 Request-scoped contexts (feature routes) also get `ctx.user`, `ctx.media` for
-access-checked media resolution, and `ctx.realtime.publish()`.
+access-checked media resolution, and `ctx.realtime.publish()`. Optional `ctx.ai` is
+host/build dependent; feature code must handle its absence. `ctx.user` is normally
+null outside request contexts.
 
 Two typed stores cover the things plugins otherwise reach into raw SQL for:
 
@@ -189,8 +228,16 @@ await ctx.mediaSegments.upsert(mediaItemId, [
 ]);
 ```
 
-`replaceItems` runs as one transaction, so the playlist is never briefly empty.
-A viewer opening it mid-update must not find it wiped.
+`playlistId` is a number returned by `ctx.playlists.create({ userId, name })`.
+`replaceItems` runs as one transaction, drops unresolved media ids, and refuses a
+playlist created by another plugin. Segment positions are seconds; `endTime` must exceed
+`startTime`. The source is the calling contract id.
+
+In a task, these typed stores use the real database handle even without raw-SQL access.
+Non-task contexts currently construct them from the capability-gated handle, so declare
+`database: true` there if you need their database operations. These stores are not
+viewer-scoped authorization helpers. Feature handlers must enforce access themselves;
+use `ctx.media` for viewer-checked media resolution.
 
 Store per-user data under `ctx.user.userId`, never `username`. Usernames are
 mutable and reusable; a deleted account frees its name for someone else, who
@@ -204,17 +251,19 @@ An integration opts in with `subscribes`:
 
 ```js
 export default {
-    id: 'discord-notify',
-    capabilities: { http: true, allowedDomains: ['discord.com'] },
+    id: 'event-log',
+    version: '1.0.0',
+    capabilities: {},
     subscribes: ['org.lumastra.task.run.failed', 'org.lumastra.media.item.added'],
     async sendNotification(ctx, event) {
-        // ctx.http exposes get() / post() — not a bare fetch().
-        await ctx.http.post('https://discord.com/api/webhooks/…', {
-            content: `${event.type}`,
-        });
+        ctx.logger.info('Received event', { type: event.type });
+        // Validate event.payload before using it: its SDK type is unknown.
     },
 };
 ```
+
+Omitting `subscribes` delivers nothing. `['*']` subscribes to every published type.
+An event is `{ type: string, payload: unknown }`; validate the payload you consume.
 
 Published event types:
 
@@ -233,7 +282,9 @@ opt-in per type and visible on your plugin's admin card.
 Delivery is in-process, at-most-once, and time-boxed (10s per handler). There is
 no durable queue and no retry. A throw is logged and isolated so it cannot fail
 the task run that emitted the event, but the event is then simply gone after
-that. Persist anything you must not lose.
+that. There is no cross-replica fan-out. A timeout stops the host waiting; it does not
+cancel your handler's work. Use your own deadlines and persist received work if it needs
+retries. Persistence cannot recover an event lost before your handler received it.
 
 ### Refusing a stream
 
@@ -241,11 +292,22 @@ An integration can also veto playback before it starts: a per-library quota, an
 office-hours rule, a bandwidth budget.
 
 ```js
-async authorizePlayback(ctx, request) {
-    const active = await countActiveFor(ctx, request.userId);
-    return active < 3 ? { allow: true } : { allow: false, reason: 'Too many streams' };
-}
+export default {
+    id: 'direct-only', version: '1.0.0', capabilities: {},
+    async sendNotification() {}, // Required by the current integration validator.
+    async authorizePlayback(ctx, request) {
+        return request.playMethod === 'direct'
+            ? { allow: true }
+            : { allow: false, reason: 'This integration permits direct play only.' };
+    },
+};
 ```
+
+The request carries `userId`, `username`, `mediaId`, `playMethod`, and optional
+`deviceId` / `ipAddress`. Gates run sequentially; the first explicit `allow: false`
+refuses the start. This supplements the host's own stream policy. The current
+integration validator also requires `sendNotification` or `handleWebhook`; the no-op
+above satisfies that requirement without subscribing to events.
 
 It fails open: a throw, a hang past 2 seconds, or a malformed answer is ignored
 and playback proceeds. That's on purpose. A policy that stops being enforced is
@@ -259,8 +321,18 @@ Declare `capabilities.webhook`, implement `handleWebhook`, and have the operator
 your `webhookSecret` secret. Callers then POST to `/api/plugin-webhooks/<your-id>` with
 an `X-Plugin-Webhook-Secret` header.
 
-Until both the capability and the secret are in place the endpoint answers 404,
-on purpose, so nobody can enumerate installed integrations.
+The endpoint returns 404 for unknown integrations, absent capability/handler/secret,
+and wrong secrets. After 20 failed attempts per IP in 15 minutes it also returns 404;
+that IP cannot authenticate again until the window clears. Successful requests do not
+consume the failure budget.
+
+`payload` is parsed JSON, `null` for an empty body, or the raw string if JSON parsing
+fails. Validate it before acting. Return a JSON-serializable value for 200, or
+`undefined` / `null` for 204. Bodies over 1,000,000 bytes return 413, read failures return
+400, and a throwing handler returns 500. Unlike event dispatch, this handler has no
+host execution timeout or delivery queue. Bound your own work and make repeated sender
+requests safe. The host-added `webhookSecret` settings field is operator-managed; do
+not hardcode it in your plugin.
 
 ---
 
@@ -270,30 +342,21 @@ A subtitle provider searches an external service and hands back bytes; the host
 installs the chosen result as a sidecar beside the video, and serves it from then on
 like any other external subtitle.
 
+This small provider serves an invented subtitle for a fixture named *Example Film*.
+Replace the lookup and download with your service adapter:
+
 ```js
 export default {
-    id: 'opensubs',
-    capabilities: { http: true, allowedDomains: ['api.opensubtitles.com'] },
-    async isConfigured(ctx) {
-        return !!(await ctx.secrets.getOptional('apiKey'));
+    id: 'example-subtitles', version: '1.0.0', capabilities: {},
+    async search(ctx, query, signal) {
+        if (query.title !== 'Example Film' || !query.languages.includes('en')) return [];
+        return [{ id: 'example-en', language: 'en', format: 'srt',
+            releaseName: 'Example Film fixture' }];
     },
-    async search(ctx, query) {
-        // query carries title, year, season/episode, externalIds, fileName,
-        // fileSize and the languages the viewer wants.
-        return [
-            {
-                id: 'file-12345', // opaque to the host, handed back to download()
-                language: 'en',
-                format: 'srt',
-                releaseName: 'Arrival.2016.1080p.BluRay',
-                downloadCount: 4210,
-                hashMatch: true,
-            },
-        ];
-    },
-    async download(ctx, candidateId) {
-        const res = await ctx.http.get(`https://api.opensubtitles.com/…/${candidateId}`);
-        return { content: await res.text(), format: 'srt' };
+    async download(ctx, candidateId, signal) {
+        if (candidateId !== 'example-en') throw new Error('Unknown candidate');
+        return { content: '1\n00:00:01,000 --> 00:00:03,000\nAn example caption.\n',
+            format: 'srt', language: 'en' };
     },
 };
 ```
@@ -305,7 +368,14 @@ and it's the difference between staying in sync and drifting.
 
 Return an empty array when you find nothing. Throwing is for genuine failures: the host
 isolates each provider behind a 15-second budget, so a throw or a hang costs your
-results but not anyone else's.
+results but not anyone else's. `search(ctx, query, signal?)` receives
+`mediaItemId`, SDK `mediaType`, title, requested languages, and optional year,
+season/episode, external ids, filename and byte size. Pass the supplied signal into
+upstream requests. `download(ctx, candidateId, signal?)` has a separate 30-second budget
+and returns UTF-8 text or `Uint8Array` with a supported format (`srt`, `ass`, `ssa`,
+`vtt`, `sub`). Installation requires a writable sidecar location within a configured
+library root. The host exposes acquisition through the admin subtitle endpoint; do not
+assume a viewer subtitle picker automatically calls your provider.
 
 ---
 
@@ -332,7 +402,12 @@ widgets: [
 | `settings-user` | Settings → Connections, for "link my account" UI |
 | `player` | Inside the video player (see below) |
 
-Your entry module exports `mount(element, context)` and returns a cleanup function. Set
+Your entry module exports `mount(element, context)` and returns a cleanup function
+(or an object with `destroy()`). Serve the ESM source from your feature's own `GET`
+route with a JavaScript content type; a file sitting in the directory is not served
+automatically. For example, the route can return
+`new Response(widgetSource, { headers: { 'content-type': 'text/javascript' } })`.
+`context.apiBase` is your feature route base; `context.user` is the viewer. Set
 `chrome: true` and the host draws its own card frame with your title around you, the
 cheapest way to look native.
 
@@ -345,15 +420,16 @@ host remounts you rather than updating: every mount is a fresh item, and you nev
 ```js
 capabilities: { browserUi: true },
 pages: [
-    { id: 'index', title: 'Requests', entry: '/page.js',
+    { id: 'index', title: 'Library report', entry: '/page.js',
       access: { adminOnly: true },
       nav: { icon: 'inbox', displayOrder: 50 } },
 ]
 ```
 
-Served at `/p/<your-id>` inside the normal app shell, optionally with a sidebar entry.
-Access is enforced server-side, and a denied viewer gets a 404, not a 403. A 403
-would confirm the page exists, telling them which plugins are installed.
+The `index` page is served at `/p/<feature-id>`; other page ids use
+`/p/<feature-id>/<page-id>`. A sidebar entry is optional. Page access is enforced
+server-side with a 404 on denial. Repeat the appropriate authorization in the API
+handlers serving that page; page access does not protect those handlers.
 
 ### Player overlay
 
@@ -365,8 +441,10 @@ You do **not** get the video element, the hls instance, or any stream URL, since
 carry session material. Your subscriber is wrapped, and three consecutive throws disarm
 it for the session: nobody is at the keyboard to fix a plugin mid-film.
 
-Your DOM sits below the host controls layer and the container is `pointer-events: none`
-(opt individual elements back in). You cannot cover pause or seek, by construction.
+The mount container sits below the host controls layer with `pointer-events: none`
+(opt individual elements back in). Keep all DOM inside it and clean up subscriptions
+on unmount. This layout containment is not a security sandbox: browser UI executes in
+the host document with the viewer's cookies and browser storage.
 
 ### Styling
 
@@ -379,25 +457,29 @@ application inside it.
 
 ## 6c. Contributing data (no browser JS)
 
-Two hooks contribute to the UI without running any code in the browser, which means
-they work on the mobile and TV apps too, and need no `browserUi`.
+`decorateCards` contributes badges without browser JavaScript. Add this method to a
+feature with at least one route:
 
 ```js
-// Badges on media cards. Called once per batch, never per card.
 async decorateCards(ctx, refs) {
-    return { [refs[0].mediaItemId]: [{ text: '4K', color: 'primary' }] };
-},
-
-// A row on the home page. Return IDS — the host resolves them through the
-// viewer's own access rules, so you cannot surface media they may not see.
-async homeSections(ctx) {
-    return [{ id: 'staff-picks', title: 'Staff Picks', mediaItemIds: [...] }];
+    return Object.fromEntries(refs.map(({ mediaItemId }) =>
+        [mediaItemId, [{ text: 'Staff pick', color: 'primary' }]]));
 },
 ```
 
-Both are strictly budgeted (50ms for badges, 500ms for sections), capped (3 badges per
-item, 3 sections and 30 items per plugin) and fault-isolated. Cache your own work in
-`ctx.cache`; the host does not cache for you.
+It runs once per batch on the recommendation path, including responses consumed by
+native clients. Other media responses do not necessarily invoke it. Return a record
+or `Map` keyed by the supplied internal UUIDs; unknown ids are ignored. Each badge has
+`text`, `color`, and optional `icon` / `title`. The host validates the badge shape,
+allows 50ms per feature, and keeps at most 3 badges per item across all plugins.
+Cache your work in `ctx.cache`; the host does not cache this hook's result.
+
+The SDK also declares `homeSections(ctx)`, returning
+`{ id, title, mediaItemIds: string[] }[]`. Its collection helper has viewer filtering
+and budgets (500ms, 3 sections per feature, 30 items per section), but the current host
+has **no production caller** for that helper. Registering this method does not add a
+home row today. Use a supported widget or page for a working web UI and verify your
+target host before depending on future section delivery.
 
 ## 6d. Supplying lyrics
 
@@ -406,13 +488,11 @@ came from one hardcoded source, and adding a second meant editing core.
 
 ```js
 export default {
-    id: 'my-lyrics',
-    capabilities: { http: true, allowedDomains: ['lrclib.net'] },
-    async fetchLyrics(ctx, query) {
-        // query: trackId, title, artist, album, durationSeconds
-        const res = await ctx.http.get(`https://lrclib.net/api/get?…`);
-        const body = await res.json();
-        return { plain: body.plainLyrics, synced: body.syncedLyrics };
+    id: 'example-lyrics', version: '1.0.0', capabilities: {},
+    async fetchLyrics(ctx, query, signal) {
+        if (query.title !== 'Example Song') return null;
+        return { plain: 'An invented line for this example.',
+            synced: '[00:01.00]An invented line for this example.' };
     },
 };
 ```
@@ -420,7 +500,13 @@ export default {
 Return at least one of `plain` or `synced`; the host prefers `synced` when both are
 present. Return `null` when you have nothing.
 
-Providers are tried sequentially and the first answer wins, unlike subtitles, where
+`query` contains `trackId`, `title`, nullable `artist` / `album`, and optional
+`durationSeconds`. Synced text uses LRC timestamps. Pass the optional third `signal`
+argument to upstream requests. Each configured check and fetch has an 8-second budget;
+a throw or timeout moves on. When plugins have no answer, the host tries its built-in
+source.
+
+Providers are tried sequentially and the first non-empty answer wins, unlike subtitles, where
 the host collects candidates from everyone and ranks them. There's nothing to rank
 here: a track has one set of lyrics, so the cheapest correct thing is to stop at the
 first provider that has them.
@@ -429,35 +515,33 @@ first provider that has them.
 
 ## 6e. Verifying a login
 
-An auth provider checks credentials against something the host does not know about, an
-LDAP directory, a company SSO, a members database, and answers one question: are these
-credentials good, and who do they belong to?
+An auth provider verifies credentials or completes a redirect login and returns claims.
+Choose one mode: `verifyCredentials`, or the pair `beginLogin` + `completeLogin`.
+Do not declare both modes. The examples below show contract wiring; implement and test
+the provider-specific `bind` or `exchange` adapter before loading them. Never accept
+claims straight from callback parameters or an unverified token.
 
 ```js
-export default {
-    id: 'acme-ldap',
-    name: 'Acme Directory', // the label on the login button
-    version: '1.0.0',
-    capabilities: { http: true, allowedDomains: ['ldap.acme.internal'] },
+// Your adapter must verify credentials against your actual directory.
+import { bind } from './directory.js';
 
+export default {
+    id: 'example-directory', name: 'Example Directory', version: '1.0.0',
+    capabilities: { http: true, allowedDomains: ['directory.example.com'] },
     async verifyCredentials(ctx, { username, password, clientIp }) {
-        const ok = await bind(username, password);
-        if (!ok) return { ok: false, reason: 'invalid_credentials' };
-        return {
-            ok: true,
-            identity: {
-                subject: 'uid=alice,ou=people,dc=acme', // STABLE, never reused
-                username: 'alice',
-                displayName: 'Alice Example',
-                email: 'alice@acme.example',
-                groups: ['staff'],
-            },
-        };
+        // bind returns a verified person, null for a bad credential, or throws
+        // on an outage. Map its immutable directory id, never the login name.
+        const person = await bind({ username, password, clientIp });
+        if (!person) return { ok: false, reason: 'invalid_credentials' };
+        return { ok: true, identity: {
+            subject: person.id, username: person.username, groups: person.groups,
+        } };
     },
 };
 ```
 
-The host binds an account to `subject` alone: no other field counts. It must be
+The host binds an account to the pair (provider id, `identity.subject`); username
+and email are provisioning hints, never account lookup keys. The subject must be
 stable for the life of that person's account and must never be reused for someone
 else, a directory's immutable id, not their username or email, both of which
 people change. A success with no `subject` is discarded as unusable rather than
@@ -473,8 +557,10 @@ Everything after "these credentials are good" is the host's decision, not yours:
   account is not linked, and an admin links it.
 - Whether your groups can confer admin is a separate opt-in too
   (`AUTH_PLUGIN_ADMIN_ASSERT`). Without it, admin-conferring groups are stripped
-  from your claims on every login; ordinary group mapping keeps working. A
-  provisioned account is never created as an admin under any configuration.
+  from reported claims; ordinary group mapping keeps working. With that opt-in,
+  asserted admin groups can grant effective admin permissions, including to a newly
+  provisioned account after initial setup. The explicit `is_admin` flag stays false.
+  Provisioning requires an existing administrator and cannot bootstrap the first one.
 - A suspended account is refused no matter how valid your answer.
 
 Two capabilities are refused for this contract: `database`, because identity
@@ -487,14 +573,23 @@ This contract fails closed, unlike `authorizePlayback` (§5): a throw, a
 A broken playback veto is an outage; a bypassed auth check is an authentication
 bypass.
 
-You receive the raw password, which comes with being a bind verifier. Declare
-`allowedDomains` so the host can bound where it travels. Inputs are bounded before they
-reach you (username ≤128, password ≤1024) and passed verbatim: escaping for your
-protocol, including LDAP filter and DN escaping, is yours to do.
+Credential providers receive the raw password. Use fixed, trusted service endpoints;
+`allowedDomains` is currently not enforced for auth-provider contexts (§4). Inputs are
+bounded before they reach you (username ≤128, password ≤1024 characters). The host
+trims username whitespace and preserves the password. Escaping for your protocol,
+including LDAP filters and DNs, is your responsibility. Do not log credentials.
 
-Rate limiting is the host's: 30 attempts per IP and 10 failures per account per 15
-minutes. A provider *outage* does not consume the per-account budget, so a flapping
-directory cannot lock people out of the fallback login too.
+Return `{ ok: false, reason: 'invalid_credentials' }` for a rejected credential, or
+`{ ok: false, reason: 'unavailable' }` for an upstream outage. Set `emailVerified: true`
+only after your provider verified that address; omission means false. Reporting
+`groups: []` clears provider-managed groups on a returning login; omitting `groups`
+keeps their existing projection. Group changes take effect on the next plugin login.
+
+Credential login uses `POST /api/auth/plugin/<id>/login` with JSON `username`,
+`password`, and optional `returnTo`; the host establishes a browser session. This is
+separate from API-client OAuth authorization. Rate limiting is 30 attempts per IP and
+10 failures per provider/username per 15 minutes. A provider outage does not consume
+the per-account budget.
 
 ### The redirect kind
 
@@ -508,27 +603,37 @@ The four actors and who owns what:
 <PluginOAuthDiagram />
 
 ```js
+// Your provider-specific code exchange and identity verification.
+import { exchange } from './identity-provider.js';
+
 export default {
-    id: 'discord-login',
-    name: 'Discord',
-    version: '1.0.0',
-    capabilities: { http: true, allowedDomains: ['discord.com'] },
-
+    id: 'example-login', name: 'Example identity', version: '1.0.0',
+    capabilities: { http: true, allowedDomains: ['identity.example.com'] },
     async beginLogin(ctx, { callbackUrl, state }) {
-        const url = new URL('https://discord.com/oauth2/authorize');
+        const url = new URL('https://identity.example.com/authorize');
         url.searchParams.set('client_id', await ctx.secrets.get('clientId'));
-        url.searchParams.set('redirect_uri', callbackUrl); // the HOST's URL
+        url.searchParams.set('redirect_uri', callbackUrl);
         url.searchParams.set('response_type', 'code');
-        url.searchParams.set('state', state);             // echo it, don't invent it
-        return { redirectUrl: url.toString(), txData: 'anything you need back' };
+        url.searchParams.set('state', state);
+        return { redirectUrl: url.toString(), txData: callbackUrl };
     },
-
-    async completeLogin(ctx, { params, state, txData }) {
-        const profile = await exchange(params.code);
+    async completeLogin(ctx, { params, txData }) {
+        if (params.error || !params.code || !txData) {
+            return { ok: false, reason: 'invalid_credentials' };
+        }
+        const profile = await exchange({ code: params.code, callbackUrl: txData,
+            clientId: await ctx.secrets.get('clientId'),
+            clientSecret: await ctx.secrets.get('clientSecret') });
         return { ok: true, identity: { subject: profile.id, username: profile.username } };
     },
 };
 ```
+
+Start redirect login with `GET /api/auth/plugin/<id>/start`; register
+`/api/auth/plugin/<id>/callback` on your identity provider. The example's `exchange`
+adapter must redeem `params.code` using the same callback URL, authenticate its client,
+and verify the resulting identity. Store that callback URL and any PKCE verifier in
+`txData` if your adapter needs them. Reject provider errors and absent codes.
 
 The host owns the transaction. It generates `state`, binds it to the browser with an
 HttpOnly cookie, stores your `txData` server-side, and enforces single use. You get no
@@ -545,7 +650,8 @@ exactly what `beginLogin` returned. It's echoed back verbatim and never inspecte
 an id in it, not a secret you can't afford to have sitting in the cache for ten
 minutes.
 
-`params` is the callback's query string, capped at 32 entries of 4KB each.
+`params` contains at most 32 callback query entries; values longer than 4096 characters
+are skipped. It is a plain string record, so duplicate keys are overwritten.
 `completeLogin` returns the same verdict shape as `verifyCredentials`, with the same
 rules: a stable `subject` is mandatory, and everything after that (linking,
 provisioning, admin stripping, suspension) is the host's decision, as above.
@@ -557,41 +663,59 @@ fail closed.
 
 ## 6f. Media sources need their own task
 
-`defineMediaSource` gives the host the primitives to ingest from your library,
-`scan`, `fullSync`, `getStatus`, and then does not call them. There is no generic
-scanner walking registered sources; every builtin media source ships a paired task that
-drives its own scan, and yours must too:
+A media source declares `sourceConfig`, `scan`, `fullSync`, and `getStatus`.
+Registering it does not schedule a scan. Pair it with a task and have that task call the
+source. This complete TypeScript skeleton performs an empty scan; replace the body
+with your ingest adapter. Bundle `zod` into distributed JavaScript with your build.
 
-```js
-export default definePlugin({
-    mediaSources: [{ id: 'my-source', scan, fullSync, getStatus }],
-    tasks: [
-        {
-            id: 'my-source-scan',
-            schedule: { every: '6h' },
-            async execute(ctx) {
-                const r = await scan(ctx, {});
-                return { success: true, itemsProcessed: r.imported };
-            },
-        },
-    ],
-});
+```ts
+import { z } from 'zod';
+import type { MediaSourceDefinition, TaskDefinition } from '@sapd/lumastra-plugin-sdk';
+
+const source: MediaSourceDefinition = {
+    id: 'my-source', name: 'My source', version: '1.0.0', capabilities: {},
+    sourceConfig: { supportsIncrementalScan: true, defaultScanIntervalHours: 6 },
+    async scan(ctx, opts) {
+        return { added: 0, updated: 0, removed: 0, unmatched: 0, skipped: 0,
+            durationMs: 0, errors: [] };
+    },
+    async fullSync(ctx) {
+        return { added: 0, updated: 0, removed: 0, durationMs: 0, errors: [] };
+    },
+    async getStatus(ctx) { return { itemCount: 0, isScanning: false }; },
+};
+
+const task: TaskDefinition = {
+    id: 'my-source-scan', name: 'Scan my source', version: '1.0.0',
+    processingVersion: 1, minAppVersion: '0.1.0', capabilities: {},
+    resourceClass: 'io', schedule: { every: '6h' },
+    inputSchema: z.object({}), identityFor: () => 'global',
+    async execute(ctx) {
+        const result = await source.scan(ctx, {});
+        return { success: result.errors.length === 0,
+            itemsProcessed: result.added + result.updated };
+    },
+};
+
+export default { mediaSources: [source], tasks: [task] };
 ```
 
-Ship only the media source and nothing will ever run. The contract's shape reads like
-something the host drives, but it's the reverse: the host provides the ingest primitives,
-your task provides the cadence.
+`ScanResult` uses `added`, not `imported`; durations are milliseconds. Optional watcher
+methods (`startWatching`, `stopWatching`, `getWatcherStatus`, `updateWatcherTargets`)
+must be declared together or all omitted. Watcher startup is also your integration's
+responsibility. A task calling `source.scan(ctx, ...)` passes its **task** context, so
+settings, secrets, cache and credential ownership remain `my-source-scan` rather than
+`my-source`. Design that configuration split deliberately.
 
 ---
 
 ## 7. Settings
 
-Declare fields and the admin UI renders them, and so do the mobile clients, which is
-why there is no arbitrary-HTML config page:
+Declare fields for the host's settings form. Supported types are `string`, `number`,
+`boolean`, `secret`, `select`, `array`, `multiline`, and `keyvalue`:
 
 ```js
 settings: {
-    canToggle: true,
     fields: [
         { key: 'maxItems', type: 'number', label: 'Max items', default: 50,
           validation: { min: 1, max: 500 } },
@@ -599,7 +723,30 @@ settings: {
 }
 ```
 
-Read them with `await ctx.settings()`.
+Read non-secret values with `await ctx.settings()`. Apply and validate defaults in
+your own code: this method loads stored values and does not merge field defaults.
+For example, accept `maxItems` only when it is an integer between 1 and 500; otherwise
+use 50. UI validation hints do not replace runtime checks. `settings.canToggle` is not
+an implemented SDK setting or a reliable enable/disable switch.
+
+Secret fields are stored separately. `ctx.secrets.get(key)` throws when missing;
+`getOptional(key)` returns `null`. There is no `ctx.secrets.set`: operators manage these
+secrets through the host settings. For per-user OAuth tokens, use
+`ctx.userCredentials.get/set/delete`, keyed by the viewer's immutable user UUID.
+`get` returns a string or `null`, including stored values past their expiry. Store
+any token expiry you need in your own credential payload so you can refresh it.
+Never trust a user id supplied by a browser when `ctx.user.userId` is available.
+
+The operator form uses admin endpoints under `/api/admin/plugins/<id>/settings`.
+External task-management clients use `GET` / `PUT /api/v1/tasks/<taskId>/settings`
+with the `tasks:admin` bearer scope. That task endpoint does not configure every
+non-task contract. Custom feature routes enforce their own finer permissions; the
+SDK does not assign API scopes to them.
+
+Every contract id has its own settings, secret, cache, and user-credential namespace.
+A shared install or id prefix does not share these values. Task-origin tracking records
+which plugin contributed a task for the admin UI; it does not redirect the task's
+settings or secrets to the bundle anchor.
 
 ---
 
@@ -608,17 +755,24 @@ Read them with `await ctx.settings()`.
 ```ts
 import { expectRun, runTask, mockContext } from '@sapd/lumastra-plugin-sdk-testing';
 
-// Fluent assertions: the matcher builds its own context from the input.
-await expectRun(myTask, { libraryGroupId: 'g1' }).toCompleteSuccessfully();
-await expectRun(myTask, { libraryGroupId: 'g1' }).toSpendExactly('api_calls', 3);
-await expectRun(myTask, {}).toFailWith(/not configured/);
-
-// Or drive it yourself when you need the raw result.
-const result = await runTask(myTask, { libraryGroupId: 'g1' });
+// Import your exported task from your own module.
+// Each matcher instance executes it once with a fresh mock context.
+await expectRun(task, {}).toCompleteSuccessfully();
+await expectRun(task, {}).toNotSpend('api_calls');
+const result = await runTask(task, {});
 
 // mockContext() builds a standalone context for testing non-task contracts.
 const ctx = mockContext({ input: {} });
 ```
+
+The task example above exports an aggregate; export `task` as a named value from your
+own module when testing it separately. `runTask` and `expectRun` call `execute()`;
+they do not reproduce schema validation, scheduling, host permissions, or installation.
+Use SDK `defineX` validators **in tests**, then load the built artifact into a test
+instance to verify namespaces, routes, settings and restart behavior. A mock context
+can expose surfaces the real host withholds, so a passing mock test is not a host
+compatibility check. Use `mockContext` for shared primitives; request-only surfaces
+such as `user`, `media`, `realtime`, and `ai` need appropriate explicit fixtures.
 
 Matchers: `toCompleteSuccessfully`, `toFailWith`, `toReturnResult`, `toReportProgress`,
 `toSpend` / `toSpendExactly` / `toNotSpend`, `toCallDep`, `toAbortWithin`.
@@ -628,14 +782,19 @@ Matchers: `toCompleteSuccessfully`, `toFailWith`, `toReturnResult`, `toReportPro
 ## 9. The ABI
 
 The SDK exports `PLUGIN_SDK_ABI`, the version of the contract surface. Your signed
-manifest declares which ABI you built against, and the host refuses to install **or
-load** a plugin whose ABI is not its own.
+manifest declares which ABI you built against, and the host refuses to install or
+load a **managed** plugin whose ABI differs. The current value is `1`; an omitted
+manifest `sdkAbi` is treated as `1`. Unmanaged drop-ins do not get that manifest gate.
 
 That's on purpose. Without it, a plugin built today installs onto a future host and
 dies at first call with a `TypeError` from inside your code, which the operator cannot
 debug. With it, they get a message naming both numbers.
 
-The `plugin-sign` script shipped in the Lumastra repository fills the field in for you.
+The `plugin-sign` script fills `sdkAbi` from `plugin.json`, falling back to the SDK ABI
+in that checkout. Record it explicitly and rebuild/test against each supported host.
+Matching ABI does not guarantee every optional hook or placement exists. Signed
+`minAppVersion` is checked at install (unstamped `unknown` host builds skip that check);
+use it along with feature detection and integration tests.
 
 ---
 
@@ -649,22 +808,54 @@ signer (`scripts/plugin-sign.mjs`) ships in the Lumastra repository:
 
 ```bash
 node scripts/plugin-sign.mjs \
-  --dir ./my-plugin --key ./private.pem --key-id mykey-2026 \
+  --dir ./hello --key ./private.pem --key-id mykey-2026 \
   --version 1.0.0 \
-  --bundle-url https://cdn.example.com/my-plugin/1.0.0/index.js \
-  --manifest-url https://cdn.example.com/my-plugin/1.0.0/manifest.json \
+  --bundle-url https://cdn.example.com/hello/1.0.0/index.js \
+  --manifest-url https://cdn.example.com/hello/1.0.0/manifest.json \
   --out ./signed
 ```
 
-Add `--format bundle [--gzip]` to ship multiple files. Your `plugin.json` declares
-`name` and either `kind` (single contract) or `kinds` (an array, for a multi-contract
-bundle).
+`plugin.json` for the `hello` aggregate above could contain:
+
+```json
+{
+    "name": "hello",
+    "kinds": ["feature", "integration"],
+    "sdkAbi": 1,
+    "capabilities": {}
+}
+```
+
+Use either `kind` (one definition) or `kinds` (an aggregate). Manifest names use
+`task`, `provider`, `trickplay`, `watch-sync`, `feature`, `integration`, `media-source`,
+`external-service`, `subtitle-provider`, `lyrics-provider`, and `auth-provider`.
+The declaration must match the exported contracts. The current signed-install gate
+compares one kind entry per exported definition while the manifest forbids duplicate
+kinds. As a result, managed aggregates can currently contain at most one definition
+per family, even though SDK arrays and unmanaged drop-ins permit several. Split
+repeated-family definitions into separate signed installs. Change the directory, URLs
+and metadata together when naming your own plugin.
+
+Add `--format bundle --gzip --entry index.js` to ship a multi-file archive. This mode
+packages the directory without compiling its sources: build JavaScript and bundle
+runtime dependencies first. Single-file mode compiles with esbuild but leaves the SDK
+external. Keep all runtime SDK imports, including `TaskError` and `definePlugin`, out
+of distributed artifacts.
+
+The optional signed `capabilities` map bounds the combined capabilities registered by
+your bundle. Declaring more is allowed; registering more than declared is refused.
+This check runs after module evaluation, so rollback cannot undo side effects. Catalog
+entries advertise manifests and grant no signing trust. Serve the generated
+`manifest.json.sig` too; the operator needs its detached signature when installing.
 
 Serve `manifest.json` byte-for-byte as written. The signature covers those exact
 bytes.
 
-Operators must add your public key to their trusted-key list before they can install
-anything you sign, see [Plugins & extensions](/guides/plugins/).
+Operators must trust your public key before installing your signed plugin; see
+[Plugins & extensions](/guides/plugins/). A fresh install can load immediately in the
+serving replica. Reload adds previously unloaded plugins; it does not replace running
+code. Upgrades, downgrades, disable and uninstall require restart to change what is
+executing. Restart each replica after a change; shared files alone do not reload code.
 
 ---
 
@@ -677,11 +868,13 @@ anything you sign, see [Plugins & extensions](/guides/plugins/).
   restart. Nothing you register can be retracted while the process lives.
 - **Never write into your own install directory.** Every load re-verifies the on-disk
   tree against the signed digest, so a file you write there fails your _next_ boot.
-  Write to `ctx.secrets` or the database.
+  Use a database or a plugin-managed data location outside that directory; operator
+  secrets are read-only through `ctx.secrets`.
 - **Bundles must be ESM.** A bundled `package.json` with `"type": "commonjs"` flips
   import semantics for your whole tree and fails the load.
-- **`isolation: 'worker'` is rejected** for external tasks. The worker sandbox resolves
-  builtins only.
+- **`isolation: 'worker'` is rejected** for managed external tasks. The worker
+  sandbox resolves builtins only. Use inline external tasks; a worker thread would
+  not turn an unmanaged drop-in into a supported sandbox.
 - **Multi-replica deployments** need `$PLUGINS_EXTERNAL_DIR` on shared writable storage;
   each replica loads from its own filesystem.
 
