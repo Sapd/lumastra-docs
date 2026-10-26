@@ -64,6 +64,15 @@ are sourced; it is **not** a playlist URL. The actual playlists/accounts/tuners 
 just turns the source off while leaving the feature flag on.)
 :::
 
+## Proxy runtime
+
+Live TV uses the Rust stream proxy shipped with the Lumastra image. The TypeScript
+proxy has been removed. Remove any `LIVETV_PROXY_RUNTIME=typescript` environment
+setting or Helm `proxy.runtime: typescript` override before upgrading; these settings
+now fail with an explicit error. The normal proxy container command stays the same.
+For source development, `npm run dev:proxy` builds and starts the Rust proxy and
+requires the pinned Rust toolchain.
+
 ## Adaptive quality
 
 With adaptive bitrate the server encodes a channel in several qualities at once (1080p up
