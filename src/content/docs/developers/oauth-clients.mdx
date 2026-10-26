@@ -65,6 +65,7 @@ curl -X POST https://lumastra.example.com/oauth/device \
 |---|---|---|---|
 | `client_id` | string | Yes | A free-form identifier for your app (e.g. `"apple-tv-app"`). No registration needed. |
 | `device_name` | string | No | Human-readable device name shown to the user during approval. |
+| `device_id` | UUID | No | Persisted per-install identifier; lets reauthorization reuse the device session. |
 | `scope` | string | No | One of two recognized values. `"media"` (the default if omitted, or if you send anything unrecognized) grants read **and** write. `"media:read"` narrows the resulting token to **read-only**, which cannot start playback (`403 scope_required`). See [What your token can do](#what-your-token-can-do). Max 256 characters. |
 
 **Response (200 OK):**
@@ -135,7 +136,8 @@ libraries that assume it.
 - Stop polling once `expires_in` seconds have elapsed since Step 1. Restart
   the flow from scratch if you need a new code.
 - Handle every response below; don't treat unrecognized errors as fatal
-  without checking `error_description`.
+  or deciding whether they require reauthorization. Use `error` and the optional stable
+  `code`, and display `error_description` as prose.
 
 **Responses:**
 
@@ -175,17 +177,19 @@ names.
 
 | Token | Lifetime | Purpose |
 |---|---|---|
-| `access_token` | ~1 hour (`JWT_ACCESS_TOKEN_TTL_SECONDS`, instance-configurable) | Bearer credential for `/api/v1/*` requests. Stateless JWT, not revocable individually before expiry. |
+| `access_token` | ~1 hour (`JWT_ACCESS_TOKEN_TTL_SECONDS`, instance-configurable) | Bearer credential for `/api/v1/*` requests. Device-session revocation can invalidate it before expiry; use `expires_in` rather than assuming one hour. |
 | `refresh_token` | 90 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`), rotated on every use | Used to mint a new access token without re-running the device flow. |
 
 - Store both in secure, platform-appropriate storage (Keychain,
   `EncryptedSharedPreferences`, or equivalent), never in plain application
   preferences or logs.
-- **Refresh tokens rotate on every use.** Each refresh call returns a *new*
-  refresh token and immediately revokes the old one. Persist the new token
-  before making any other request. Presenting an already-consumed refresh
-  token is treated as a theft signal and revokes the entire device session,
-  forcing the user to re-approve from scratch.
+- Serialize refresh requests so callers share one in-flight refresh. Persist the
+  returned refresh token securely before allowing waiting requests to continue.
+- Current servers supersede the presented token rather than immediately revoking it.
+  It remains usable until its own successor is used; a short replay cache can return
+  the identical replacement after a lost response. An older predecessor can then be
+  rejected with `invalid_grant`. There is no automatic whole-session revocation for a
+  refresh race. Keep the latest returned token rather than depending on recovery.
 
 ---
 
@@ -195,7 +199,7 @@ Use the access token as a standard bearer credential against the `/api/v1/*`
 token surface:
 
 ```bash
-curl https://lumastra.example.com/api/v1/user/profile \
+curl https://lumastra.example.com/api/v1/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -237,14 +241,20 @@ curl -X POST https://lumastra.example.com/oauth/token \
 }
 ```
 
-**Important:** the response always contains a **new** refresh token. Save it
-and use it for the *next* refresh. The one you just sent is now revoked.
+Save the returned refresh token for the next refresh. A replay can return the same
+replacement, so do not assume every response has a different value. A transport
+failure or `server_error` is retryable with backoff; retain your token. A refresh
+`invalid_grant` with `code: refresh_token_invalid`, `refresh_token_revoked` or
+`refresh_token_expired` is terminal: ask the user to authorize again. Never infer
+recovery from an `error_description` string.
 
 ---
 
 ## Complete example (TypeScript)
 
-A minimal client that runs the whole flow and auto-refreshes on demand:
+This example bounds polling and retries and shares an in-flight refresh. Add durable
+secure token storage before using it in an app: `setTokens` below holds tokens in
+memory only. Await your storage write before releasing waiting API requests.
 
 ```typescript
 interface TokenResponse {
@@ -269,6 +279,7 @@ class LumastraClient {
     private accessToken?: string;
     private refreshToken?: string;
     private tokenExpiry?: Date;
+    private refreshInFlight?: Promise<void>;
 
     constructor(baseUrl: string, clientId: string) {
         this.baseUrl = baseUrl;
@@ -290,9 +301,11 @@ class LumastraClient {
     }
 
     // Step 3: poll for token
-    async pollForToken(deviceCode: string, interval: number): Promise<TokenResponse> {
-        for (;;) {
+    async pollForToken(deviceCode: string, interval: number, expiresIn: number): Promise<TokenResponse> {
+        const deadline = Date.now() + expiresIn * 1000;
+        while (Date.now() < deadline) {
             await this.sleep(interval * 1000);
+            if (Date.now() >= deadline) break;
 
             const response = await fetch(`${this.baseUrl}/oauth/token`, {
                 method: 'POST',
@@ -322,14 +335,24 @@ class LumastraClient {
                 throw new Error(data.error_description || data.error);
             }
 
-            // success
+            if (!response.ok) throw new Error(`Token request failed: ${response.status}`);
             this.setTokens(data);
             return data;
         }
+        throw new Error('Device code expired; start authorization again');
     }
 
     // Step 6: refresh
     async refreshAccessToken(): Promise<void> {
+        if (!this.refreshInFlight) {
+            this.refreshInFlight = this.performRefresh().finally(() => {
+                this.refreshInFlight = undefined;
+            });
+        }
+        return this.refreshInFlight;
+    }
+
+    private async performRefresh(): Promise<void> {
         if (!this.refreshToken) throw new Error('No refresh token');
 
         const response = await fetch(`${this.baseUrl}/oauth/token`, {
@@ -349,31 +372,35 @@ class LumastraClient {
         this.setTokens(data);
     }
 
-    // Authenticated request helper, with auto-refresh
-    async api<T>(path: string, options: RequestInit = {}): Promise<T> {
+    // JSON resource helper. Replays at most once, only with a newer token.
+    async api<T>(path: string, options: RequestInit = {}): Promise<T | undefined> {
+        const target = new URL(`${this.baseUrl}/api/v1${path}`);
+        if (!path.startsWith('/') || target.origin !== new URL(this.baseUrl).origin) {
+            throw new Error('API path must stay on the configured server');
+        }
         if (this.tokenExpiry && new Date() >= this.tokenExpiry) {
             await this.refreshAccessToken();
         }
-
-        const response = await fetch(`${this.baseUrl}/api/v1${path}`, {
-            ...options,
-            headers: {
-                ...options.headers,
-                Authorization: `Bearer ${this.accessToken}`,
-            },
-        });
-
-        if (response.status === 401) {
-            await this.refreshAccessToken();
-            return this.api(path, options);
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const usedToken = this.accessToken;
+            const headers = new Headers(options.headers);
+            headers.set('Authorization', `Bearer ${usedToken}`);
+            const response = await fetch(target, { ...options, headers });
+            if (response.status === 401 && attempt === 0) {
+                // A parallel caller may already have refreshed this token.
+                if (this.accessToken === usedToken) await this.refreshAccessToken();
+                continue;
+            }
+            if (!response.ok) throw new Error(`API request failed: ${response.status}`);
+            if (response.status === 204) return undefined;
+            return response.json() as Promise<T>;
         }
-
-        return response.json();
+        throw new Error('Authentication failed after refresh');
     }
 
     private setTokens(data: TokenResponse) {
         this.accessToken = data.access_token;
-        this.refreshToken = data.refresh_token; // IMPORTANT: always the new one
+        this.refreshToken = data.refresh_token; // Persist the returned value before releasing callers
         this.tokenExpiry = new Date(Date.now() + (data.expires_in - 60) * 1000);
     }
 
@@ -390,7 +417,7 @@ async function main() {
     console.log(`Go to: ${deviceAuth.verification_uri}`);
     console.log(`Enter code: ${deviceAuth.user_code}`);
 
-    await client.pollForToken(deviceAuth.device_code, deviceAuth.interval);
+    await client.pollForToken(deviceAuth.device_code, deviceAuth.interval, deviceAuth.expires_in);
     console.log('Authorized!');
 
     const playing = await client.api('/play-sessions?scope=mine');
@@ -411,7 +438,7 @@ All `/oauth/*` errors share the same shape:
 | `error` | HTTP | Meaning |
 |---|---|---|
 | `invalid_request` | 400 | Missing or malformed required parameter. |
-| `invalid_grant` | 400 | Unknown or already-consumed `device_code` / `refresh_token`. |
+| `invalid_grant` | 400 | Unknown, revoked or expired refresh token, or invalid/consumed device code. Inspect the optional stable `code` for the refresh-specific reason. |
 | `authorization_pending` | 400 | User hasn't approved yet. Keep polling. |
 | `slow_down` | 400 | Polling too fast for this device code. Increase your interval. |
 | `slow_down` | 429 | Per-IP rate limit exceeded. Back off for `Retry-After` seconds (60). |
@@ -476,7 +503,7 @@ Submitting media requests is the common case. `POST /api/v1/requests` and
 `POST /api/v1/requests/{id}/dismissal` require an authenticated user and are
 **not** scope-gated: there is no `requests:write` scope, and the `requests:read`
 in your grant is not what permits them. Request submission is gated by
-`canRequest` in the permissions object of `GET /api/v1/user/profile`. A device token can submit requests whenever that user
+`canRequest` in the permissions object of `GET /api/v1/me`. A device token can submit requests whenever that user
 could from the web UI.
 
 When it is denied you get:

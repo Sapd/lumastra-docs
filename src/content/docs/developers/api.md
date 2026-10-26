@@ -149,6 +149,7 @@ response header.
 | `not_found` | 404 | Resource does not exist, or feature is off |
 | `conflict` | 409 | Resource exists / operation already in-flight |
 | `gone` | 410 | Resource permanently removed |
+| `route_retired` | 410 | Legacy route permanently retired; use the replacement named by that route |
 | `payload_too_large` | 413 | Request body exceeds the endpoint cap |
 | `validation_failed` | 422 | Request syntactically valid but semantically wrong |
 | `quota_exceeded` | 422 | Request quota exhausted for the bucket |
@@ -200,7 +201,7 @@ Lists that take only `limit` return `truncated` instead of `hasMore`. Unpaged co
 item count and `hasMore` is `false`.
 
 Endpoints with high churn (run history, event logs, feeds) use **cursor
-pagination** instead of offset: `"page": { "limit": 50, "cursor": "eyJpZCI6…",
+pagination** instead of offset: `"page": { "limit": 50, "nextCursor": "eyJpZCI6…",
 "hasMore": true }`. Pass `?cursor=<opaque>&limit=50` on subsequent requests.
 Offset and cursor are mutually exclusive per endpoint.
 
@@ -212,7 +213,7 @@ to route validation:
 | Type | Prefix | Created by | Permissions | Expiry |
 |---|---|---|---|---|
 | JWT access token | *(none, compact JWT)* | OAuth device flow | User's groups | `JWT_ACCESS_TOKEN_TTL_SECONDS` (default 3 600 s) |
-| Personal Access Token | `pat_` | User (settings UI or `/api/v1/user/pats`) | User's groups, scoped | User choice |
+| Personal Access Token | `pat_` | User (settings UI or `/api/v1/me/pats`) | User's groups, scoped | User choice |
 | Service token | `svc_` | Admin only (`/api/v1/service-tokens`) | Configurable scope, optional IP allowlist | Admin choice |
 
 All token values are SHA-256-hashed before storage; the plaintext is returned
@@ -233,7 +234,7 @@ longer than 7 days after its first start. `GET` and `DELETE` on
 `/api/v1/playback/grants/{id}` read and revoke it.
 
 A grant ends with its playback session. Ending the session (a `COMPLETED` report on
-`PUT /api/v1/play-sessions/{id}`, or `POST /api/v1/play-sessions/{id}/cancel`), a newer start on
+`PUT /api/v1/play-sessions/{id}`, or `DELETE /api/v1/play-sessions/{id}`), a newer start on
 the same device, or reaping makes every URL on that grant
 answer `401 invalid_grant` with `reason: session_ended`. Start a new session to play
 again.
@@ -265,7 +266,10 @@ JWT payload:
 
 Format: `pat_` + 48 hex chars.
 
-- Inherit the creating user's groups and library access.
+- Inherit the creating user's groups and library access. For a player, request the
+  `write` alias so the token can start sessions and report progress; `read` can only
+  browse/probe. Self-service creation requires an interactive browser session; an
+  existing PAT or device JWT cannot mint another PAT.
 - Accepted scopes: `read`, `write`, `admin`, or either exclusive
   `jellyfin_compat` / `jellyfin_compat_read` scope. Fine-grained scopes are expanded
   permissions and cannot be requested independently. See the scope tree below.
@@ -289,7 +293,7 @@ Creating a PAT:
 
 ```bash
 # Requires an active browser session on /api/* (forward auth, built-in, or OIDC)
-curl -X POST https://lumastra.example.com/api/v1/user/pats \
+curl -X POST https://lumastra.example.com/api/v1/me/pats \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Home Assistant",
@@ -300,8 +304,8 @@ curl -X POST https://lumastra.example.com/api/v1/user/pats \
 ```
 
 The response body includes the `token` field (shown once, store it
-immediately). Manage PATs at `GET/POST /api/v1/user/pats` and `DELETE
-/api/v1/user/pats/{id}` (`204`).
+immediately). Manage PATs at `GET/POST /api/v1/me/pats` and `DELETE
+/api/v1/me/pats/{id}` (`204`).
 
 ### Service tokens
 
@@ -570,15 +574,18 @@ Content-Type: application/json
 }
 ```
 
-Refresh tokens rotate on every use: the old token is revoked and a new one is
-issued. Default lifetime: 90 days. Token responses include
-`Cache-Control: no-store`. Persist the new `refresh_token` before making any
-other API call: presenting an already-rotated (old) refresh token is treated
-as a theft signal. The **entire** device session is revoked and the user must
-re-authorize from Step 1.
+Refresh returns a replacement refresh token with a default 90-day lifetime. Token
+responses include `Cache-Control: no-store`; persist the returned `refresh_token`.
+Current servers keep the predecessor usable until its own successor is used, allowing
+recovery after a lost response. A short replay cache can return the same replacement.
+A refresh race does not automatically revoke the device session. A terminal refresh
+`invalid_grant` (`refresh_token_invalid`, `refresh_token_revoked` or
+`refresh_token_expired` in `code`) requires authorization from Step 1 again.
 
-Refresh proactively, roughly 5 minutes before `expires_at` (`now + expires_in`
-from issuance), and reactively on any `401` from `/api/v1/*`.
+Refresh proactively before the lifetime in `expires_in` elapses. Serialize refreshes
+so concurrent requests share one rotation. On a resource `401 invalid_token`, refresh
+and retry at most once; if it still fails, reauthorize. A media `401 invalid_grant` is
+a separate playback-grant failure and is not repaired by rotating the account token.
 
 ## Rate limits
 
@@ -589,7 +596,7 @@ from issuance), and reactively on any `401` from `/api/v1/*`.
 | `PUT /play-sessions/{id}` + `POST /play-sessions/{id}/beacon` | No endpoint-level rate limit |
 | `POST /play-sessions` | 60 requests / minute / user |
 | `POST /playback/grants/{id}/renew` | 30 requests / minute / user |
-| Everything else | No explicit client-side limit (dependency limits may still apply) |
+| Other endpoints | Endpoint-specific limits apply; honor `429` and `Retry-After` |
 
 ## Environment variables
 
