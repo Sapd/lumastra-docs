@@ -30,6 +30,9 @@ administrator, adjusts bitrate to your connection. Titles with multiple cuts or 
 list them under **Versions**.
 
 Open **Audio and subtitle tracks** to browse audio and subtitles in one scrolling list.
+Audio and subtitle languages follow the server's primary metadata language, its additional
+metadata languages, and the title's original production language, with other languages
+following alphabetically by code. Variants within one language keep their existing order.
 Long subtitle lists include a search field. The menu grows to fit the available player
 height. **Subtitle Appearance** opens the style controls; **Back** returns to the tracks
 at your previous scroll position.

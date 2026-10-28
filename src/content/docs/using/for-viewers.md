@@ -112,6 +112,12 @@ subtitle badges in series episode lists, hover details, and the player’s episo
 It starts enabled and is saved to your account across browsers. Combined-episode titles
 remain visible when the badges are hidden.
 
+Movie details and episode rows show compact audio and subtitle badges. The server's
+primary metadata language comes first, followed by its additional metadata languages,
+the title's original production language, and then other available languages. Hover or focus **+N** to see the full list; click or tap
+it to keep the list open. Press Escape or click outside to close it. Narrow screens
+show fewer badges to leave room for episode information.
+
 Audio/subtitle language, subtitle style, playback automation, and music crossfade settings
 follow your account across browsers. Playback automation is under **Player → Quality →
 Playback Settings**; see [Using the video player](/using/player/).

@@ -98,7 +98,10 @@ treating the count as a list of files to find.
 
 Episode rows and episode details show audio and subtitle languages for the default
 file, including embedded and sidecar subtitles. Rows keep this to two compact
-lines; the **+N more** tooltip shows additional languages. Expand track details
+lines; **+N** opens the full language list on hover or keyboard focus. Click or tap
+to keep it open, and press Escape or click outside to close it. The server's primary
+metadata language and additional metadata languages appear first, followed by the original
+production language when known. Expand track details
 for individual track flags.
 Compare alternate file versions under **Files**: languages can differ between releases. Default and forced track
 markers describe the stored track flags; an unidentified language or a file that
