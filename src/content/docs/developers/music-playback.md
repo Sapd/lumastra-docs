@@ -302,11 +302,6 @@ GET /rest/reportPlayback.view?mediaId=…&mediaType=music&positionMs=…&state=s
 
 ## Internet radio stations
 
-:::note[Unreleased]
-Starting radio through `POST /api/v1/play-sessions` is recent and may not be in your
-server version yet.
-:::
-
 List the stations the account can use with `GET /api/v1/music/radio/stations`. An empty
 `items` collection means none are available. Use a station's `id` as `mediaId` in the
 ordinary session start request, with your `deviceId`. Radio supports direct playback only:
