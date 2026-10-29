@@ -114,7 +114,7 @@ the viewer's own buffer and bandwidth are shown separately in their playback ses
 
 Video timestamp observations help investigate freezes even when FFmpeg is running.
 Forward jumps greater than one second are counted, with the largest jump and the time
-of the latest observation. Backward jumps and signalled discontinuities are counted as
+of the latest observation. Backward jumps greater than one second and signalled discontinuities are counted as
 clock resets. The scan uses video PES decode timestamps (DTS), falling back to
 presentation timestamps (PTS), in the ingest MPEG-TS output. It does not decode video
 or inspect every viewer's output.

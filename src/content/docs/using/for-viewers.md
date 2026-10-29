@@ -107,7 +107,7 @@ screen with only your own numbered channels, see
 
 ## Preferences
 
-**Settings → Display → Home & Browsing → Show episode languages** controls audio and
+**Settings → Display → Home & browsing → Show episode languages** controls audio and
 subtitle badges in series episode lists, hover details, and the player’s episode browser.
 It starts enabled and is saved to your account across browsers. Combined-episode titles
 remain visible when the badges are hidden.

@@ -281,8 +281,10 @@ works on the web for now.
 ## Integrations
 
 **Jellyfin is optional and only syncs in the background.** No Lumastra feature needs
-Jellyfin. When sync is on, users are matched by username, so a Lumastra username must
-match the Jellyfin one.
+Jellyfin. When sync is on, a Lumastra user is matched to the Jellyfin user with the same
+username (capitals don't matter). If the names differ, an admin can link the account
+manually under **Admin → Users → Identities** by entering the Jellyfin login name. See
+[Jellyfin watch-state sync](/guides/integrations/#jellyfin-watch-state-sync).
 
 **Audiobooks need AudiobookShelf.** Lumastra doesn't scan audiobook files from a folder.
 Audio files in a folder library are imported only when it's a music library, so the

@@ -134,7 +134,7 @@ Jellyfin wins.
 
 **What to check when sync stops:**
 
-- **Settings → Connections** lists Jellyfin titles that could not be paired, with a
+- **Admin → Settings → Connections** lists Jellyfin titles that could not be paired, with a
   count and a few examples. A title appears after it has been unpaired for 15 minutes.
 - An **admin notice** lists Jellyfin users who have no Lumastra account to sync to.
   Link them under **Admin → Users**, or create accounts with matching names. Until
