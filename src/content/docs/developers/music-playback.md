@@ -300,6 +300,36 @@ GET /rest/reportPlayback.view?mediaId=…&mediaType=music&positionMs=…&state=s
 - [API reference](/reference/): interactive per-endpoint reference from the
   vendored OpenAPI spec
 
+## Internet radio stations
+
+:::note[Unreleased]
+Starting radio through `POST /api/v1/play-sessions` is recent and may not be in your
+server version yet.
+:::
+
+List the stations the account can use with `GET /api/v1/music/radio/stations`. An empty
+`items` collection means none are available. Use a station's `id` as `mediaId` in the
+ordinary session start request, with your `deviceId`. Radio supports direct playback only:
+a start with a non-zero `startPositionMs`, `audio` options, a non-direct
+`requestedMethod` or `purpose: "prefetch"` is rejected with `422`.
+
+The response has `kind: "music"`, `delivery.kind: "file"`, `delivery.live: true`,
+`delivery.startPositionMs: 0`, no finite duration and an unknown container. Open
+`delivery.url` unchanged: it points to the server's radio stream proxy and already
+carries the scoped grant. Renew the grant through `grant.renewHref` with account
+authentication, as for other playback. Do not put an account token in the stream URL.
+
+Follow `reporting.href` and `reporting.intervalMs` for reports; they keep the stream
+lease alive. The server ignores the position of a radio report and does not write watch
+progress, play counts or listen history for it. Send `status: "COMPLETED"` when the
+listener stops. For pause, close the session and release the network connection; to
+listen live again, start a new session and use its new delivery URL. The proxy forwards
+the station's audio as is, so your player must support the station's format.
+
+`GET /api/v1/music/radio/stations/{id}/now-playing` returns optional now-playing
+metadata. Poll it at a modest interval while playing and stop when playback stops;
+a metadata failure should not interrupt the audio.
+
 ## Radio, autoplay and the music home
 
 Recommendations are stateless: you say what is playing and what was played, the server answers what
