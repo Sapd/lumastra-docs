@@ -92,7 +92,9 @@ details. You can also add or change connections later in **Admin → Settings**.
 For Jellyfin sync, enter your Jellyfin server URL and API key in the UI. The
 `JELLYFINURL` and `JELLYFINAPIKEY` variables are optional alternatives.
 
-Jellyfin watch-state sync works in both directions, with users matched by username.
+Jellyfin watch-state sync works in both directions. How users and titles are matched,
+and what to do when they don't match, is covered in
+[Jellyfin watch-state sync](#jellyfin-watch-state-sync) below.
 Both servers can use the same media folders while you try Lumastra.
 
 | Integration         | What it adds                                  | Environment alternative / option |
@@ -109,6 +111,51 @@ Both servers can use the same media folders while you try Lumastra.
 
 Open **Settings → Connections → Connect a Jellyfin app** to generate a client
 password or a separate read-only token for tools that observe your library.
+
+### Jellyfin watch-state sync
+
+Lumastra keeps each person's watch state in step with Jellyfin, in both directions:
+played and unplayed status, and resume positions for partly watched titles. Watch
+state is exchanged every 5 minutes.
+
+**Users.** A Jellyfin user syncs with the Lumastra account that has the same
+username (capitals don't matter). If the names differ, open the user under
+**Admin → Users**, open **Identities**, and enter their Jellyfin login name.
+
+**Titles.** Titles are matched by their TMDB or IMDb IDs first. A title without a
+matching ID is paired by file: the same file, with the same size, must be in both
+libraries. Lumastra compares the path relative to each library root, or the identical
+full path. A file that holds several episodes is never paired, and neither is a title
+with more than one possible match. If you rename a file in Jellyfin, the new name is
+picked up at the next file check, which runs at most every 30 minutes.
+
+**Conflicts.** If you mark a title unwatched in Lumastra, a newer "played" from
+Jellyfin wins.
+
+**What to check when sync stops:**
+
+- **Settings → Connections** lists Jellyfin titles that could not be paired, with a
+  count and a few examples. A title appears after it has been unpaired for 15 minutes.
+- An **admin notice** lists Jellyfin users who have no Lumastra account to sync to.
+  Link them under **Admin → Users**, or create accounts with matching names. Until
+  then, their watched status does not sync.
+
+**Connection problems.** The setup wizard checks the address and API key before it
+saves them. If the check fails, the message says what to fix:
+
+- **Rejected key (HTTP 401):** copy the API key again from Jellyfin under
+  **Dashboard → API Keys**. If a reverse proxy sits in front of Jellyfin, it must pass
+  the `Authorization` header through.
+- **Unreachable address:** the message names the address it tried and the cause, such
+  as connection refused, host name not found, or timed out. Check the address and that
+  Jellyfin is running.
+- **Invalid characters:** the API key contains characters that are not allowed. Copy
+  it again.
+- **User name and password in the address:** remove them. Jellyfin connects with the
+  API key only.
+
+Jellyfin under a subpath works. Enter the full address, such as
+`http://media.example.lan/jellyfin`.
 
 ## Music analysis
 

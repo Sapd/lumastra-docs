@@ -57,6 +57,16 @@ Consequences:
 
 ---
 
+## Turning a library off
+
+Turn an AudiobookShelf folder off or on under **Library → Sources & scanning**.
+Disabling it hides its books straight away, the same way deleting the folder does.
+Watch progress, ratings and playlists are kept. Turn it back on and its books return
+on the next sync. A book that now sits in another enabled AudiobookShelf library
+stays available.
+
+---
+
 ## Browsing
 
 Browse at `/audiobooks`. Filters and sorting are stored in the URL, including library
@@ -162,6 +172,7 @@ gap at each file boundary, roughly every few minutes on a split book.
 | Progress syncs one way only                        | The listener has been unlinked. Starting a book in Lumastra re-links them.                              |
 | A book shows hundreds of "parts"                   | Expected: the book has no chapter marks upstream. Add them in AudiobookShelf and re-sync.              |
 | Newly added books take a while to appear           | The sweep is a full reconcile; raise its cadence in **Settings → Plugins & features** for a large library. |
+| Books are missing after a library was turned off   | Expected. Turn the library back on; its books return on the next sync. |
 | Nothing in "Listening in your circle"              | Nobody in your audience has listened recently, or your listening audience is empty. See [Sharing & privacy](/guides/sharing-privacy/). |
 
 ## Next
