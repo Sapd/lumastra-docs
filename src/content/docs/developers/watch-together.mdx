@@ -830,18 +830,13 @@ reporting, end the old play session, cancel stream requests/timers, and release 
 old player before opening a replacement. See
 [Playback state](/developers/building-a-player-state/) for statuses and cleanup.
 
-### Physical releases, episode windows, and multipart video
+### Physical releases and episode windows
 
-Watch Together carries a physical `fileId`, with no multipart `versionId`, part list,
-or multipart capability negotiation. Select a complete physical release for the
+Watch Together carries a physical `fileId`. Select a complete physical release for the
 concrete movie/episode and use the same release on every participant. A `version`
-command changes that physical file only. Do not advertise `multipartVideo` for party
-playback, pass a logical group ID as a `fileId`, or silently play just one part. If an
-episode is available only as a multipart group, refuse party playback and explain that
-a complete release is required. The Watch Together create/join handler does not itself
-validate this player-level limitation; successful membership is not proof of playability.
+command changes that physical file only.
 
-Preserve ordinary multi-episode-file support. Its party positions and progress remain
+Multi-episode files are supported. Their party positions and progress remain
 on the **whole physical file clock**. `delivery.seek.streamStartPositionMs` selects an
 episode's entry point; it does not create a zero-based episode clock or a stop boundary.
 When creating a party for a later episode in such a file, initialize `currentTime`
@@ -849,8 +844,7 @@ from the negotiated whole-file entry position (or the host's actual position).
 Do not replace it with episode-relative zero.
 For an HLS player whose local media time restarts at a seek base, map both directions
 using the negotiated stream base. Do not subtract the episode start from party reports,
-add it twice, or clamp playback at an episode window's end. This differs from opt-in
-multipart video's logical episode clock in the normal player API.
+add it twice, or clamp playback at an episode window's end.
 
 ### Host handoff and departure
 

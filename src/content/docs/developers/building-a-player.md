@@ -24,10 +24,6 @@ matches its installed release. The hosted [**API reference**](/reference/) is a 
 snapshot and can lag newly shipped fields. Target endpoints marked `x-stability: stable`.
 The field lists below explain the contracts a player needs.
 
-The hosted reference currently omits multipart video's `multipartVideo` and `versionId`
-fields. Use the [multipart recipe below](#multipart-video-episodes) and your instance's
-schema for that opt-in contract.
-
 ## The model in one paragraph
 
 **The server owns the playback decision.** Your client never builds an HLS or file
@@ -240,7 +236,7 @@ A series node additionally embeds traversal links (`seasons`, `episodes`, `nextE
 `POST /api/v1/media/{id}/playability` answers "what would a start decide?" without
 starting anything: no session, no grant, no transcode, no watch history. Send the same
 optional `capabilities` as a start, and an optional `fileId` or `versionId` to probe one
-version (see multipart support below). Each
+version. Each
 entry in `versions[]` carries `playable` and `blockedBy`, the `playMethod` a start would
 choose for your capabilities, the tracks, and `sizeBytes` (on-disk size; absent means
 unknown, not zero) — enough for a version picker, a track picker, a "this will
@@ -259,96 +255,14 @@ subtitles and the resume point.
 receive `410 route_retired`; use this playability probe and `POST
 /api/v1/play-sessions` instead.
 
-### Multipart video episodes
+### Removed: multipart video versions
 
-Multipart support is optional. Send `capabilities.multipartVideo: true` on **both**
-the probe and the start only when your integration supports a logical version and one
-aggregate playback clock. Omission and `false` mean unsupported. This client declaration
-is separate from the server feature flags returned by `/server`.
-
-A complete physical release has `fileId`. A logical multipart release has `versionId`
-and `versionKind: "multipart_video"`, with no `fileId`. Use those fields to identify a
-version picker row. `activeVersionId` identifies an active group; `activeFileId` identifies
-a physical selection. Pass either `versionId` or `fileId`, never both.
-
-```http
-POST /api/v1/media/550e8400-e29b-41d4-a716-446655440000/playability
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{ "capabilities": { "multipartVideo": true } }
-```
-
-```jsonc
-// 200, abridged: a logical release in versions[]
-{
-  "mediaId": "550e8400-e29b-41d4-a716-446655440000",
-  "activeVersionId": "6f5a4d32-b101-4abd-8000-000000000001",
-  "resumePositionMs": 900000,
-  "isWatched": false,
-  "versions": [{
-    "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
-    "versionKind": "multipart_video",
-    "playable": true, "blockedBy": [],
-    "playMethod": "full_transcode", "durationMs": 2400000
-  }]
-}
-```
-
-```http
-POST /api/v1/play-sessions
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "mediaId": "550e8400-e29b-41d4-a716-446655440000",
-  "deviceId": "my-player-installation",
-  "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
-  "capabilities": { "multipartVideo": true }
-}
-```
-
-The server returns **one aggregate HLS stream** (`delivery.kind: "hls"`), currently
-using `full_transcode`. Open the issued URL unchanged. The server joins the parts; your
-client does not concatenate files or start a session per part. An abridged delivery
-looks like this:
-
-```jsonc
-"delivery": {
-  "kind": "hls",
-  "url": "/api/v1/…?PlaySessionId=…&grant=…",
-  "versionId": "6f5a4d32-b101-4abd-8000-000000000001",
-  "versionKind": "multipart_video",
-  "playMethod": "full_transcode",
-  "durationMs": 2400000,
-  "startPositionMs": 900000,
-  "seek": { "clientShouldSeek": true, "streamStartPositionMs": 0 },
-  "subtitles": []
-}
-```
-
-`durationMs`,
-`startPositionMs`, seeking and progress reports all use milliseconds from the beginning
-of the complete logical episode.
-
-Complete alternate releases remain separate picker choices. Group parts cannot be
-selected as complete releases. A client that omits multipart support gets a complete
-physical alternative when one exists; when only multipart content exists, probe/start
-returns `422` instead of playing the first part.
-
-Current limits: group downloads, part-local subtitles, chapters and trickplay are
-unavailable. Do not derive them from the first part. There is no general audio-track
-switching across parts; use the group default. Trimmed or nonzero part windows cannot
-be activated. Watch Together currently selects complete physical releases and does not
-negotiate groups. Operators configure groups through
-[Multipart episodes](/guides/multipart-episodes/).
-
-For older servers, a compatibility retry must be narrow: only an exact single `422`
-validation issue whose field identifies `capabilities` and whose message identifies
-only the unrecognized key `multipartVideo` may trigger
-one retry with that field omitted, for an ordinary physical selection. Never drop an
-explicit `versionId`, select a part, or downgrade authentication, policy, network or
-unrelated validation errors.
+Lumastra no longer composes several files into one logical episode. Versions in
+`versions[]` are always complete physical releases with a `fileId`. The
+`capabilities.multipartVideo` field on probe and start and `versionId` on start are
+deprecated: the server still accepts them so shipped clients keep working, but ignores
+them. Do not send them from new clients, and do not rely on `versionId` or
+`versionKind: "multipart_video"` appearing in a response.
 
 ## Play media from your own client
 
@@ -418,8 +332,7 @@ Send a field when your player differs from the default:
 Codec lists use open lower-case tokens; unknown tokens in those lists are ignored.
 Unknown capability **fields** are rejected. Declaring a subtitle format does not select
 a subtitle. Unsupported selected embedded subtitles may require burn-in; unsupported
-sidecars can instead be unavailable. `hlsCopyReload` and `multipartVideo` default to
-false. `maxVideoBitrateBps` (bits per second), `maxHeight` (pixels) and
+sidecars can instead be unavailable. `hlsCopyReload` defaults to false; `multipartVideo` is deprecated and ignored. `maxVideoBitrateBps` (bits per second), `maxHeight` (pixels) and
 `maxAudioChannels` are optional.
 
 ### Play a movie
@@ -438,7 +351,7 @@ The same call. `delivery.startPositionMs` is the effective resume/entry position
 frame when `delivery.seek.clientShouldSeek` is true. For a combined file representing
 several episodes, positions remain on the **whole file clock**;
 `delivery.seek.streamStartPositionMs` is the episode entry point. It is not a new time
-origin or a stop boundary. For multipart video, the whole logical episode is the clock.
+origin or a stop boundary.
 Do not subtract an entry offset from progress reports.
 
 Set `entry` to `continue` when the viewer chose a Continue Watching item, or
@@ -498,7 +411,7 @@ seeking. See [Audiobook playback](/developers/audiobook-playback/).
 An integrating app or script authenticates, probes when needed, and starts a session.
 It resolves a relative `delivery.url` against the server origin and hands the resulting
 URL to VLC, mpv or another URL-capable player. Those players can render an already-issued
-HLS stream, including aggregate multipart HLS, without implementing the negotiation API.
+HLS stream without implementing the negotiation API.
 An existing Jellyfin/Subsonic client instead uses its compatibility protocol.
 
 Media fetches keep a URL-only session active while it is being read, but do not report

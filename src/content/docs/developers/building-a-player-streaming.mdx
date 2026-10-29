@@ -119,7 +119,7 @@ A fresh start with the chosen track and the current position is the portable way
 change a selection that needs a new server plan. It supersedes the old session on that
 device; use the new URLs and reporting ID. Read `delivery.applied` for the actual
 selection, since a stale audio index may fall back to the default. Subtitles come from
-`delivery.subtitles[]` (§4). Multipart groups currently have no general track switching.
+`delivery.subtitles[]` (§4).
 
 :::note[One session id]
 The `PlaySessionId` on the HLS URL is the `playbackSessionId` the start returned. Use
@@ -152,7 +152,7 @@ inspect the grant failure before attempting a reload.
 
 For a file or HLS video delivery, honor `delivery.seek.clientShouldSeek` and seek to
 `delivery.startPositionMs`. A combined multi-episode file uses the full file clock,
-including its entry offset; a multipart episode uses the aggregate episode clock.
+including its entry offset.
 [Resume an episode](/developers/building-a-player/#resume-an-episode) explains the
 difference. Never restart the clock at a part boundary.
 
@@ -328,9 +328,7 @@ carries:
   `startMs` and `endMs`.
 - `trickplay`: `state` and `variants[]` (`width`, `manifestHref`).
 
-The timeline link is optional. Multipart video currently omits it and provides no
-part-local chapters, subtitles or trickplay. Do not fetch the first part's timeline as
-a substitute.
+The timeline link is optional; do not assume it is present.
 
 All times are integer **milliseconds** on the selected file's clock. `trickplay.state` is
 `ready`, `pending` (`variants` is empty; ask again later), `unavailable` (retry later) or

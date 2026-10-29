@@ -69,9 +69,7 @@ Use the [AAC fallback](#aac-fallback-and-seeking) for such a file, or request
 `audio.format` and `audio.bitrateKbps` are unsupported for books. Video controls
 (`fileId`, `versionId`, `audioStreamIndex`, `subtitleId`, `maxHeight` and
 `maxVideoBitrateBps`) are unsupported too; they return `422`. `purpose: "prefetch"`
-is music-only. Audiobook `multipart-audio` needs no `multipartVideo` opt-in; that
-capability selects a separate [multipart video](/developers/building-a-player/#multipart-video-episodes)
-contract.
+is music-only. Audiobook `multipart-audio` needs no capability opt-in.
 
 Here is a two-file response with a resume point 15 seconds into the second file.
 The example tokens stand in for the opaque values the server issues:

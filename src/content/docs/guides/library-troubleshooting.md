@@ -198,8 +198,9 @@ them into continuous playback. Verify which version plays after any saved change
 
 If several episodes are shifted, review the whole season before saving individual
 reassignments. Preserve existing provider identities, watch progress and alternate
-files. A combined provider episode needs a verified complete source or a supported
-multipart playback workflow before its separate halves can be considered repaired.
+files. A combined provider episode needs a verified complete source before its separate
+halves can be considered repaired. Lumastra no longer joins several files into one
+episode for playback.
 Do not delete an extra episode row merely because its number appears duplicated.
 
 ### Intro analysis reports video timestamps that do not advance

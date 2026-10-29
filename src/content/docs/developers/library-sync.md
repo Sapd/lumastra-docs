@@ -187,10 +187,10 @@ required service is unavailable; retry transient failures with backoff.
 A long-running server write transaction can delay the change feed. Keep the cursor
 and poll again. A file rename alone does not generate a catalog update.
 
-People, Live TV stations, historical playback events, playback preferences, and
-local playback version/multipart associations are outside the sync projection.
+People, Live TV stations, historical playback events, and playback preferences
+are outside the sync projection.
 Audiobook authors and series are fields of each book rather than separate synced
-entities. Before playing, fetch fresh playability and use the current version,
-file and multipart plan. A cached catalog entry or an unchanged cursor cannot
+entities. Before playing, fetch fresh playability and use the current version
+and file. A cached catalog entry or an unchanged cursor cannot
 establish that an old playback plan is still usable. See
 [building a player](/developers/building-a-player/).

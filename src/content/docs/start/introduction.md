@@ -73,16 +73,14 @@ Start with [Live TV setup](/guides/live-tv/) and
 - **Review album merges.** Inspect the kept album, tracks, artwork and user-data
   policies before confirming; duplicate track candidates keep their separate files.
 - **Match episodes to actual files.** Review boundaries in combined multi-episode
-  files, or compose several files as one multipart episode with its identity and
-  progress intact. Multipart playback needs a supported player and transcoding.
+  files and link each physical file to the episodes it contains.
 - **Inspect file health.** Stream and audio-tail measurements support bounded
   rechecks; inconclusive results keep their warnings.
 - **Resolve uncertain matches in quarantine.** Compare historical proposals with
   current files and metadata, then preview eligible changes before accepting a batch.
 
 See [media enrichment](/guides/media-enrichment/),
-[administration](/guides/administration/),
-[multipart episodes](/guides/multipart-episodes/) and
+[administration](/guides/administration/) and
 [library troubleshooting](/guides/library-troubleshooting/) for the detailed workflows.
 
 ## The stack

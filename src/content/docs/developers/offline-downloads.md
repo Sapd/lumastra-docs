@@ -38,11 +38,8 @@ need `media:write`. Feature flags do not grant scopes or library access. Each re
 checks the caller's access; inaccessible titles answer `404`.
 :::
 
-Multipart video groups cannot be downloaded through either path. Choose an independent,
-complete physical release with a `fileId` from playability. A logical multipart version
-has `versionId` and `versionKind: "multipart_video"`; never submit it to these routes or
-save one part as the full episode. Independent complete releases remain downloadable
-even when the same episode also has a multipart version.
+Choose a complete physical release with a `fileId` from playability. Save a file only
+as the full release it is, never as part of an episode.
 
 ## Knowing the size before you commit
 

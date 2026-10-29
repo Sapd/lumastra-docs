@@ -37,8 +37,8 @@ curl -X PUT https://lumastra.example.com/api/v1/play-sessions/{playbackSessionId
 ```
 
 - **`positionMs`** is the playback position in milliseconds on the selected delivery
-  clock: whole-file time for combined episodes, aggregate time for multipart video,
-  and whole-book time for audiobooks. Never reset it at a part boundary.
+  clock: whole-file time for combined episodes and whole-book time for audiobooks. Never
+  reset it at a file boundary within a book.
 - **`sessionElapsedMs`** is required: cumulative milliseconds actually played since the
   session started, excluding pauses, seeks and buffering.
 - **`eventSeq`** is required: a per-session, monotonically increasing integer starting at

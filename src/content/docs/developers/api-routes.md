@@ -180,14 +180,6 @@ only formats the client can decode. Video bitrate ceilings use `maxVideoBitrateB
 (bits/second), audio uses `bitrateKbps` (kilobits/second), and playback/report positions
 use milliseconds. Use the returned `reporting` descriptor for method, href and interval.
 
-For multipart video, opt in with `capabilities.multipartVideo: true` on both playability
-and start, select a returned `versionKind: "multipart_video"` with `versionId`, and omit
-`fileId`. The server returns one aggregate HLS stream, currently fully transcoded.
-All positions and duration use the aggregate clock. Parts are not complete alternate
-releases. Without opt-in, a complete physical alternative may play; a multipart-only
-item fails with `422`. Group downloads and part-local subtitles, chapters and trickplay
-are unavailable. See [Multipart video episodes](/developers/building-a-player/#multipart-video-episodes).
-
 For music only, `purpose: "prefetch"` prepares the next track without consuming a stream
 slot. It needs an admitted ACTIVE/PAUSED session for the same user/device; otherwise
 `422 prefetch_requires_current_session` means use `purpose: "play"`. One unpromoted
