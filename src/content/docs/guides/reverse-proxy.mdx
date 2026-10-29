@@ -596,7 +596,7 @@ change its format, so the snippet turns it off. If you need an access log, see
 
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' \
-     https://lumastra.example.com/api/user/profile
+     https://lumastra.example.com/api/me
    ```
 
    A `200` means anyone can sign in as any user. Stop the stack and fix the proxy

@@ -673,7 +673,7 @@ returns `422`.
 
 Wait up to 5 minutes: the next start after the lock expires claims the probe.
 To resume immediately, use **Resume now** on the task page (or
-`PUT /api/v1/tasks/{taskId}/state` with `{ "breaker": "enable", "force": true }`).
+`PATCH /api/v1/tasks/{taskId}/state` with `{ "breaker": "enable", "force": true }`).
 
 ---
 

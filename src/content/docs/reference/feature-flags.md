@@ -132,7 +132,7 @@ feature-flagged) at `/admin/settings/appearance` via `APPEARANCE_CUSTOM_CSS`,
 | Flag | Default | Gates |
 | ---- | ------- | ----- |
 | `FEATURE_DEVICE_AUTH` | `true` | The Public API: the `/api/v1/*` token surface, the OAuth2 Device Authorization flow (`/oauth/*`) the Lumastra iPhone/iPad/Apple TV apps sign in with, and service-token management. Needs `JWT_SECRET` (derived from `LUMASTRA_MASTER_KEY` when unset). Offered as a switch in the setup wizard; editable later under **Settings → Access → Public API & Device Auth**. See [Authentication](/guides/authentication/). |
-| `FEATURE_USER_PATS` | `false` | Self-service personal access tokens at `/user/tokens`. Needs `JWT_SECRET`. |
+| `FEATURE_USER_PATS` | `false` | Self-service personal access tokens (**Settings → Account → API tokens**, or `POST /api/v1/me/pats`). Needs `JWT_SECRET`. |
 
 :::caution[`FEATURE_DEVICE_AUTH` is on by default since v0.1]
 It used to default to `false`. An install that never set it has the Public API **on**

@@ -77,7 +77,7 @@ The API supports `GET`, `PUT`, and `DELETE`
 with `tasks:admin` scope. `PUT` replaces the set with `{ triggers: [...] }`
 (1–8 entries); `DELETE` restores defaults. Saving or resetting triggers does not
 resume a paused task. Pause or resume separately with
-`PUT /api/v1/tasks/{taskId}/state` and `{ "schedule": "paused" }` or
+`PATCH /api/v1/tasks/{taskId}/state` and `{ "schedule": "paused" }` or
 `{ "schedule": "active" }`. The older `GET/PUT /api/v1/tasks/{taskId}/schedule`
 endpoint has been removed.
 

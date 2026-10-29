@@ -153,8 +153,8 @@ its own decision logic and codec matrix.
 of these applies:
 
 - The client requests a `format` that differs from the source container.
-- A `maxBitRate` is requested and the source exceeds it.
-- Playback starts at a `timeOffset` (a seek before the stream begins).
+- A `maxBitrateKbps` cap is requested and the source exceeds it.
+- Playback starts at a `startPositionSeconds` offset (a seek before the stream begins).
 - The client is an OpenSubsonic app that negotiated a transcode through the
   `transcoding`/`transcodeOffset` extensions (see the [API reference](/developers/api/)).
 
@@ -169,7 +169,7 @@ have already run. It doesn't bypass those.
 | AAC   | ADTS      | 64, 96, 128, 160, 192, 256, 320  | 192     |
 
 :::note[A seek always forces a transcode]
-A `timeOffset > 0` against an already-cached file re-encodes from that point rather
+A `startPositionSeconds > 0` against an already-cached file re-encodes from that point rather
 than slicing raw bytes. Raw byte offsets aren't decoder-safe for Opus or MP3/ADTS
 streams, so the server can't just jump ahead in the file without re-encoding.
 :::
