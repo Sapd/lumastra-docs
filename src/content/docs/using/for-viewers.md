@@ -105,6 +105,14 @@ scheduled programmes, even when you're browsing Favorites. For a larger, simpler
 screen with only your own numbered channels, see
 [Live TV simple mode](/guides/live-tv-simple-mode/).
 
+### Internet radio
+
+If your administrator has added internet radio stations (under **Settings → Music →
+Radio**), they appear in the **Internet Radio** section of the Music page. Choose a
+station to listen live. A station has no timeline, track skips or crossfade, and the
+current song or programme appears when the station provides it. Which
+Lumastra apps offer internet radio varies by version; check the app's release notes.
+
 ## Preferences
 
 **Settings → Display → Home & browsing → Show episode languages** controls audio and

@@ -434,6 +434,10 @@ sessions also appear. CPU, memory and GPU load are not shown here: **System load
 opens **System health → Cluster**, which shows them per machine (see
 [Watching GPU load](/guides/gpu-transcoding/#watching-gpu-load)).
 
+Sessions shows a **CarPlay** badge on a session whose client reports a connected CarPlay
+display. The badge is informational and clears when the client reports that CarPlay has
+disconnected.
+
 Select a session to send a message to it. On a Lumastra app the message shows on the
 device. In other players it shows as a notice. You can also stop a session from here.
 
