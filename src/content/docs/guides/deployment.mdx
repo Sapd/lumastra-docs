@@ -45,8 +45,9 @@ Run **N web replicas + exactly one worker**, sharing PostgreSQL and both Valkeys
 - **Web replicas** (`WORKER_MODE=disabled`) serve HTTP/API/SSE. Scale these freely.
 - **Worker replica** (`start-worker.sh`) runs the lean TypeScript task host,
   existing task/plugin execution, scheduler and supervised Rust watcher child. Run **exactly one**: it's the single source of background job
-  orchestration, and it scans the mounted media library. Web replicas also need media mounts
-  for direct play and transcoding. Running more than one
+  orchestration, and it scans the mounted media library. Web replicas and the worker need
+  the same media mounted at the same path, read-only: the worker to scan, the web
+  replicas for direct play and transcoding. Running more than one
   worker is **not supported**. If background processing is your bottleneck, give the
   single worker more CPU/RAM and tune its
   [concurrency](/guides/performance-tuning/). Don't add worker replicas.
@@ -58,7 +59,8 @@ Run **N web replicas + exactly one worker**, sharing PostgreSQL and both Valkeys
   and the admin cluster view. Leave it unset and Lumastra derives a unique one from
   the hostname; if you set it explicitly, it must differ per replica.
 - The `config` volume is shared between web and worker replicas (artwork, trickplay
-  tiles); the media library only needs mounting on the worker.
+  tiles). Mount the media library, read-only and at the same path, on the worker and on
+  every web replica.
 - Database migrations are serialized by a PostgreSQL advisory lock at startup.
 
 See [Deploy on Kubernetes](/guides/deploy-kubernetes/) for the Helm chart, the
@@ -68,8 +70,10 @@ per-pod requirements, and the Valkey eviction-policy split.
 
 - `NODE_ENV=production`, and `ORIGIN=https://your-domain` set so secure session cookies
   work behind your TLS proxy
-- `JWT_SECRET` and `LUMASTRA_MASTER_KEY` set to ≥ 32-byte random values; the master key
-  **backed up separately**
+- `LUMASTRA_MASTER_KEY` set to a ≥ 32-byte random value and **backed up separately**.
+  `JWT_SECRET` is optional: without it, the signing secret is derived from the master
+  key. Set it only if you want to rotate it on its own, and then use a ≥ 32-byte random
+  value
 - Sign-in configured: a first admin via the `/setup` wizard (built-in login); for
   forward auth, `FORWARD_AUTH_ENABLED=true` and `TRUSTED_PROXY_IPS` set and admin granted via an `ADMIN_GROUPS` group in
   your IdP; or for [OIDC](/guides/sso-oidc/), `AUTH_OIDC_*` set and the callback URI

@@ -89,7 +89,9 @@ requested during the first-run setup wizard.**
 
 For integrations offered during setup, the wizard asks for and verifies the connection
 details. You can also add or change connections later in **Admin → Settings**.
-For Jellyfin sync, enter your Jellyfin server URL and API key in the UI. The
+For Jellyfin sync, enter your Jellyfin server URL and API key in the UI. If you don't run
+a Jellyfin server yet, see the official
+[Jellyfin installation guide](https://jellyfin.org/docs/general/installation/). The
 `JELLYFINURL` and `JELLYFINAPIKEY` variables are optional alternatives.
 
 Jellyfin watch-state sync works in both directions. How users and titles are matched,

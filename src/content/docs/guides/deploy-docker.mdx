@@ -68,6 +68,7 @@ services:
       - config:/config # admin settings + artwork (shared with the worker)
       - cache:/app/.cache # image cache
       - plugins:/app/plugins # installed plugins, shared with the worker
+      # - /path/to/media:/data/media:ro # media for playback; same line on the worker
     ports:
       - "127.0.0.1:3000:3000" # bind to loopback; front with a reverse proxy
     depends_on:
@@ -103,6 +104,7 @@ services:
     volumes:
       - config:/config # MUST be the same config volume as the web container
       - plugins:/app/plugins # the worker loads the installed task plugins
+      # - /path/to/media:/data/media:ro # the SAME line as on the web service; the worker scans it
     healthcheck:
       # Readiness, not just liveness: unhealthy while another worker holds the singleton
       # lease, during a prepared upgrade, or without PostgreSQL / task Valkey.
@@ -259,8 +261,9 @@ Do not flush task/shared-coordination data to recover cache capacity; see
 | `config`        | `/config`             | Admin settings, extracted artwork, trickplay tiles | web **and** worker (shared) |
 | `cache`         | `/app/.cache`         | TMDB / Jellyfin image cache, avatars               | web                          |
 
-To index local files, mount your media (read-only) into the worker and web
-containers and add it as a library in **Library → Sources & scanning**. See
+To index local files, mount your media (read-only) into **both** the web and the worker
+containers, at the same container path. The worker scans the files and the web
+container plays them. Then add it as a library in **Library → Sources & scanning**. See
 [Organizing your media](/guides/organizing-media/):
 
 ```yaml
@@ -271,6 +274,23 @@ volumes:
 If your library is on **NFS**, the mount options make a big difference to scan speed
 (use `nconnect`, `vers=4.2`, `noatime`, …). See [Performance
 tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
+
+### Valkey memory overcommit warning
+
+On start, both Valkey containers can log `WARNING Memory overcommit must be enabled!`.
+Valkey saves its data in a forked child process. With Linux's default setting, that fork
+can fail on a host that is short on memory, and a background save or replication sync then
+fails. The warning comes from the host kernel, not from Lumastra, and you don't have to
+act on it: a small install runs fine with it. To silence it, set this on the **Docker
+host** (not inside the container):
+
+```bash
+sudo sysctl vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee /etc/sysctl.d/99-valkey.conf
+```
+
+The second line keeps the setting after a reboot. The setting applies to the whole host,
+so skip it on a machine shared with workloads that rely on strict memory accounting.
 
 ## First run
 

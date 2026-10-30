@@ -8,7 +8,9 @@ minutes, plus the time for the first library scan.
 
 ## Prerequisites
 
-- **Docker** ≥ 24 and **Docker Compose** ≥ 2.20
+- **Docker** ≥ 24 and **Docker Compose** ≥ 2.20. If you don't have them yet, follow
+  the official [Docker Engine install instructions](https://docs.docker.com/engine/install/),
+  which include the Compose plugin. Allow extra time for this if you start from a fresh server.
 - **8 GB RAM** recommended. See [Memory](#memory) below for a breakdown per container.
 - **20 GB disk** minimum (grows with metadata and the image cache)
 - A supported **CPU** (see below)
@@ -26,7 +28,8 @@ Plan for 8 GB across the app, background jobs, PostgreSQL, and Valkey. The
 background tasks that scan and analyse your library are the main reason; a small
 library can run on about 4 GB in low-RAM mode, but it gets tight. The app typically uses a few hundred MB and the worker
 about 1–1.6 GB during scans, embeddings, or thumbnail generation. PostgreSQL grows
-with library size; Valkey typically uses tens of MB.
+with library size; Valkey typically uses tens of MB. For measured numbers on a 4 GB host,
+see [Performance tuning](/guides/performance-tuning/#measured-on-a-4-gb-host).
 
 :::tip[Constrained hosts]
 The example compose file already sets `LUMASTRA_LOW_RAM_MODE=true`. It caps the
@@ -125,7 +128,9 @@ command, including `down` and `logs`.
 The example compose file mounts no media folder yet, so the app can't see your files.
 Under `volumes:` of the `lumastra` service, uncomment the line
 `- /path/to/media:/data/media:ro` and point it at your media folder (on Windows:
-`- C:/Users/you/Videos:/data/media:ro`).
+`- C:/Users/you/Videos:/data/media:ro`). Add the **same line to the `lumastra-worker`
+service**: the web service needs the files for playback and the worker needs them to scan.
+Use the same host path and the same container path on both, read-only.
 In the setup wizard the folder then shows up under **Found these folders**. See
 [Deploy with Docker → Volumes](/guides/deploy-docker/#volumes).
 
@@ -166,6 +171,11 @@ setup wizard and under **Admin → Settings**. The one worth adding early is a f
 [TMDB API key](/guides/integrations/), which the setup wizard asks for: without it,
 titles and artwork come from file names only.
 
+Without a TMDB key, or without other optional providers such as Discogs, MDBList, Sonarr
+or Radarr, the worker logs `WARN` lines saying that a provider is missing or was skipped.
+These are expected and harmless: scans still finish and playback works. Add a key later
+and the matching tasks start.
+
 Use hex, not base64. Both passwords end up inside `DATABASE_URL` and `CACHE_URL`, where
 a `/`, `+` or `=` breaks the connection string. `JWT_SECRET` is optional: without it,
 the token-signing secret is derived from the master key, the same on every replica.
@@ -205,6 +215,10 @@ network, put the [reverse proxy](/guides/reverse-proxy/) in front. A reverse pro
 installed on the same host connects to `127.0.0.1:3000`, so keep the `ports:` block
 then. If the proxy runs in the same compose file, remove the `ports:` block so the app
 is only reachable through the proxy.
+
+The Valkey containers may log `WARNING Memory overcommit must be enabled` on start. See
+[Deploy with Docker → Valkey memory overcommit warning](/guides/deploy-docker/#valkey-memory-overcommit-warning).
+It is not required to fix it.
 
 The admin-only config doctor at `/api/health/config` returns `401` before setup.
 Run it locally instead:

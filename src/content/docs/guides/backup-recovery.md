@@ -207,6 +207,109 @@ store is reported as `notRotated`.
 
 No downtime is required. The app reconnects on its next query or on restart.
 
+## Docker Compose: backup and restore step by step
+
+These commands match the [example compose file](/start/quick-start/#1-get-the-example-files):
+the services are `lumastra` (web), `lumastra-worker`, `lumastra-postgres`, `lumastra-valkey`
+and `lumastra-valkey-cache`, and the config volume is `config`. If you renamed anything,
+adjust the names. Run everything from the folder that holds your `docker-compose.yml`.
+
+A bare `pg_dump` on the host usually isn't installed on a Docker-only machine. Run it
+inside the PostgreSQL container instead.
+
+### Back up
+
+1. Create a private folder for the backup. It will hold secrets.
+
+   ```bash
+   mkdir -p ~/lumastra-backup && chmod 700 ~/lumastra-backup
+   ```
+
+2. Stop web and worker so the database and the config volume are consistent. PostgreSQL
+   keeps running.
+
+   ```bash
+   docker compose stop lumastra lumastra-worker
+   ```
+
+3. Dump the database. The container reads the password from its own environment.
+
+   ```bash
+   docker compose exec -T lumastra-postgres pg_dump -U lumastra -d lumastra \
+     --no-owner --no-acl \
+     --exclude-table-data=oauth_refresh_tokens \
+     --exclude-table-data=hls_playback_tokens \
+     --exclude-table-data=oauth_device_codes \
+     -F c > ~/lumastra-backup/lumastra-$(date +%F).dump
+   ```
+
+   Check that the dump is readable: `docker compose exec -T lumastra-postgres pg_restore -l < ~/lumastra-backup/lumastra-$(date +%F).dump | head`.
+
+4. Archive the config volume. The archive is created as root, so hand it back to your
+   user. Replace `lumastra_config` with your volume name from `docker volume ls`.
+
+   ```bash
+   docker run --rm -v lumastra_config:/config -v ~/lumastra-backup:/backup alpine \
+     tar czf /backup/config-$(date +%F).tar.gz -C / config
+   sudo chown "$(id -u):$(id -g)" ~/lumastra-backup/config-*.tar.gz
+   ```
+
+5. Copy `.env` and `docker-compose.yml` into the backup folder, and store
+   `LUMASTRA_MASTER_KEY` somewhere else as well, such as a password manager. A backup
+   that sits next to the key it needs is not a safe backup.
+
+   ```bash
+   cp .env docker-compose.yml ~/lumastra-backup/ && chmod 600 ~/lumastra-backup/.env
+   ```
+
+6. Start web and worker again.
+
+   ```bash
+   docker compose start lumastra lumastra-worker
+   ```
+
+Then move the folder off the machine. Backups on the same disk don't protect you from
+losing the disk.
+
+### Restore on a fresh Docker host
+
+1. Put `docker-compose.yml` and the backed-up `.env` into the install folder. Use the
+   **same** `LUMASTRA_MASTER_KEY` and `DATABASE_PASSWORD`.
+2. Create the volumes and start only PostgreSQL. Wait until it is healthy.
+
+   ```bash
+   docker compose up -d --wait lumastra-postgres
+   ```
+
+3. Restore the database. The `--clean --if-exists` flags make the command safe to repeat.
+
+   ```bash
+   docker compose exec -T lumastra-postgres pg_restore -U lumastra -d lumastra \
+     --clean --if-exists < ~/lumastra-backup/lumastra-2026-05-20.dump
+   ```
+
+4. Restore the config volume while web and worker are still stopped. The files must belong
+   to uid 1000, which the app runs as; `tar` keeps the owner stored in the archive when it
+   runs as root, as it does here.
+
+   ```bash
+   docker run --rm -v lumastra_config:/config -v ~/lumastra-backup:/backup alpine \
+     tar xzf /backup/config-2026-05-20.tar.gz -C /
+   ```
+
+   If `docker compose` has not created the volume yet, `docker volume create lumastra_config`
+   first. Use the name that `docker volume ls` shows for your project.
+5. Start everything else. Migrations run on boot, the cache and queue Valkeys start empty,
+   and the task system heals from PostgreSQL.
+
+   ```bash
+   docker compose up -d
+   ```
+
+To restore onto an existing install, stop `lumastra` and `lumastra-worker` first, restore
+the database and the config volume, and start them again. Never restore while web or
+worker is running.
+
 ## Next
 
 - [Rotating the master key](/guides/master-key-rotation/)

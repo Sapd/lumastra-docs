@@ -174,9 +174,13 @@ See [Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-y
   `127.0.0.1:3000:3000`, which is all it needs. Keep that `ports:` block. When the proxy
   runs in the same compose file, remove the `ports:` block from the `lumastra` service
   and send traffic to `lumastra:3000` over the compose network.
-- The example compose file ships Traefik labels with an Authentik forward-auth
-  middleware. They do nothing without Traefik. If you use Traefik, replace them as shown
-  in the Traefik setup below.
+- The example compose file ships Traefik labels for the `lumastra` service. They do
+  nothing without Traefik. The forward-auth middleware line
+  (`traefik.http.routers.lumastra.middlewares=...`) and the `FORWARD_AUTH_ENABLED` and
+  `TRUSTED_PROXY_IPS` settings are **commented out** by default, so a fresh install uses
+  built-in login or OIDC. Enable them only if you want your proxy to sign users in (forward
+  auth), and then set all three together. If you use Traefik, adapt the labels as shown in
+  the Traefik setup below.
 - The example compose file indents with 4 spaces, and so do the snippets below. Keep the
   indentation when you paste, or Docker Compose rejects the file.
 

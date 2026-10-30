@@ -304,6 +304,26 @@ per-task-queue isolation that keeps a stuck task from wedging others (see
 [Per-resource-class queues](/developers/architecture-decisions/#one-isolated-queue-per-task-type-budgeted-by-resource-class)).
 It can remain enabled permanently on small hosts.
 
+### Measured on a 4 GB host
+
+A host with 4 GB RAM and 2 vCPUs, no swap, low-RAM mode on and the default example
+compose file, handled a small library (a few movies and about 200 music tracks) like this:
+
+- **Memory.** All containers together peaked at about 2.6 GB working set. No container
+  was killed for lack of memory and the host never swapped.
+- **Building from source needs more.** Compiling the image on a 4 GB host stalled for lack
+  of memory and finished only with temporary swap. Pull the published image instead, or
+  build elsewhere.
+- **First enrichment.** Analysing the 200 tracks took about 40 minutes after the scan.
+  Browsing stays responsive meanwhile; the page loads were well under a second.
+- **CPU-only transcoding.** 1080p to 720p ran at about 4 times real time when idle, and
+  2 to 3 times while background work was running. 4K to 1080p ran at about 0.8 times
+  real time, which is too slow for smooth playback.
+
+So on 2 vCPUs, 4K sources need **direct play**, a [GPU](/guides/gpu-transcoding/) or more
+cores. If your devices can't play the 4K file directly, keep a smaller copy of it.
+The optional sonic sidecar is sized for 6 GB and does not fit on a 4 GB host.
+
 ## See also
 
 - [Deploy with Docker](/guides/deploy-docker/) · [Deploy on Kubernetes](/guides/deploy-kubernetes/): topology, the worker split, and the second `noeviction` Valkey (`TASK_CACHE_URL`)

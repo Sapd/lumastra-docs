@@ -10,6 +10,10 @@ It does not scan audiobook files itself: a folder of audiobooks on disk can't be
 Lumastra library, so you need an AudiobookShelf server. Audio is proxied through
 Lumastra, so AudiobookShelf need not be reachable from listeners' browsers.
 
+If you don't run an Audiobookshelf server yet, follow the official
+[Audiobookshelf install guide](https://www.audiobookshelf.org/docs/#docker-compose-install)
+first.
+
 ## Before you start
 
 Three things must be in place. On a new install, the setup wizard does all

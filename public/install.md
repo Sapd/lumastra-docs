@@ -222,8 +222,10 @@ Then:
 - **Proxy on the compose network** (a container in the same `docker-compose.yml`, or on a
   Docker network shared with Lumastra): point it at `lumastra:3000`.
 - **Proxy on the host:** point it at `127.0.0.1:3000` and keep the `ports:` mapping.
-- **Traefik:** the example compose file ships Traefik labels that use an Authentik
-  middleware (`authentik@docker`). Replace all of them with the labels from the guide.
+- **Traefik:** the example compose file ships Traefik labels for the `lumastra` service.
+  The forward-auth middleware line and the `FORWARD_AUTH_ENABLED` and `TRUSTED_PROXY_IPS`
+  settings are commented out by default; leave them that way unless the person chose
+  forward auth in question 4. Replace the labels with the ones from the guide.
   With an existing Traefik, use its network, entrypoint and certificate resolver names.
   Edit the existing `labels:` and `networks:` keys instead of adding a second key of the
   same name, and keep `lumastra` on `lumastra-network`.
@@ -245,10 +247,15 @@ Then:
   It must print `{"status":"pass"}`. HTML or any other body means the request did not
   reach Lumastra. If the certificate can't be issued, check that DNS points at this
   server and that ports 80 and 443 reach it.
-- Check that the proxy removes the sign-in headers. This must print `401`:
-  `curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' https://<domain>/api/user/profile`.
-  A `200` means anyone can sign in as anyone: stop, tell the person, and fix the proxy
-  config before you continue.
+- Check that the proxy removes the sign-in headers. `/api/me` is a browser route: it
+  accepts a session cookie or forward-auth headers, and nothing else. With no cookie, this
+  must print `401`:
+  `curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' -H 'X-Forwarded-Groups: admins' https://<domain>/api/me`.
+  A `200` means the forged headers signed the request in: stop, tell the person, and fix
+  the proxy config before you continue. The test only proves something when forward auth
+  is on (`FORWARD_AUTH_ENABLED=true`). With forward auth off, Lumastra ignores the headers
+  and always answers `401`, so check that the proxy config still removes them. Don't use
+  `/api/v1/me` for this: it takes bearer tokens only and never reads these headers.
 - If the proxy reaches Lumastra over the compose network, remove the `ports:` block from
   the `lumastra` service, run `docker compose up -d` and check again. From then on, check
   the app directly with
