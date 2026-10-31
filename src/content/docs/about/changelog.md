@@ -21,7 +21,8 @@ Live TV proxy: update needed (protocol 0 → 1, TypeScript proxy, Rust proxy, sh
 build scripts, image build).
 
 - Home’s **What's On Now** row searches channel names and the current or single next
-  programme. Large lineups reveal cards in small batches to keep scrolling responsive.
+  programme. The search field shows its full placeholder. Large lineups reveal cards
+  in small batches to keep scrolling responsive.
 - Web playback stays fullscreen when advancing between episodes, and seek previews keep
   their correct proportions on partial thumbnail sheets.
 - A season is available once all aired episodes are present.
