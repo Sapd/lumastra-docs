@@ -147,9 +147,12 @@ export const starlightDocs = {
 		// duplicate text title in the header.
 		replacesTitle: true,
 	},
-	social: REPOS_PUBLIC
-		? [{ icon: 'github', label: 'GitHub', href: 'https://github.com/Sapd/lumastra' }]
-		: [],
+	social: [
+		...(REPOS_PUBLIC
+			? [{ icon: 'github', label: 'GitHub', href: 'https://github.com/Sapd/lumastra' }]
+			: []),
+		{ icon: 'discord', label: 'Discord', href: 'https://discord.gg/ZhaFYkuqq9' },
+	],
 	editLink: REPOS_PUBLIC
 		? { baseUrl: 'https://github.com/Sapd/lumastra-docs/edit/main/' }
 		: undefined,
