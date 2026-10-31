@@ -241,11 +241,11 @@ works for small ones), and every new Valkey call has to pick a role.
 
 ## Media & playback
 
-### Local-files-only streaming; Jellyfin is optional sync
+### Local-files-only streaming; Jellyfin is optional
 
 All media is served from local library paths; playability is gated on
-`has_files`. Jellyfin integration is background sync only and never sits in the
-playback path.
+`has_files`. Jellyfin supplies metadata and optional background watch-state sync;
+it never sits in the playback path.
 
 **Why:** keeping Jellyfin out of the critical path means streaming and watch-state
 don't depend on it. Items without local files surface a **Request** action instead

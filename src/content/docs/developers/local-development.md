@@ -6,7 +6,7 @@ sidebar:
 ---
 
 Build, run, and test Lumastra from source. You'll need Node.js 22 or newer,
-Docker with Compose, and Git.
+Docker with Compose, Git, and a Rust toolchain installed with `rustup`.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Docker with Compose, and Git.
 | **npm** | 10.x | Bundled with Node 22+ |
 | **Docker + Compose** | Docker ≥ 24, Compose ≥ 2.20 | Runs PostgreSQL 18 + pgvector and two Valkeys locally |
 | **Git** | any recent | — |
-| **Rust** | Pinned in `native/rust-toolchain.toml` | Required by the default worker watcher build. The explicit TypeScript watcher fallback skips this native build. |
+| **Rust** | Pinned in `native/rust-toolchain.toml` | Install with `rustup`; required to build the worker's Rust watcher from source. |
 
 Jellyfin is **not required** for development. The app starts in setup mode and
 most UI can be exercised without it.
@@ -108,9 +108,8 @@ most UI can be exercised without it.
    ```
 
    This builds and runs the lean TypeScript task host, existing tasks/plugins and
-   one Rust watcher child. For the explicit filtered TypeScript watcher fallback,
-   run `LUMASTRA_WATCHER_IMPLEMENTATION=chokidar npm run dev:worker`; that command
-   skips the Rust build. Web remains separate from task execution.
+   one Rust watcher child. Rust is the only file watcher, including for bare-metal
+   and development installs. Web remains separate from task execution.
 
 ## Code quality
 

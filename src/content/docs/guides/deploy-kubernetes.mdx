@@ -614,9 +614,10 @@ libraries only work if the pod lands on the node that has the path, so use `nfs`
 `existingClaim` on a multi-node cluster.
 
 For libraries on NFS, see the mount options in [Performance
-tuning](/guides/performance-tuning/#nfs-mount-options-media-library). The watcher does
-not see writes made by other hosts, so scheduled scans find new files. This is the same
-as on Docker.
+tuning](/guides/performance-tuning/#nfs-mount-options-media-library). The Rust watcher
+watches network mounts and reconciles them every 15 minutes by default to find writes
+made by other hosts. Set `LUMASTRA_WATCH_NETWORK_RECONCILE_SECS` to change the interval.
+This is the same as on Docker.
 
 **Media on object storage.** You can mount an S3 bucket read-only with the
 [Mountpoint for Amazon S3 CSI driver](https://github.com/awslabs/mountpoint-s3-csi-driver)

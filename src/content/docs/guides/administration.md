@@ -384,6 +384,9 @@ Use **Connections** to revoke device sessions, `/j` and Subsonic clients, or per
 access tokens individually. The user editor also sets age-rating ceilings, privacy,
 and admin status.
 
+The per-user **Allow Live TV** switch controls access to Live TV. Turning it off
+immediately ends that user's running Live TV streams.
+
 :::caution[Removing groups is not the same as offboarding]
 Taking someone out of every identity-provider group stops new admin/permission grants
 from applying, but a session or token issued earlier can keep working until it expires.

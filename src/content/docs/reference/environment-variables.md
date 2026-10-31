@@ -103,12 +103,17 @@ Mostly relevant for **very large libraries** or busy servers. See
 | Variable | Default | Description |
 | --- | --- | --- |
 | `WORKER_MODE` | `disabled` for web | Set by the role start script: web submits work; the dedicated worker runs tasks/plugins and supervises its Rust watcher child. |
-| `LUMASTRA_WATCHER_IMPLEMENTATION` | `rust` in the worker | Same-container watcher child. Set `chokidar` explicitly for the filtered TypeScript watcher fallback; use one implementation at a time. |
+| `LUMASTRA_WATCH_NETWORK_RECONCILE_SECS` | `900` | Seconds between network-mount reconciliations by the Rust watcher. Network mounts are always watched; `0` disables only periodic reconciliation. |
 | `LUMASTRA_ORCHESTRATOR_LEADER_TTL_MS` | `15000` | **Advanced (rarely tuned).** Per-class leader-lock TTL. Raise to `30000` on a single heavy worker to avoid leadership flapping under cold-start backlog. |
 | `LUMASTRA_ORCHESTRATOR_LEADER_RENEW_MS` | `5000` | **Advanced.** Leader-lock renew cadence (must be `<` TTL). |
 | `LUMASTRA_RUN_STATE_TTL_ACTIVE_MS` | `900000` | **Advanced.** Zombie self-heal window: a crashed run is reclaimed ~15 min after its last heartbeat. |
 | `PREVIEW_CACHE_DIR` | `/config/cache/preview` | Where hover-preview clips are cached as small content-addressed VOD artifacts. On a **multi-instance** web tier, put this on shared storage (it rides the `config` volume by default) so any instance can serve a finished preview from disk. See [Zero-downtime updates › Hover previews](/guides/zero-downtime-updates/#hover-previews-need-a-shared-preview-cache-too). Single-instance needs nothing. |
 | `PREVIEW_CACHE_ENABLED` | `true` | Set `false` to disable the hover-preview disk cache entirely (every hover re-transcodes on demand). |
+
+The Rust watcher is the only file watcher, including on bare metal and in development.
+Remove `LUMASTRA_WATCHER_IMPLEMENTATION` and `LUMASTRA_WATCH_NETWORK_FS=false` from
+older configurations: they are no longer supported and produce a startup warning.
+Network mounts are watched and reconciled every 900 seconds (15 minutes) by default.
 
 ## Authentication
 
@@ -319,7 +324,7 @@ the default relay is run by the Lumastra maintainer and is covered on that page.
 | `MDBLIST_API_KEY`                 | Aggregated ratings + keyword tags    |
 | `LASTFM_API_KEY`                  | Music popularity                     |
 | `DISCOGS_TOKEN`                   | Artist / album enrichment            |
-| `JELLYFINURL` / `JELLYFINAPIKEY`  | Jellyfin background **sync** (the `/j` compat API needs neither) |
+| `JELLYFINURL` / `JELLYFINAPIKEY`  | Jellyfin metadata and optional background **sync** (the `/j` compat API needs neither) |
 | `PUBLIC_JELLYFINURL`              | Public Jellyfin address for links users click (homepage button, Quick Connect hint). Environment only |
 | `AUDIOURL` / `AUDIOAPIKEY`        | AudiobookShelf: the key needs **admin** rights so per-listener keys can be minted. See [Audiobooks](/guides/audiobooks/) |
 | `PUBLIC_AUDIOBOOKURL`             | Public AudiobookShelf address for the "open in AudiobookShelf" button. Environment only |

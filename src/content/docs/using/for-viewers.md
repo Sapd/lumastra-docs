@@ -29,6 +29,10 @@ Resuming a series follows its saved watch marker, including progress from other 
 If that takes you somewhere unexpected, a notice names the device and offers to jump
 back. Finished series offer the next season or a rewatch.
 
+Watching a title to the end removes it from Continue Watching, even if an older
+partial position remains from a sync. Next Up moves past completed episodes.
+Starting a rewatch brings the title back once you have new playback progress.
+
 Restore dismissed titles on **Hidden from Continue Watching** at `/my/hidden`.
 
 ## Recommendations and ratings

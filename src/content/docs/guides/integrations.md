@@ -25,6 +25,10 @@ explicitly enable.
   configuration files. The variable names below are a reference for that path, not
   required setup steps.
 
+If TMDB rejects the key, **Save & continue** stays on the setup step with a message
+to check the key. If TMDB can't be reached, the key is saved with a warning that
+metadata requests will retry automatically.
+
 :::tip[For the full experience]
 Everything here is optional, but these make the biggest difference. Set them up in
 roughly this order:
@@ -53,9 +57,8 @@ trusted certificate.
 
 :::note[Local-first streaming]
 Movies, series and music stream from files available to Lumastra; audiobooks
-stream from your Audiobookshelf server. Discovery-only items (for example, TMDB metadata with no local file)
-surface a **Request** action instead of **Play**. Jellyfin is background
-**sync only**: Lumastra does not stream from it, and it isn't required for
+stream from your Audiobookshelf server. Jellyfin supplies metadata and optional
+watch-state sync; Lumastra does not stream from it, and it isn't required for
 any feature.
 :::
 
@@ -94,6 +97,10 @@ a Jellyfin server yet, see the official
 [Jellyfin installation guide](https://jellyfin.org/docs/general/installation/). The
 `JELLYFINURL` and `JELLYFINAPIKEY` variables are optional alternatives.
 
+Jellyfin can also supply metadata without watch sync. Configure the URL and API key
+and set `FEATURE_JELLYFIN_SYNC=false` for metadata only. Private addresses are
+supported, provided the Lumastra server can reach them.
+
 Jellyfin watch-state sync works in both directions. How users and titles are matched,
 and what to do when they don't match, is covered in
 [Jellyfin watch-state sync](#jellyfin-watch-state-sync) below.
@@ -101,7 +108,7 @@ Both servers can use the same media folders while you try Lumastra.
 
 | Integration         | What it adds                                  | Environment alternative / option |
 | -------------------- | ------------------------------------------------ | ---------------------------------- |
-| **Jellyfin sync**   | Bidirectional watch-state sync and "now streaming" sessions | `JELLYFINURL` + `JELLYFINAPIKEY` |
+| **Jellyfin**   | Metadata, optional bidirectional watch-state sync and "now streaming" sessions | `JELLYFINURL` + `JELLYFINAPIKEY` |
 | **Jellyfin-compatible `/j` API** | Connect existing Jellyfin / Streamyfin TV & mobile apps to Lumastra (**no Jellyfin server required**) | (built-in) |
 | **Subsonic** | Use any Subsonic music client | Enable OpenSubsonic API Compatibility under Settings → Music, or set `FEATURE_SUBSONIC_COMPAT=true` (off by default) |
 | **AudiobookShelf**  | Audiobook library, see [Audiobooks](/guides/audiobooks/) | `AUDIOURL` + `AUDIOAPIKEY`      |
@@ -118,21 +125,28 @@ password or a separate read-only token for tools that observe your library.
 
 Lumastra keeps each person's watch state in step with Jellyfin, in both directions:
 played and unplayed status, and resume positions for partly watched titles. Watch
-state is exchanged every 5 minutes.
+state is exchanged every 5 minutes. Marking a title played in Jellyfin later is
+imported too, even if its last-played date hasn't changed.
 
 **Users.** A Jellyfin user syncs with the Lumastra account that has the same
 username (capitals don't matter). If the names differ, open the user under
 **Admin → Users**, open **Identities**, and enter their Jellyfin login name.
 
-**Titles.** Titles are matched by their TMDB or IMDb IDs first. A title without a
-matching ID is paired by file: the same file, with the same size, must be in both
-libraries. Lumastra compares the path relative to each library root, or the identical
+**Titles.** Titles are matched by their TMDB or IMDb IDs first. Movies and episodes
+without provider IDs pair automatically by file path and size: the same file must
+be in both libraries. Lumastra compares the path relative to each library root, or the identical
 full path. A file that holds several episodes is never paired, and neither is a title
 with more than one possible match. If you rename a file in Jellyfin, the new name is
 picked up at the next file check, which runs at most every 30 minutes.
 
-**Conflicts.** If you mark a title unwatched in Lumastra, a newer "played" from
-Jellyfin wins.
+Episodes scanned after the first Jellyfin listing pair automatically too. In
+**Admin → Library**, a series without provider IDs shows as linked to Jellyfin once
+all its episodes with files are linked.
+
+**Conflicts.** For resume positions, the newest stop wins: Jellyfin's last-played
+time is compared with Lumastra's playback event time. With push-only sync, Lumastra
+always pushes its position. If you mark a title unwatched in Lumastra, a newer
+"played" from Jellyfin wins.
 
 **What to check when sync stops:**
 

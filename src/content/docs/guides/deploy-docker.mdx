@@ -40,8 +40,7 @@ and supervises one credential-free Rust file-watcher child in its container.
 The web and worker containers must **share the `config` volume**: the worker writes
 artwork the web tier serves. BullMQ and shared coordination use persistent
 `noeviction` Valkey; disposable cache uses a separate evictable Valkey. The worker
-uses the Rust watcher by default; set `LUMASTRA_WATCHER_IMPLEMENTATION=chokidar`
-on the worker for the filtered TypeScript fallback during diagnosis or rollback. See [Performance tuning](/guides/performance-tuning/)
+always uses the Rust watcher. See [Performance tuning](/guides/performance-tuning/)
 for task parallelism and resource limits.
 
 ## Minimal docker-compose.yml
