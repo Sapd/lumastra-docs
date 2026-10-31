@@ -20,6 +20,11 @@ The full changelog is in the repository:
 Live TV proxy: update needed (protocol 0 → 1, TypeScript proxy, Rust proxy, shared modules,
 build scripts, image build).
 
+- Home’s **What's On Now** row searches channel names and the current or single next
+  programme. Large lineups reveal cards in small batches to keep scrolling responsive.
+- Web playback stays fullscreen when advancing between episodes, and seek previews keep
+  their correct proportions on partial thumbnail sheets.
+- A season is available once all aired episodes are present.
 - Sync quarantine can recheck decisions that are already applied and retain uncertain
   proposals. Changes that remain use reviewed batches with dependency checks and clear
   continuation results. See [Library troubleshooting](/guides/library-troubleshooting/).
