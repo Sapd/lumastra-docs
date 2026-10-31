@@ -54,6 +54,8 @@ services:
   lumastra:
     image: ghcr.io/lumastra/lumastra:latest
     restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     environment:
       NODE_ENV: production
       WORKER_MODE: disabled # web requests and durable task submission
@@ -89,6 +91,8 @@ services:
   worker:
     image: ghcr.io/lumastra/lumastra:latest
     restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     command: ["./start-worker.sh"]
     stop_grace_period: 90s # lets running jobs finish on stop/update (Docker's default is 10 s)
     cpu_shares: 512 # yield to web + Postgres under contention (idle = still uses everything)
@@ -273,6 +277,55 @@ volumes:
 If your library is on **NFS**, the mount options make a big difference to scan speed
 (use `nconnect`, `vers=4.2`, `noatime`, …). See [Performance
 tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
+
+### Hardening and containment
+
+The example Compose setup uses these safeguards:
+
+- The web app (`lumastra`), worker (`worker`) and Live TV proxy (`proxy`) use
+  `cap_drop: [ALL]` and `security_opt: [no-new-privileges:true]`.
+- Media mounts use `:ro`. The proxy mounts only the read-only FFmpeg binary cache,
+  `ffmpeg-cache:/config/bin:ro`. Never mount all of `/config` on the proxy: it holds
+  `master.key`. See [Live TV stream proxy](#live-tv-stream-proxy).
+- `postgres`, `valkey` and `valkey-cache` have no `env_file`. They receive only their
+  explicitly configured database/cache credentials. `LUMASTRA_MASTER_KEY` and other
+  app secrets in `.env` are not passed to them.
+- The app port is published on `127.0.0.1` only.
+
+**Read-only mounts do not isolate the network.** `:ro` stops writes through that
+mount only. A compromised container can still access anything its network allows,
+including a writable NFS/SMB export or an internal admin service. On the NAS, export
+the media share read-only, or restrict the export to the Lumastra host only.
+
+If containers can reach sensitive internal services, add host firewall rules scoped
+to what Lumastra needs. With Docker's iptables backend, use the `DOCKER-USER` chain.
+See [Docker packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
+A blanket block of private networks breaks supported integrations: Jellyfin,
+Sonarr/Radarr, Live TV tuners and M3U sources, NAS media, and Authentik or another
+OIDC provider.
+
+**Resource limits need separate settings.** A `NODE_OPTIONS` heap size limits the
+Node.js heap, not container memory. FFmpeg and native allocations sit outside that
+heap. `cpu_shares` is only a relative CPU weight under contention.
+
+For hard limits, add `mem_limit` and `pids_limit` per service. The commented YAML
+below shows illustrative values, not tested Lumastra recommendations. Size each
+service for your own hardware. Transcoding needs headroom: watch peak usage under a
+transcode plus a library scan first, then set the limits with margin.
+
+```yaml
+# Example only: merge into your existing services after measuring peak usage.
+# services:
+#   lumastra:
+#     mem_limit: 4g
+#     pids_limit: 512
+#   worker:
+#     mem_limit: 4g
+#     pids_limit: 512
+#   proxy:
+#     mem_limit: 2g
+#     pids_limit: 512
+```
 
 ### Valkey memory overcommit warning
 
@@ -751,6 +804,8 @@ service that uses `start-proxy.sh`, and point the app at it:
 proxy:
   image: ghcr.io/lumastra/lumastra:latest
   restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
   command: ["sh", "start-proxy.sh"]
   environment:
     STREAM_PROXY_SECRET: ${STREAM_PROXY_SECRET}
