@@ -20,6 +20,12 @@ Here's how to turn Live TV on and add your first source. The proxy, multiplexing
 failover are covered in [Live TV architecture](/architecture/live-tv/); day-to-day channel
 administration is in [Administering Lumastra → Live TV](/guides/administration/#live-tv-and-radio).
 
+On Home, **What's On Now** shows a small row of channels with your favorites first.
+Search beside the heading to match a channel name, its current program or its single
+next program. A next-program match is labeled beneath the current listing. Scroll the
+row horizontally or choose **Load more** to reveal more results; clear the search to
+return to the lineup. The full schedule is available in **Live TV**.
+
 ## Example setups
 
 ### TV from your own tuner
