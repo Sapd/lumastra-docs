@@ -12,9 +12,14 @@ in the app.
 
 ## How age ratings work
 
-Every title carries a **minimum age** (in years), derived from its provider
-certification. A user can see a title only if their age limit is **greater than or
-equal to** the title's minimum age.
+A rated title has a **minimum age** in years. A user with an age limit can see it
+only if their limit is **greater than or equal to** that minimum age.
+
+Seasons and episodes always use their **series' rating**.
+
+Users with an age limit or a library-group limit don't see posters for **discovery
+titles** (suggestions that are not in your library). Lumastra can't check the rating
+of a title it doesn't have, so it doesn't show its artwork to them.
 
 | Certification                          | Minimum age |
 | --------------------------------------- | ----------- |
@@ -30,15 +35,45 @@ equal to** the title's minimum age.
 | 12 / 12A / 15 / 18 (UK)                | the number  |
 | MA15+ / R18+ (Australia)               | 15 / 18     |
 
-**Unrated titles** (no certification) are **hidden** from age-restricted users by
-default. Set `UNRATED_CONTENT_VISIBLE=true` (or the toggle in admin Settings) to show
-them instead.
+**Unrated** means the title has no usable numeric age rating. Missing certifications,
+explicit “unrated” labels, or unreadable certifications can leave a title unrated.
+Unrated titles are **hidden** from users with an age limit by default.
 
-:::tip[Where ratings come from]
-Age ratings are populated from your metadata providers, most reliably from
-**MDBList**. If you rely on age limits, configure MDBList (see
-[Optional integrations](/guides/integrations/)) so titles are rated consistently.
-:::
+In **Admin → Settings → Access**, enable **Show Unrated Content to Age-Restricted
+Users** (`UNRATED_CONTENT_VISIBLE=true`) to let those users see unrated titles.
+Library-group access limits still apply. A library-group limit alone does not hide
+unrated titles; this setting applies when the user has an age limit.
+
+### Where ratings come from
+
+**TMDB** supplies the national certification for the admin's **Age Rating Country**.
+Find this setting in **Admin → Settings → Metadata → API keys & languages → Metadata
+sources**, beside **TMDB Metadata Language**. Its default is **Automatic (from
+metadata language)**. For example, `de-DE` selects Germany and `en-GB` selects the
+United Kingdom. The fallback is the United States.
+
+Lumastra uses the strictest readable TMDB certification for that country, across all
+release types. If the country has no certification, or only explicit unrated labels,
+it tries the US certification. If a national certification is present but cannot be
+read, it does not borrow the US rating. Without another usable rating, the title
+stays unrated.
+
+A national certification replaces an **MDBList** age rating. MDBList fills ratings
+where no national rating exists and cannot overwrite a national rating.
+
+**Jellyfin OfficialRating** and movie NFO **`<mpaa>` / `<certification>`** tags can
+also supply national certifications. NFO scans and Jellyfin file adoption keep an
+existing national rating. They can replace an MDBList rating.
+
+### Changing the rating country
+
+Changing **Age Rating Country** makes existing titles eligible for another rating
+check. The **Backfill Age Ratings** task runs at startup and hourly. It checks titles
+in small batches, so a large library can take a while. TMDB lookups need a configured
+TMDB API key.
+
+Find the task under **Admin → Tasks → Overview** and its runs under **Tasks → Runs**.
+As ratings change, users with age limits may see titles appear or disappear.
 
 ## Setting an age limit
 
@@ -46,9 +81,15 @@ There are three independent ways to limit a user. Use whichever fits your setup.
 
 ### 1. Per user (admin)
 
-In **Admin → Users**, each user has an **Age Limit** field (0–21; blank = no limit).
+In **Admin → Users**, open a user and select **Access & sign-in**. The **Age limit**
+field accepts 0–21; blank means no limit.
 Setting it here **pins** the value, overriding whatever the identity provider says.
-Click the pin to release it and hand control back to your IdP groups.
+Select **Use identity provider groups** to release it and use your IdP groups again.
+
+Beside the age limit, a message shows how many active library movies and series are
+unrated, out of the total. It appears when at least one title is unrated. The count
+covers the whole library, not just titles that user can access. The message also
+says whether users with age limits can see unrated titles under the current setting.
 
 ### 2. Via your identity provider
 
@@ -67,12 +108,13 @@ Administrators bypass age limits regardless of their groups.
 ### 3. Per library
 
 A **library group** can have a **Max age rating** (set in **Library → Sources & scanning**).
-A library is hidden entirely from any user whose age limit is below it. Useful for
-keeping an adult library out of a child's view completely.
+A library disappears from the library list for users whose age limit is below that
+value.
 
-The per-library ceiling and the per-title rating work at different levels: the
-library ceiling hides a whole library from browse, while the per-title rating filters
-individual titles inside the libraries a user *can* see.
+For **audiobooks**, this value also sets a minimum age for every book in that
+library. A higher rating on the book still wins. A book with no rating uses the
+library's value, so it does not count as unrated for access checks. **Movies and
+series** use their own ratings; the library value does not replace them.
 
 ## What a restricted user experiences
 
@@ -107,9 +149,10 @@ Both are configured in env or **Admin → Settings**, alongside `ADMIN_GROUPS` a
 | Setting                   | Where                                         | Default | Effect                                               |
 | -------------------------- | ----------------------------------------------- | ------- | ------------------------------------------------------ |
 | Per-user age limit        | Admin → Users                                 | —       | Pins an age ceiling for one user                     |
-| Library max age rating    | Library → Sources & scanning (group settings) | —       | Hides a whole library below the given age            |
+| `AGE_RATING_COUNTRY`      | env / Admin → Settings → Metadata             | `auto`  | Selects the national rating system; automatic follows metadata language, with US fallback |
+| Library max age rating    | Library → Sources & scanning (group settings) | —       | Hides the library from the list below this age; also sets an audiobook age floor |
 | `AGE_RATING_GROUP_PREFIX` | env / Admin → Settings                        | `age-`  | IdP group prefix; `age-12` limits a user to age ≤ 12 |
-| `UNRATED_CONTENT_VISIBLE` | env / Admin → Settings                        | `false` | Show titles with no rating to restricted users       |
+| `UNRATED_CONTENT_VISIBLE` | env / Admin → Settings → Access               | `false` | Lets users with an age limit see unrated titles; library access still applies |
 | `ARR_MANAGER_GROUPS`      | env / Admin → Settings                        | `arrmanager,admin` | Groups that can manage the media-acquisition backend |
 | `MODERATOR_GROUPS`        | env / Admin → Settings                        | empty   | Groups that can delete other users' community content |
 
