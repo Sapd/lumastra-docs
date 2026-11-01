@@ -340,6 +340,11 @@ the default relay is run by the Lumastra maintainer and is covered on that page.
 | Variable                       | Default | Description                                                                                                                                 |
 | ---------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AUDIOBOOK_REMUX_MAX_PER_USER` | `2`     | Concurrent on-the-fly remuxes one listener may hold on a single instance. Each is an ffmpeg process started at a requested offset, and dragging the scrubber can ask for several in a second. `0` disables the cap. |
+| `DOWNLOAD_SESSION_GRANT_HOURS` | `168` | How long the download links of an audiobook download session stay valid, in hours. Apple Watch downloads use these sessions. Values are clamped to 1–168 (7 days), and an invalid value falls back to `168`. Other playback grants are not affected. |
+| `DOWNLOAD_SESSIONS_MAX_PER_USER` | `10` | Audiobook download sessions one user may hold at once. Values are rounded down and clamped to 1–100. A further start answers `422 quota_exceeded`. |
+
+Keep query strings out of your access logs: these download links carry a credential in
+the URL. See [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
 See [Audiobooks](/guides/audiobooks/) for the rest of the setup.
 

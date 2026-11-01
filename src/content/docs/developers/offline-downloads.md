@@ -299,16 +299,24 @@ or capacity `503`. A live encode may not provide a final size or resumable bytes
 apply the video-file resume guarantee to every audio response. See
 [Music playback](/developers/music-playback/) for negotiation and replay.
 
-Audiobook download starts require `media:write` and create a real session without
-superseding the user's listening sessions. They remain subject to stream policy and
-require the user's AudiobookShelf link. Save every required track, its book offset and
-duration; a book may have several files. Follow issued URLs unchanged and inspect the
-delivery kind rather than assuming one progressive file. Audiobook grants normally last
-up to 24 hours, or up to 6 hours when unpinned for casting; use the returned `expiresAt`,
-`renewAfter` and `renewHref`. Renewal needs account authentication. Session termination
-revokes byte access. `castTarget: true` requests access from another IP only when server
-policy allows it; a download flag itself grants no casting permission. See
-[Audiobook playback](/developers/audiobook-playback/) for session closure and track clocks.
+Audiobook download starts require `media:write` and require the user's AudiobookShelf
+link. Save every required track, its book offset and duration; a book may have several
+files. Follow issued URLs unchanged and inspect the delivery kind rather than assuming
+one progressive file. A download start creates a **download session**, which is built for
+long background transfers:
+
+- Its grants last up to 7 days (see [Audiobook downloads](/developers/audiobook-playback/#audiobook-download-sessions)).
+- It takes no stream slot, so it never blocks playback, and it does not supersede the
+  user's listening sessions.
+- It does not appear as playing, and it never writes a listening position.
+- A user can hold only a limited number at once. A start over the cap answers
+  `422 quota_exceeded` with `details.bucket = "audiobook_downloads"`.
+
+Session termination revokes byte access. `castTarget: true` requests access from another
+IP only when server policy allows it; the download flag itself grants no casting
+permission. Send `castTarget: true` when another device, such as an Apple Watch, fetches
+the files. See [Audiobook playback](/developers/audiobook-playback/) for session closure
+and track clocks.
 
 ## Record playback, not transfers
 

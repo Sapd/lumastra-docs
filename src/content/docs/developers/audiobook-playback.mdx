@@ -56,7 +56,7 @@ A successful start returns `201` and a bare playback envelope. The retired
 | `startPositionMs` | Optional whole-book position. Omit for upstream resume; send `0` only for an intentional start over. |
 | `capabilities.containers` | Optional list the player can actually decode, such as `mp3`, `m4b`, `flac` or `ogg`. MIME strings such as `audio/mpeg` also work. Omission or an empty recognized list falls back to `audio/mpeg` and `audio/mp4`. |
 | `requestedMethod` | Omit for negotiation, or use `direct`. `audio_transcode` and `full_transcode` both force upstream audio HLS conversion. `direct` does not override a required conversion. |
-| `audio.download` | Set `true` only to prepare an offline transfer; see below. |
+| `audio.download` | Set `true` only to prepare an offline transfer; see [Audiobook download sessions](#audiobook-download-sessions). |
 | `clientInfo.client`, `clientInfo.version` | Optional app identity for diagnostics. |
 
 **Recommended audio setup:** declare supported containers and inspect each returned
@@ -307,13 +307,55 @@ session, or change its IP binding. Normal starts can supersede this user's sessi
 on the same book on other devices, and sessions on the same device, whether active or
 paused. Handle the resulting report outcome instead of repeatedly restarting.
 
-For an offline transfer, start with `audio: { "download": true }`. This avoids
-superseding the listener's current playback, and the transfer session is protected
-from later playback takeovers. It still consumes stream policy capacity and needs
-valid media authorization. Do not report a download as heard audio. Renew its grant
-when necessary, close it after transfer, and retain the book-clock metadata with the
-saved files. See [Offline downloads](/developers/offline-downloads/) for storage and
+### Audiobook download sessions
+
+For an offline transfer, start with `audio: { "download": true }`. Add `castTarget: true`
+when another device fetches the files, such as an Apple Watch that downloads in the
+background. The server may refuse `castTarget` by policy. The response is the same
+playback envelope with the track URLs and a `grant`.
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/play-sessions \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "mediaId": "550e8400-e29b-41d4-a716-446655440000",
+        "deviceId": "watch-install-1",
+        "audio": { "download": true },
+        "castTarget": true }'
+```
+
+A download session differs from a listening session:
+
+- **Longer grants.** Grants last `DOWNLOAD_SESSION_GRANT_HOURS` (default and maximum 168
+  hours, 7 days), also when unpinned. The session lives as long as its grants. It needs no
+  heartbeat or report, and it survives other playback and server restarts. The server ends
+  it when its grants expire or are revoked, or after 7 days. Hand the issued URLs to the
+  background transfer and do not renew. After expiry, start a new download session and
+  replace the grant on all pending requests.
+- **Not a stream.** It takes no stream slot, so it never blocks playback, even at a
+  one-stream limit. It does not appear as playing in active sessions.
+- **No position.** Reports against it are ignored. `DELETE` or a closing report ends it
+  without moving the book's position. Do not report a download as heard audio.
+- **Per-user cap.** One user may hold `DOWNLOAD_SESSIONS_MAX_PER_USER` of them at once
+  (default 10). A start over the cap answers `422 quota_exceeded` with
+  `details.bucket = "audiobook_downloads"`, plus `limit`, `used` and `remaining`.
+- **One per book and device.** Starting again for the same book on the same device ends
+  the previous download session and revokes its grants. Download sessions never end the
+  user's listening sessions, and later playback starts never end them.
+
+Release the session when the transfer is finished or cancelled:
+
+```bash
+curl -X DELETE https://lumastra.example.com/api/v1/play-sessions/ba56a842-218c-46c0-a9db-f1177aaecaa9 \
+  -H "Authorization: Bearer <token>"
+```
+
+This needs `media:write` and answers `204`. Keep the book-clock metadata with the saved
+files. See [Offline downloads](/developers/offline-downloads/) for storage and
 reconnection handling.
+
+Operators: a download URL carries its credential in the query string and stays valid for
+up to 7 days. Keep query strings out of access logs. See
+[Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
 ## 5. Where the resume point actually lives
 

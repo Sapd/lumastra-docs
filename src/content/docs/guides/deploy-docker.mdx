@@ -538,11 +538,15 @@ Some clients can't send auth headers, so they put credentials in the **query str
   **password**
 - Media URLs for native players, `<audio>`/`<video>` streams, and the iPhone, iPad and
   Apple TV apps (`/api/v1/`): `grant`, a credential bound to one item and one playback
-  session that works until it expires (up to 24 hours)
+  session that works until it expires. Most grants last up to 24 hours. Audiobook
+  download sessions (`audio.download` play sessions, used for Apple Watch downloads) get
+  grants that last up to **7 days**, so a leaked download URL stays usable much longer.
+  See [`DOWNLOAD_SESSION_GRANT_HOURS`](/reference/environment-variables/#audiobooks).
 
 Most proxies' default access-log formats record the full request URI (nginx's
 `$request`, for example), so every one of those requests writes a live credential into
-your logs in plain text. Log the path without the query string.
+your logs in plain text. Log the path without the query string. Keep query strings out
+of every log that sees these requests, including proxy, WAF and CDN logs.
 
 <Tabs>
 <TabItem label="nginx">
@@ -593,8 +597,9 @@ lumastra.example.com {
 </TabItem>
 <TabItem label="Traefik">
 
-Drop query parameters from the access log. With the command-line flags used in the
-[Reverse proxy guide](/guides/reverse-proxy/), add these to the `command:` list:
+Drop query parameters from the access log. This needs Traefik 3.7.3 or later. With the
+command-line flags used in the [Reverse proxy guide](/guides/reverse-proxy/), add these to
+the `command:` list:
 
 ```yaml
             - --accesslog=true
@@ -612,6 +617,8 @@ accessLog:
 ```
 
 On an older release without `queryParameters`, drop the `RequestPath` field instead.
+See the [Reverse proxy guide](/guides/reverse-proxy/) for the Referer header and
+CrowdSec.
 
 </TabItem>
 </Tabs>

@@ -473,12 +473,26 @@ connection. To lift that limit, add this to the Traefik `command:` list:
 ```
 
 Traefik writes no access log by default. If you turn it on, drop query parameters so
-credentials stay out of it:
+credentials stay out of it. This needs Traefik 3.7.3 or later; an older release does not
+know the option:
 
 ```yaml
             - --accesslog=true
             - --accesslog.fields.queryparameters.defaultmode=drop
 ```
+
+With a static `traefik.yml` the same setting is `accessLog.fields.queryParameters.defaultMode: drop`.
+It removes the query string from the logged `RequestPath`. Audiobook download URLs for
+Apple Watch stay valid for up to 7 days, so a query string in a log is a long-lived
+credential.
+
+Traefik drops request headers from the access log unless you list them. Do not log the
+`Referer` header (`--accesslog.fields.headers.names.Referer=keep` or a `keep` default). It
+can carry the same query string as the page that made the request.
+
+If a CrowdSec parser reads the Traefik access log, it no longer sees query strings.
+Scenarios that match on the query stop working. Detection by path, status code and
+request rate still works.
 
 See [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
 
