@@ -557,8 +557,9 @@ Define the format in the `http` block and use it in the Lumastra `server` block:
 # http { ... }
 log_format lumastra_no_query '$remote_addr - $remote_user [$time_local] '
                              '"$request_method $uri $server_protocol" $status '
-                             '$body_bytes_sent "$http_referer" "$http_user_agent" '
+                             '$body_bytes_sent "$http_user_agent" '
                              'rt=$request_time';
+# No $http_referer: a same-site Referer repeats the page URL, query string included.
 
 # server { ... }
 access_log /var/log/nginx/access.log lumastra_no_query;
