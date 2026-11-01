@@ -115,6 +115,75 @@ authentication method the instance has enabled: forward auth, built-in
 login, or OIDC) and confirms the code. Nothing else is required on your
 client's side during this step. Keep polling in the background (Step 3).
 
+### Approving a code from a signed-in app
+
+A signed-in app can use `POST /api/v1/oauth/device/approve` instead of opening
+the browser approval page. Send the approving user's OAuth access token in
+`Authorization: Bearer <token>`.
+
+This requires a full `media` device grant with coarse `write` authority and
+expanded `media:write` scope. The token must belong to a live, independently
+signed-in device session. A session approved by another bearer session cannot
+approve further devices. PATs, service tokens, read-only device tokens, stream
+tokens, browser cookies, proxy identities, delegated requests, and tokens with
+admin authority or admin-class scopes are refused. Self-approval by session,
+device, or client ID is also refused.
+
+Before approving, show the user the sign-in code and the target client and device.
+Require explicit confirmation that the code and device match. Set `approve` to
+`true` only after that confirmation. Client IDs and device names are self-reported
+recognition aids, never proof of client identity.
+
+To get the display information, call
+`GET /api/v1/oauth/device/approve?user_code=WDJB-MJHT` with the same bearer token.
+It returns `{ "clientId": "my-tv-app", "deviceName": "Living Room TV" }`;
+`deviceName` is optional. `clientId` is capped at 128 characters. The device name
+is capped at 64 characters, with an ellipsis if truncated. This lookup uses the
+same authentication checks and rate limits as a decision.
+
+Send a JSON body with these two required fields. No other fields are defined.
+The body limit is 1,024 bytes.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `user_code` | string | Eight letters or digits, optionally separated by a dash after the fourth character. Case-insensitive. Send the displayed user code, never the secret `device_code`. |
+| `approve` | boolean | `true` approves the sign-in; `false` denies it. |
+
+```bash
+curl -X POST https://lumastra.example.com/api/v1/oauth/device/approve \
+  -H "Authorization: Bearer APPROVING_USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_code":"WDJB-MJHT","approve":true}'
+```
+
+| HTTP | Response or meaning |
+|---|---|
+| 200 | `{ "approved": true }` for approval, or `{ "approved": false }` for denial. |
+| 401 | Authentication required, invalid credentials, or account disabled or deleted. |
+| 403 | Insufficient scope, refused credential or session, or self-approval. |
+| 404 | Unknown, expired, already decided, or consumed code; also returned when device authorization is disabled. |
+| 413 | Body exceeds 1,024 bytes. |
+| 422 | Invalid body, including malformed JSON, an invalid code format, or a missing/non-boolean `approve`. |
+| 429 | Shared approval budget exceeded. Honour `Retry-After` in seconds. |
+| 500 / 503 | Internal error / database or account check unavailable. |
+
+Already-decided codes return `404`, not `409`. Invalid input returns `422`, not
+`400`. Errors use the API's `application/problem+json` format. Responses are not
+cached.
+
+Browser approval and bearer lookup/decision requests share three one-minute
+budgets: **20 requests per IP**, **10 per user**, and **10 per user and normalized
+code pair**. Lookups and decisions both count. A `429 rate_limited` response gives
+the remaining wait in `Retry-After`; it is not a fixed 60-second delay.
+
+The approving token's user becomes the grant owner. The TV still exchanges its
+own `device_code` at `/oauth/token` to obtain its **own device session**, subject
+to that user's age and library restrictions. That session can be revoked
+independently. Revoking the approving session also revokes sessions it approved.
+The approver's token is never transferred to the TV.
+
+Lumastra's Apple apps use this for [Set up Apple TV with your iPhone](/using/apple-apps/#set-up-apple-tv-with-your-iphone), with local pairing that is internal to the Apple apps.
+
 ---
 
 ## Step 3: poll for the token
