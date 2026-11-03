@@ -198,6 +198,12 @@ On first boot the app **runs all database migrations by itself**. Look for
 `✅ Schema migration completed successfully` in the logs. You don't need to run any SQL;
 the `pgvector/pgvector:pg18` image already includes the vector extension.
 
+The example compose file pulls `ghcr.io/lumastra/lumastra:stable` (the same as `:latest`),
+the newest release. Version tags such as `:0.1.0` or `:0.1` pin one. All of these are
+published for `linux/amd64` and `linux/arm64`. `:edge` follows every commit to `main` and
+is `linux/amd64` only; use it for testing, not production. The full list is in
+[Deploy with Docker](/guides/deploy-docker/).
+
 ## 4. Verify
 
 ```bash

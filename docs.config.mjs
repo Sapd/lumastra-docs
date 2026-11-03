@@ -19,6 +19,7 @@ export const sidebar = [
 		items: [
 			{ label: 'Introduction', slug: 'start/introduction' },
 			{ label: 'Quick Start', slug: 'start/quick-start' },
+			{ label: 'Features', slug: 'start/features' },
 		],
 	},
 	{
