@@ -148,8 +148,11 @@ sed -i.bak \
   -e "s|^DATABASE_PASSWORD=.*|DATABASE_PASSWORD=$(openssl rand -hex 24)|" \
   -e "s|^CACHE_PASSWORD=.*|CACHE_PASSWORD=$(openssl rand -hex 24)|" \
   -e "s|^# LUMASTRA_MASTER_KEY=.*|LUMASTRA_MASTER_KEY=$(openssl rand -hex 32)|" \
-  .env && rm -f .env.bak
+  .env && rm -f .env.bak && chmod 600 .env
 ```
+
+`.env` holds the database password and the master key, so `chmod 600` keeps it readable
+for its owner only.
 
 On Windows without WSL, `openssl` usually isn't installed. Run this in PowerShell in
 the same folder instead; it does the same thing:
@@ -173,6 +176,8 @@ titles and artwork come from file names only.
 
 Without a TMDB key, or without other optional providers such as Discogs, MDBList, Sonarr
 or Radarr, the worker logs `WARN` lines saying that a provider is missing or was skipped.
+Without an embeddings key the app logs `No embedding provider configured`, and without
+forward auth it logs that forward auth is disabled. All of these are expected.
 These are expected and harmless: scans still finish and playback works. Add a key later
 and the matching tasks start.
 
@@ -296,13 +301,15 @@ a match are scanned again too.
 
 ## Needs internet on first start
 
-The first start needs outbound internet. Each container that transcodes downloads
-FFmpeg from GitHub, and the app contacts `lumastra.org` for the licence. On a host behind
-a firewall, allow both, or see [What Lumastra sends where](/reference/data-flows/) for
-the full list and for running offline. The licence is fetched only after you have
-answered the setup wizard's question about contacting `lumastra.org`. Turn it off there
-(or set `LICENSE_SERVER_CONTACT_ENABLED=false`) and nothing is sent; the install then runs
-on the free tier ([what that means](/guides/licensing/#run-without-contacting-lumastraorg)).
+The first start needs outbound internet. The image ships without FFmpeg: on first start
+the worker downloads jellyfin-ffmpeg from GitHub into `/config/bin`, which the web
+container reuses from the shared volume. The app also contacts `lumastra.org` for the
+licence. On a host behind a firewall, allow both, or see [What Lumastra sends
+where](/reference/data-flows/) for the full list and for running offline. The licence is
+fetched only after you have answered the setup wizard's question about contacting
+`lumastra.org`. That switch is on by default; turn it off there (or set
+`LICENSE_SERVER_CONTACT_ENABLED=false`) and nothing is sent; the install then runs on the
+free tier ([what that means](/guides/licensing/#run-without-contacting-lumastraorg)).
 
 ## Next: put it behind HTTPS
 
