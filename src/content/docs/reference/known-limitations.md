@@ -61,8 +61,8 @@ also where the token-signing secret comes from. Lose it and every phone, TV app 
 browser is signed out, and saved secrets can't be decrypted any more. It's the most
 important thing to back up; see [Backup & recovery](/guides/backup-recovery/).
 
-**Image tags are not equivalent.** Release tags (`:stable`, `:latest` and version tags
-such as `:0.1.0`) are built for `linux/amd64` **and** `linux/arm64`. `:edge` follows
+**Image tags are not equivalent.** Release tags (`:stable`, `:latest`, `:beta` and version
+tags such as `:0.1.0`) are built for `linux/amd64` **and** `linux/arm64`. `:edge` follows
 every commit to `main` and is **amd64 only**; on an ARM host it fails with
 `exec format error`. The reference compose file uses `:stable`.
 
