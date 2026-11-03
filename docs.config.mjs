@@ -10,7 +10,7 @@
 // Set to true once github.com/Sapd/lumastra and github.com/Sapd/lumastra-docs
 // are public. While false, the header GitHub link and the "Edit page" links are
 // left out, because they would 404 for readers.
-export const REPOS_PUBLIC = false;
+export const REPOS_PUBLIC = true;
 
 /** @type {import('@astrojs/starlight/types').StarlightUserConfig['sidebar']} */
 export const sidebar = [
