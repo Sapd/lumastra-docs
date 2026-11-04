@@ -134,14 +134,16 @@ not work.
 
 ## Quick start
 
-This installs the small topology: one pod running web and worker, one Valkey, volumes
-that need no `ReadWriteMany`, and an Ingress. You need a PostgreSQL server you can
-reach and an Ingress controller.
+This installs a small setup: one web pod, the worker, the two Valkeys (tasks and cache),
+the router and an Ingress. Web and worker are always separate pods, and they share the
+config, transcode and plugins volumes. You need a PostgreSQL server you can reach, an
+Ingress controller, and either a `ReadWriteMany` storage class or a single node (see
+[Single node (k3s)](#single-node-k3s) below).
 
-Clone the repository and change into it:
+Clone the repository at the release you want to run and change into it:
 
 ```bash
-git clone https://github.com/Sapd/lumastra
+git clone --branch v0.1.2 https://github.com/Sapd/lumastra
 cd lumastra
 ```
 
@@ -243,7 +245,11 @@ kubectl -n lumastra get pods -w
 ```
 
 The first start runs the database migrations and downloads FFmpeg. The startup probe
-allows about 15 minutes. Follow the log with `kubectl -n lumastra logs -f deploy/lumastra-app`.
+allows about 15 minutes. Follow the logs with
+`kubectl -n lumastra logs -f statefulset/lumastra-web` and
+`kubectl -n lumastra logs -f deploy/lumastra-worker`. If pods stay `Pending`, check
+`kubectl -n lumastra get pvc`: a PVC stuck in `Pending` usually means your storage class
+has no `ReadWriteMany`. Use the single-node values below.
 `helm status lumastra -n lumastra` repeats the chart's notes, including warnings about
 missing values.
 
@@ -255,7 +261,45 @@ buffering and timeout annotations for you.
 With no OIDC and no forward-auth in the values, the chart turns built-in login on
 (`AUTH_NATIVE_LOGIN_ENABLED=true`), the same as the Compose quick start.
 
-The chart's `ci/` directory holds example values for every topology: `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
+### Single node (k3s)
+
+A stock k3s install has one storage class, `local-path`, which only offers
+`ReadWriteOnce`. The chart's default `ReadWriteMany` volumes then stay `Pending`. On a
+single node, keep every pod on that node and ask for `ReadWriteOnce` instead. Add this to
+`my-values.yaml` (the chart ships the same as `ci/single-node-values.yaml`):
+
+```yaml
+router:
+  enabled: false
+
+global:
+  nodeSelector:
+    kubernetes.io/hostname: my-node # kubectl get nodes
+
+persistence:
+  config:
+    accessModes: [ReadWriteOnce]
+  transcode:
+    type: emptyDir
+    emptyDirSizeLimit: 20Gi
+  plugins:
+    accessModes: [ReadWriteOnce]
+  appCache:
+    enabled: true
+    accessModes: [ReadWriteOnce]
+
+libraries:
+  - name: media
+    mountPath: /data/media
+    hostPath: /srv/media # a folder on the node
+```
+
+The router only matters with more than one web pod, so it is off here. k3s ships Traefik
+as its Ingress controller: set `ingress.className: traefik` instead of `nginx`. The chart
+adds its body-size and timeout annotations only for ingress-nginx, so large admin uploads
+may need a Traefik middleware.
+
+The chart's `ci/` directory holds example values for every topology: `single-node`, `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
 `full`, `icu`, `migration` and `stopped`.
 
 ## Configuration
