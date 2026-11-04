@@ -251,6 +251,10 @@ has no `ReadWriteMany`. Use the single-node values below.
 `helm status lumastra -n lumastra` repeats the chart's notes, including warnings about
 missing values.
 
+The `tls` block expects a certificate Secret `lumastra-tls` that you create, or that
+cert-manager creates for you. Without it the Ingress controller serves its own default
+certificate. Remove the `tls` block to test over plain HTTP first.
+
 Then open `https://lumastra.example.com/setup`. Pick the sign-in method, create the
 first admin, and add your library paths in the admin area. Use the `mountPath` values
 from `libraries`. With `className: nginx` the chart adds the ingress-nginx body size,
@@ -297,6 +301,17 @@ The router only matters with more than one web pod, so it is off here. k3s ships
 as its Ingress controller: set `ingress.className: traefik` instead of `nginx`. The chart
 adds body-size and timeout annotations only for ingress-nginx; with Traefik, check its
 timeouts if large admin uploads fail.
+
+Other things a fresh k3s needs:
+
+- **kubectl and helm as a normal user.** k3s writes its kubeconfig to
+  `/etc/rancher/k3s/k3s.yaml`, readable by root only. Copy it:
+  `mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $USER ~/.kube/config`.
+- **PostgreSQL.** The quick start assumes a server you already run. Inside the cluster,
+  use CloudNativePG (`database.mode: cnpg`, see [Database](#database)); it needs the
+  CloudNativePG operator installed first.
+- **No DNS yet.** `app.origin` must match the address in the browser. To test before DNS
+  exists, add the host name to your computer's hosts file, pointing at the node's IP.
 
 The chart's `ci/` directory holds example values for every topology: `single-node`, `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
 `full`, `icu`, `migration` and `stopped`.
