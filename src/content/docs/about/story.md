@@ -4,8 +4,7 @@ description: How Lumastra grew from a small dashboard into a self-hosted media s
 ---
 
 Lumastra started as a dashboard, not as a media server. It could recommend movies before
-it could play them, and for a long time it ran on top of Jellyfin. Here is how it got
-from there to where it is now.
+it could play them, and for a long time it ran on top of Jellyfin.
 
 ## 2023: a dashboard
 
@@ -25,9 +24,7 @@ In August 2025 I picked the project up again and rewrote it from scratch in Svel
 The AI part started small. I created embeddings for my library and used similarity
 search to find titles that are alike. Then I added swipe-to-rate for movies (left for
 no, right for yes), and those ratings went straight into the recommendations. The AI
-chat assistant followed in November 2025.
-
-So for a few months the project could tell you what to watch, but not play it.
+chat assistant followed in November 2025. It still couldn't play anything.
 
 ## Late 2025: a player, still powered by Jellyfin
 
@@ -37,13 +34,12 @@ the player and Watch Together on top.
 
 ## Early 2026: streaming on its own
 
-This happened step by step. First it ran its own FFmpeg for audio. In January 2026 it
+First it ran its own FFmpeg for audio. In January 2026 it
 got full transcoding with GPU acceleration. In February 2026 it could finally stream
 files directly from disk, without Jellyfin. A file scanner and a proper library model
 followed a few days later.
 
-From then on Jellyfin was only an optional sync source, which is the opposite of how the
-project started.
+From then on Jellyfin was only an optional sync source.
 
 ## Spring 2026: more kinds of media
 
@@ -54,7 +50,7 @@ With its own libraries in place, a lot got added quickly:
 - A Jellyfin-compatible API (`/j`), so Jellyfin and Streamyfin apps can connect directly
 - An OpenSubsonic API for Subsonic music apps
 
-That was the busiest time so far, with thousands of commits a month.
+Some months had thousands of commits.
 
 ## 2026: native Apple apps
 
@@ -64,8 +60,8 @@ several audio and subtitle languages properly. Watch Together works in it.
 
 It has since grown into native apps for iPhone, iPad and Apple TV, with offline downloads
 on iPhone and iPad and Top Shelf on Apple TV. The apps sign in with the standard OAuth
-device flow, so they also work when your server sits behind single sign-on. They go into
-public TestFlight together with the open-source release.
+device flow, so they also work when your server sits behind single sign-on. They're in
+public TestFlight now.
 
 ## 2026: a name and a license
 
@@ -74,9 +70,9 @@ it became Lumastra. At the same time I chose the AGPL-3.0 license and an open-co
 a free open-source core plus two source-available supporter modules, the `/j` API and the
 AI chat assistant, which are free during early access.
 
-## October 2026: v0.1
+## November 2026: v0.1
 
-In October 2026 the code goes public at
+On November 3, 2026 the code went public at
 [github.com/Sapd/lumastra](https://github.com/Sapd/lumastra) as v0.1. I use it for my
 own library every day, but it hasn't seen most hardware and setups yet. Expect bugs, and please [report them](https://github.com/Sapd/lumastra/issues).
 
@@ -109,8 +105,8 @@ reviewed. The edge-case reviews eat the most tokens, and I also run them through
 model (OpenAI's Codex), so one model isn't just grading its own work. A big feature can
 burn through the weekly limit on Claude's largest plan twice.
 
-None of this replaces being a developer. The AI proposes. Someone still has to catch a bad
-design and push back with something better. Small features, and a lot of frontend work,
+You still have to be a developer for this. Someone has to catch a bad design and push
+back with something better. Small features, and a lot of frontend work,
 could in theory be vibe-coded. The parts holding the whole thing together need someone who
 actually understands them. And every change, however small, gets tested end to end before
 it ships, same as before I used AI at all. What changed is that writing those extra tests
@@ -119,17 +115,17 @@ anything. If it says a feature works, the architecture is sound or a review is c
 I check it myself.
 
 Bugs still get through, like in any project. Testing is what catches most of them. There
-are more than 2,500 test files in the repo, from unit tests to browser tests, and AI
+are more than 4,000 test files in the repo, from unit tests to browser tests, and AI
 helped write a lot of them. Automated tests only catch so much, so my friends and I also
-test a lot by hand. It's tedious, and it's where the real problems turn up.
+test a lot by hand. That's tedious, but it finds the bugs the tests miss.
 
 Security got extra rounds. Before the public release the code went through several
 security reviews, and I checked every finding against the code myself instead of taking it
 on faith. Then I tested on a pre-production server what those reviews could only read from
 the source: race conditions, what happens when someone gets removed from the identity
 provider, what a reverse proxy actually forwards. Everything the reviews found got fixed,
-though a couple of the fixes needed a fix of their own, which is exactly why I measured
-instead of just trusting the review.
+though a couple of the fixes needed a fix of their own. I only found those because I
+tested on the server.
 
 Contributions made with AI are welcome under the same rule: you're the author, so you need
 to understand and have actually run what you submit. See
