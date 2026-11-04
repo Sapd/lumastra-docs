@@ -266,9 +266,13 @@ The setup preference **Allow apps and third-party clients (Public API)** is on b
 default. It enables native app sign-in, push notifications, and `/api/v1`. You can
 change it later at **Settings → Access**.
 
-The next step, **Your account is ready. Now the basics**, is optional and only shows
-problems, such as a background worker that does not answer. Change anything on it later
-in the admin settings.
+The next step, **Your account is ready. Now the basics**, collects the main settings in
+one form: the TMDB and MDBList keys, an embeddings provider for recommendations, the AI
+assistant, the Public API switch, Jellyfin, hardware, privacy and the two licence
+switches (contacting `lumastra.org` is on by default). It also points out problems, such
+as a background worker that does not answer. Everything on it is optional: select **Save
+& continue** to go on to your libraries, and change any of it later in the admin
+settings.
 
 ## 6. Add your libraries
 
