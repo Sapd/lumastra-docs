@@ -270,9 +270,9 @@ The next step, **Your account is ready. Now the basics**, collects the main sett
 one form: the TMDB and MDBList keys, an embeddings provider for recommendations, the AI
 assistant, the Public API switch, Jellyfin, hardware, privacy and the two licence
 switches (contacting `lumastra.org` is on by default). It also points out problems, such
-as a background worker that does not answer. Everything on it is optional: select **Save
-& continue** to go on to your libraries, and change any of it later in the admin
-settings.
+as a background worker that does not answer. Everything on it is optional: **Save &
+continue** saves the form and goes on to your libraries, **Skip for now** goes on to your
+libraries without saving anything. You can change all of it later in the admin settings.
 
 ## 6. Add your libraries
 
