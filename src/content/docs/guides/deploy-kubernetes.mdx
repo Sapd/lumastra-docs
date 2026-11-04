@@ -160,8 +160,7 @@ CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
 ```
 
 pgvector is not a trusted extension, so the role cannot create it itself. That is why a
-superuser creates the extensions here. Use an app image from 2026-10-01 or later: older
-images also needed the extensions handed over to the app role.
+superuser creates the extensions here.
 
 Create the namespace and the Secret. The chart never generates a password. Every secret
 is a reference to a Secret you create, so Argo CD and other tools can render the chart
@@ -930,9 +929,7 @@ The chart sets `STREAM_PROXY_URL` on the app pods for you.
   re-checks for the binary every 5 seconds, so it starts working once a web or worker
   pod has downloaded FFmpeg. The chart refuses to render the proxy with
   `ffmpeg.autoDownload` and no `ffmpegCache`, unless you set
-  `proxy.ffmpegCacheReadOnly: false` so the proxy downloads its own. For images built
-  before 2026-10-01, which check only at boot, set `proxy.waitForFfmpegSeconds` (for
-  example `600`) to make an init container wait for the binary.
+  `proxy.ffmpegCacheReadOnly: false` so the proxy downloads its own.
 - **Recreate strategy.** A rolling surge would double your upstream IPTV connections.
 - **Draining.** On shutdown the proxy waits up to `proxy.drainSeconds` (240 by default)
   for `activeChannels` to reach 0. See [Known limitations](#known-limitations-on-kubernetes).
