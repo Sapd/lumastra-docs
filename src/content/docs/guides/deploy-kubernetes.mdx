@@ -73,8 +73,27 @@ that resolves to several pods, so a plain Deployment cannot be hashed. Only Read
 have a DNS record, and a slot without one is skipped. Several router replicas agree on
 the target, because the hash depends only on the configured server lines.
 
+**Client address.** Playback grants and token IP allowlists are pinned to the client
+address, but web's TCP peer is a router pod. So the router adds `X-Lumastra-Router-Hop`,
+a value derived from your `LUMASTRA_MASTER_KEY`, and the app believes the forwarded client
+address only on requests that carry it (it then removes the header). There is nothing to
+configure: the quick start Secret already has the key, and a router init container derives
+the value, so the key never reaches nginx. The hop gives no forward-auth identity trust.
+Restart the router pods after rotating the key. Use a random 64-hex key
+(`openssl rand -hex 32`), not a passphrase.
+
+The hop proves a request came through the router, not that the router's
+`X-Forwarded-For` is honest. By default the router accepts `X-Forwarded-For` from all
+private ranges, so any pod that can reach the router can choose its client address (per-IP
+login limits, IP-pinned grants, a stolen token's IP allowlist). Set
+`networkPolicy.enabled: true` with `networkPolicy.ingressFrom` set to your ingress
+controller's pods, or narrow `router.realIp.fromCIDRs` to them. The chart warns until you
+do.
+
 What sits in front of the router (your Ingress or gateway) needs no session affinity. It
-does need:
+must set or append the real client address in `X-Forwarded-For`, never pass a
+client-supplied one through untouched. With `externalTrafficPolicy: Cluster` the client
+address is lost to SNAT. It also needs:
 
 - no response buffering (HLS and server-sent events)
 - long timeouts, at least 1 hour
@@ -1452,6 +1471,14 @@ contains and how to restore. On Kubernetes:
   Velero.
 
 ### Troubleshooting
+
+**HLS segments or `/api/playback/…` answer `403 ip_mismatch`.** The grant's pinned address
+differs from the request's. Check the router pods have a `hop-secret` init container and
+`kubectl -n lumastra get cm lumastra-env -o yaml | grep ROUTER_REALIP` shows a value. If
+not, `LUMASTRA_MASTER_KEY` is missing from the Secret, `router.hop.enabled` is false, or the
+chart predates the router hop: as a stopgap, run one router replica. After a key rotation,
+restart the router pods. Don't set `TRUSTED_PROXY_IPS` to the pod network as a workaround:
+that trusts every pod for forward-auth too.
 
 **Playback stalls or answers `503`, and the router log shows one session on several
 pods.** A pod that does not own a session answers `503` with `Retry-After: 2` while the
