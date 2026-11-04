@@ -26,17 +26,17 @@ Keep at least one healthy instance serving while another is replaced.
 Per-session HLS/transcode state is tied to the instance a playback session started on.
 The proxy in front of the web tier **must**:
 
-- Pin each playback session to one instance, by session cookie (client-level) or by
-  hashing the playback-session id. Plain round-robin splits a single stream's segment
+- Pin each playback session to one instance by hashing the playback grant or the
+  playback-session id that every media URL carries, with the client IP as fallback. Plain round-robin splits a single stream's segment
   requests across instances and breaks it, even without a deploy.
 - Retry the next instance on a connection error or timeout, so when one instance is
   briefly down during its replacement, requests routed to it land on a healthy peer
   instead of returning `502`.
 
-On Kubernetes, the Helm chart's router does this for you: it hashes the playback session id,
-then the client IP, over one upstream line per web pod.
+On Kubernetes, the Helm chart's router does this for you: it hashes the playback grant, then
+the playback session id, then the client IP, over one upstream line per web pod.
 See [Deploy on Kubernetes → Why there is a router](/guides/deploy-kubernetes/#why-there-is-a-router).
-With your own load balancer, use cookie affinity or a source-IP hash at the layer that
+With your own load balancer, hash on those URL arguments or the source IP at the layer that
 fans out across the web instances, not at the Kubernetes Service behind an Ingress.
 
 ### 3. Replace instances one at a time, gated on health, never all at once
@@ -93,8 +93,9 @@ Its in-flight jobs pause and resume, but version skew can break schema or task
 contracts. On Docker, recreate it immediately after the web swap. PostgreSQL and
 Valkey updates are separate operations. Only one worker may hold the singleton lease, so
 start the replacement only after the old one has exited. A hard-killed worker delays its
-replacement by up to 30 s. The worker's readiness (`/api/health/ready`) is `503` while another
-worker holds the lease or an upgrade is prepared.
+replacement by up to 30 s. The worker's readiness (`/api/health/ready`) is `503` while it is
+starting or stopping, while another worker holds the lease, during a prepared upgrade, when
+PostgreSQL or the task Valkey is unreachable, or when the library watcher has failed.
 
 ## On Kubernetes: mostly native
 
@@ -133,7 +134,7 @@ spec:
 A Deployment rollout waits for readiness before removing an old pod. See
 [Deploy on Kubernetes](/guides/deploy-kubernetes/) for the chart's configuration.
 
-## On a single host (Docker): run two, roll by hand or by script
+## On a single host (Docker): run two, roll by hand
 
 The [Docker guide](/guides/deploy-docker/) runs **one** web container, which means a
 brief outage on update. To get zero-downtime on a single host, run **two** web containers
@@ -141,15 +142,24 @@ on different ports, front them with your reverse proxy, and replace them one at 
 
 1. **Two web services**, e.g. bound to `127.0.0.1:8080` and `127.0.0.1:8081`, sharing the
    same config **and transcode-cache** directories (same host paths), each with a distinct
-   `INSTANCE_ID`. Give each a container healthcheck hitting `/api/health/ready`.
+   `INSTANCE_ID` (it labels metrics and the cluster view). Don't give both the same
+   `hostname:`: transcode ownership follows the container hostname, and Docker's default
+   (the container ID) is already unique. The shipped `docker-compose.example.yml` checks
+   only `/api/health`; for these two services use
+   `curl -fsS http://127.0.0.1:3000/api/health/ready` as the healthcheck, like the worker
+   service already does.
 2. **A reverse proxy over both**, sticky + failover. An nginx sketch:
 
    ```nginx
-   # Key on PlaySessionId: every media URL carries it, and it stays constant
-   # throughout the session. Fall back to the sticky cookie.
-   map $arg_PlaySessionId $lumastra_route {
-       ""      $cookie_lumastra_sticky;
+   # Every media URL carries the playback grant and PlaySessionId; both stay constant
+   # for the session. Key on the grant, then the session id, then the client address.
+   map $arg_PlaySessionId $lumastra_session {
+       ""      $remote_addr;
        default $arg_PlaySessionId;
+   }
+   map $arg_grant $lumastra_route {
+       ""      $lumastra_session;
+       default $arg_grant;
    }
    upstream lumastra {
        hash $lumastra_route consistent;
@@ -164,8 +174,9 @@ on different ports, front them with your reverse proxy, and replace them one at 
    ```
 
    Caddy (`lb_policy` + `lb_try_duration`) and Traefik (sticky service + `HealthCheck`)
-   provide equivalent routing. Key stickiness on `PlaySessionId`.
+   provide equivalent routing. Key stickiness on `grant` and `PlaySessionId`, not on a cookie.
 
 3. Pull the image, then run `docker compose up -d --no-deps --wait <service>` for each
    web service in turn. Its healthcheck must use `/api/health/ready`. Update the worker
-   immediately afterwards.
+   immediately afterwards. There is no ready-made script for this; a short shell loop
+   over the two services does it.

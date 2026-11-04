@@ -59,8 +59,7 @@ session must reach one pod.
 
 The router is nginx (1.27.3 or newer) and hashes each request on a key:
 
-1. the `stream_token` query argument, if present (current Lumastra media URLs no longer
-   carry one)
+1. the `grant` query argument (the playback grant), if present
 2. otherwise `PlaySessionId`, except `preview-*` ids
 3. otherwise the client IP
 
@@ -266,7 +265,8 @@ With no OIDC and no forward-auth in the values, the chart turns built-in login o
 A stock k3s install has one storage class, `local-path`, which only offers
 `ReadWriteOnce`. The chart's default `ReadWriteMany` volumes then stay `Pending`. On a
 single node, keep every pod on that node and ask for `ReadWriteOnce` instead. Add this to
-`my-values.yaml` (the chart ships the same as `ci/single-node-values.yaml`):
+`my-values.yaml` and replace the quick start's `libraries` block with the one below
+(modelled on the chart's `ci/single-node-values.yaml`, plus the app cache):
 
 ```yaml
 router:
@@ -291,13 +291,13 @@ persistence:
 libraries:
   - name: media
     mountPath: /data/media
-    hostPath: /srv/media # a folder on the node
+    hostPath: /srv/media # a folder that already exists on the node
 ```
 
 The router only matters with more than one web pod, so it is off here. k3s ships Traefik
 as its Ingress controller: set `ingress.className: traefik` instead of `nginx`. The chart
-adds its body-size and timeout annotations only for ingress-nginx, so large admin uploads
-may need a Traefik middleware.
+adds body-size and timeout annotations only for ingress-nginx; with Traefik, check its
+timeouts if large admin uploads fail.
 
 The chart's `ci/` directory holds example values for every topology: `single-node`, `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
 `full`, `icu`, `migration` and `stopped`.
@@ -680,8 +680,10 @@ from **Library → Sources & scanning**. To push exact changes from bucket event
 
 Two modes give pods access to the GPU. In both, `gpu.acceleration` sets
 `GPU_ACCELERATION` (`none`, `qsv`, `vaapi`, `nvenc` or `amf`), and `gpu.components`
-decides which pods get the GPU. The default is `[web, worker]`. Add `proxy`
-if the Live TV proxy should use it.
+decides which pods get the GPU device. The default is `[web, worker]`. Add `proxy`
+if the Live TV proxy should use it. `GPU_ACCELERATION` and `gpu.env` reach web and worker
+whichever components you list; for a component you leave out, set
+`GPU_ACCELERATION: none` in its own `env`.
 
 **Device plugin** (`gpu.mode: resource`). The chart adds your `gpu.resources` to the
 requests and limits of every component in `gpu.components`, and adds `gpu.renderGroupId`
@@ -921,7 +923,7 @@ The chart sets `STREAM_PROXY_URL` on the app pods for you.
   restarts whenever that changes.
 - **Update it when a release says so.** Each release's notes start with
   "Live TV proxy: update needed (reason)" or "Live TV proxy: no update needed".
-  Admin → System health → Cluster also warns when the running proxy has changed since its
+  Admin → System → Health → Cluster also warns when the running proxy has changed since its
   image ("Update the Live TV proxy image to …"), and the attention board raises an alert
   when the proxy and the app no longer work together.
 - **The proxy mounts the shared FFmpeg cache read-only** (`persistence.ffmpegCache`) and
@@ -1049,8 +1051,9 @@ Everything else goes through a few generic values:
   `app.publicUrls` sets `PUBLIC_*` links shown in the UI, and `app.env` sets any other
   non-secret variable for web and worker. Later groups win, and `app.env`
   wins over everything structured above it.
-- Each component takes `env` (a map), `extraEnv` (a list of `name`/`value` or
-  `valueFrom` entries), `extraEnvFrom`, `extraVolumes` and `extraVolumeMounts`.
+- `web`, `worker` and `proxy` take `env` (a map), `extraEnv` (a list of `name`/`value`
+  or `valueFrom` entries), `extraEnvFrom`, `extraVolumes` and `extraVolumeMounts`.
+  `sonic` takes `env` and `extraEnv`.
 
   ```yaml
   web:
@@ -1063,7 +1066,9 @@ Everything else goes through a few generic values:
 - `app.timezone`, `app.logLevel`, `app.lowRamMode`, `app.protocolHeader` and
   `branding.existingConfigMap` (custom branding files) are also available.
 - `global.nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `podLabels` and
-  `imagePullSecrets` apply to every pod. Each component takes the same keys.
+  `imagePullSecrets` apply to the chart's own pods. The CloudNativePG pods use
+  `database.cnpg.*` instead. Each component takes its own `nodeSelector`, `tolerations`
+  and `affinity`; a component's `affinity` replaces the global one instead of merging.
 
 Secrets are not watched. Pods roll when the rendered environment or the router
 configuration changes. They do not roll when the content of a Secret you reference
@@ -1119,7 +1124,8 @@ render needs no cluster access, so Argo CD can render it offline.
 
 1. The web StatefulSet updates one pod at a time, highest ordinal first. It waits
    `web.minReadySeconds` (10) between pods, with no surge. Capacity is N-1 during the
-   roll. `pdb.minAvailable: 1` also serialises node drains.
+   roll. `web.pdb.minAvailable: 1` (rendered when `web.replicas` is above 1) also serialises
+   node drains.
 2. A web pod that is being replaced first keeps serving for `web.preStopSleepSeconds`
    (15) while the router and the endpoints drop it. Then it drains: its readiness turns
    `503`, it stops accepting connections and ends open event streams (browsers
@@ -1141,7 +1147,7 @@ render needs no cluster access, so Argo CD can render it offline.
    cut.
 6. The Live TV proxy uses Recreate and waits for its channels to end. Leave it alone
    during app updates, so Live TV carries on. Change `proxy.image` only when the release
-   notes say "Live TV proxy: update needed" or Admin → System health → Cluster asks for it,
+   notes say "Live TV proxy: update needed" or Admin → System → Health → Cluster asks for it,
    and do it when nobody is watching Live TV.
 
 Migrations run at startup under a lock, and the first pod to start applies them. The old
@@ -1209,7 +1215,8 @@ window. Back up first: see [Backup & recovery](/guides/backup-recovery/).
 **1. Install with everything stopped.** Keep web and worker at 0 until the database is
 restored. If either runs against an empty database, it migrates that database at
 startup, and your restore then collides with that schema. Start from
-`ci/migration-values.yaml` in the chart. In split mode:
+`ci/migration-values.yaml` in the chart, and also keep the tasks Valkey at 0 until its
+snapshot is copied (step 5), or it starts with an empty AOF and skips the import:
 
 ```yaml
 web:
@@ -1219,6 +1226,7 @@ worker:
 
 valkey:
   tasks:
+    replicas: 0
     rdbImport:
       enabled: true
 ```
@@ -1341,7 +1349,7 @@ Health** for the cluster view. Keep the old install stopped but intact for a whi
 | Endpoint                  | Where             | Meaning                                                              |
 | ------------------------- | ----------------- | -------------------------------------------------------------------- |
 | `/api/health`             | web, worker       | Liveness. Always `200`, no dependency checks. Used for startup and liveness probes. |
-| `/api/health/ready`       | web, worker | Readiness. `200` or `503` with a JSON body listing the reasons. A web pod is not ready without PostgreSQL or task Valkey, and from the moment it receives SIGTERM. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, or without PostgreSQL or task Valkey. |
+| `/api/health/ready`       | web, worker | Readiness, `200` or `503`. Web returns only `{status}`, plus per-component `checks` for admins and `metrics:read` tokens; the worker lists its `reasons`. A web pod is not ready without PostgreSQL or task Valkey, and from the moment it receives SIGTERM. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, without PostgreSQL or task Valkey, or when the library watcher has failed. |
 | `/__router/healthz`       | router            | The router's own probes.                                             |
 | `/status`                 | proxy             | Reports `healthy` and `activeChannels`.                              |
 | `/health`                 | sonic             | Probes.                                                              |
@@ -1483,9 +1491,10 @@ the request's Host: add that host to its application, or route the caller throug
 public hostname. A `5xx` or a missing value means the identity provider is down or slow.
 The router treats both as "not signed in".
 
-**Pods stay `Pending`, or a claim stays unbound.** Split mode asks for `ReadWriteMany`
+**Pods stay `Pending`, or a claim stays unbound.** The chart asks for `ReadWriteMany`
 volumes by default. Check `kubectl -n lumastra get pvc` and your storage class. See
-[What you need](#what-you-need).
+[What you need](#what-you-need), or [Single node (k3s)](#single-node-k3s) for a cluster
+without `ReadWriteMany` storage.
 
 **The first start takes minutes.** The first boot runs migrations and downloads FFmpeg.
 The startup probe allows about 15 minutes. Check the pod log.
