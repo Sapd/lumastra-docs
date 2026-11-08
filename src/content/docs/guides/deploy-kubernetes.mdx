@@ -215,6 +215,9 @@ Write a values file, `my-values.yaml`:
 ```yaml
 mode: split
 
+image:
+  tag: 0.1.3 # the release you cloned. Pin it: with the default moving tag, helm upgrade changes nothing.
+
 app:
   origin: https://lumastra.example.com
 
@@ -313,7 +316,7 @@ persistence:
 libraries:
   - name: media
     mountPath: /data/media
-    hostPath: /srv/media # a folder that already exists on the node
+    hostPath: /srv/media # a folder that already exists on the node, readable by uid 1000
 ```
 
 The router only matters with more than one web pod, so it is off here. k3s ships Traefik
