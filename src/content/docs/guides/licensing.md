@@ -31,7 +31,7 @@ The free core includes:
 
 - **Single sign-on** (OIDC and reverse-proxy forward auth), including sign-in on the TV
   through the native apps. SSO will never be a paid feature.
-- Library organization, browsing, search and playback (gapless audio, subtitles, HLS
+- Library organization, browsing, search and playback (subtitles, HLS
   streaming, trickplay)
 - **Software and hardware transcoding**, and the engine that decides how each file is
   played

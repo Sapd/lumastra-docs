@@ -81,7 +81,7 @@ viewer. While simple mode is on and locked, the viewer's own account needs the P
   is the favorites, so it would otherwise change by accident),
 - set an Apple TV to **Always Off**.
 
-After 5 wrong PINs in 15 minutes, the PIN screen asks to wait.
+After 5 wrong PINs in 15 minutes, the PIN screen asks to wait. There is also a limit of 20 wrong PINs in 24 hours.
 
 **Forgot the PIN?** The admin opens **Admin > Users**, the person, **Live TV** and turns
 **Lock with a PIN** off. The admin never needs the PIN. Switching the lock off removes the

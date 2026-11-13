@@ -17,10 +17,6 @@ only if their limit is **greater than or equal to** that minimum age.
 
 Seasons and episodes always use their **series' rating**.
 
-Users with an age limit or a library-group limit don't see posters for **discovery
-titles** (suggestions that are not in your library). Lumastra can't check the rating
-of a title it doesn't have, so it doesn't show its artwork to them.
-
 | Certification                          | Minimum age |
 | --------------------------------------- | ----------- |
 | G · TV-Y · TV-G · U (BBFC)             | 0           |
@@ -96,7 +92,8 @@ says whether users with age limits can see unrated titles under the current sett
 Put a user in a group named `age-<N>` and they're limited to age `N`. For example, a
 member of **`age-12`** sees only titles rated 12 and under. The prefix is
 `AGE_RATING_GROUP_PREFIX` (default `age-`). If a user is in several such groups, the
-**highest** wins (most permissive).
+**highest** wins (most permissive). Groups you create inside Lumastra that are named
+`age-<N>` are ignored for age limits, so they can't raise a limit.
 
 This is the cleanest option when you already manage users in
 [Authentik or similar](/guides/authentication/): no per-user setup in Lumastra.
@@ -124,8 +121,17 @@ A restricted user gets the **normal interface** (there's no separate mode), but:
 - An over-limit title returns **"not found"** even via a direct link or a playback
   request (a deliberate 404, so the restriction doesn't reveal that the title
   exists).
-- **AI recommendations and the chat assistant are hidden entirely** for restricted
-  users, along with "similar titles" sections.
+- The **AI chat assistant** and **mood recommendations** are not available to restricted
+  users, and the AI similar-title rows on the home feed stay empty.
+- In Jellyfin apps, the "similar items" list is filtered by the same age limit.
+- Jellyfin apps that show a parental-rating picker get the US rating table (MPAA and TV
+  guidelines) plus **Unrated** and **21**. Lumastra still enforces plain ages from 0 to 21.
+
+## Live TV
+
+Live TV content is not filtered by age rating. A new user with an age limit is denied
+Live TV by default. Users who already exist keep access until an admin turns Live TV
+off for them with **Allow Live TV** under **Admin → Users**. See [Live TV](/guides/live-tv/#who-can-watch).
 
 ## Other group-based permissions
 

@@ -83,8 +83,7 @@ to 8 Mbps, 720p, 540p and 360p up to 1 Mbps), and the player switches between th
 match each viewer's connection. Click the quality badge in the player to see the qualities
 and which one is playing.
 
-It needs a GPU for hardware encoding and is tested with an Intel Arc A380; see
-[GPU transcoding](/guides/gpu-transcoding/).
+It needs a GPU for hardware encoding. See [GPU transcoding](/guides/gpu-transcoding/).
 
 The synchronized quality ladder is off by default: enable
 `LIVETV_ADAPTIVE_LADDER_ENABLED=true` in **Settings → Live TV** to offer multiple
@@ -370,6 +369,10 @@ Live TV is restricted to the identity-provider groups in `LIVETV_GROUPS` (defaul
 For a home setup, choose which household accounts can watch the configured sources.
 Assign access only to viewers covered by your source’s viewing and sharing permissions;
 Lumastra groups are application access controls, not broadcaster or provider authorization.
+
+Live TV content is not filtered by age rating. A new user with an age limit is denied
+Live TV by default. Users who already exist keep access until an admin turns Live TV
+off for them with **Allow Live TV** under **Admin → Users**.
 
 ### Live TV in Active Streams
 

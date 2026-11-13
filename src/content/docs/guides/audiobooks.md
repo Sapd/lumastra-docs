@@ -84,8 +84,9 @@ the past month.
 ## The player
 
 Seeking uses the current chapter's scrubber; the whole-book progress rail is not
-draggable. A seek offers **Undo** for about ten seconds, during which the previous
-position remains the one reported upstream.
+draggable. A seek of more than five minutes, or back to before the start of the current
+chapter, offers **Undo**. After a seek, the previous position remains the one reported
+upstream until about ten seconds of playback have passed.
 
 Books split into numbered files without meaningful chapter names show **parts**
 labelled by start time. Named chapters retain their titles.

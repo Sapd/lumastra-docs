@@ -35,7 +35,7 @@ area. The [introduction](/start/introduction/) gives the short version; the
   [AkariSub](https://github.com/altqx/akarisub) (libass for the web) and
   [libbitsub](https://github.com/altqx/libbitsub); Apple apps receive server-rendered
   pictures with timing data. Burn-in remains available for clients that need it.
-- Trickplay thumbnails for seeking, chapters, and gapless audio.
+- Trickplay thumbnails for seeking and chapters.
 
 ## Music
 
@@ -51,7 +51,8 @@ needed.
   **search by sound** ("calm solo piano") or by the meaning of lyrics.
 - **Careful tag reading**, so albums, discs and compilations come out in the right order.
 - **OpenSubsonic compatibility**, so your favourite music apps keep working. No separate
-  Subsonic server or smart-playlist scripts needed.
+  Subsonic server needed. Playlists are lists you build and save; Lumastra has no
+  rule-based smart playlists. A saved mix is a fixed list of tracks.
 
 See [Music discovery](/guides/music-discovery/) and
 [Organizing music](/guides/organizing-music/).
@@ -78,7 +79,7 @@ Built and tested for reliable viewing.
 - **Backup feeds:** automatic failover tries alternate feeds. If none work, the player
   shows a failure with a choice to try another channel.
 - **Adaptive quality:** optional GPU encoding from 1080p down to 360p lets the player
-  switch quality to match each viewer's connection. Tested with an Intel Arc A380.
+  switch quality to match each viewer's connection.
 - **Simple mode:** large controls, a personal numbered channel list, now/next information
   and an optional helper PIN for viewers who want a familiar TV screen.
 - **End-to-end testing:** a synthetic provider exercises real imports, decoded playback,

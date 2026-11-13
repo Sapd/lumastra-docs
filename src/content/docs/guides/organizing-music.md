@@ -38,8 +38,19 @@ conventions.
 
 ## Tags win over the path
 
-The scanner always prefers embedded tags over folder-name heuristics. The
-**artist derivation** chain runs in this exact order:
+The scanner prefers embedded tags over folder names. It decides the **album artist**
+from all the files of an album, in this order:
+
+1. The album's `ALBUMARTIST` tag, when more than half of the files carry the same value.
+2. The MusicBrainz release artist, from embedded release artist IDs or stored release data.
+3. The compilation flag, when more than half of the files set it. The album goes under
+   *Various Artists*.
+4. The most common first performer in the track `ARTIST` tags. If there are three or more
+   different performers and none covers half of the tracks, the album goes under
+   *Various Artists*.
+5. The fallback chain below, for files with no usable tag evidence.
+
+The fallback chain runs in this exact order:
 
 | Priority | Source | Notes |
 | -------- | ------ | ----- |
@@ -348,8 +359,10 @@ by subdirectories.
 :::note[What the scanner ignores]
 - **ReplayGain / volume tags are ignored**: Lumastra derives loudness from its own
   audio analysis ([Essentia](#audio-analysis-essentia)), not from file tags.
-- **Embedded MusicBrainz IDs in audio tags aren't read during the scan**: MusicBrainz
-  data comes from `.nfo` sidecars or the online lookup ([enrichment](#enrichment--analysis)).
+- **Embedded MusicBrainz IDs are read during the scan** (recording, release, release
+  group and artist IDs). Lumastra uses the release artist ID to decide the album artist;
+  other MusicBrainz data comes from `.nfo` sidecars or the online lookup
+  ([enrichment](#enrichment--analysis)).
 - **Playlist files (`.m3u` / `.m3u8`) aren't imported**: they're skipped by the scan.
 
 Re-scans are incremental: a track is only re-read when its size, modification time,
@@ -437,7 +450,7 @@ previous one left:
 | **TheAudioDB** | Artist images, banner/fanart, bio (no key required)   | built-in          |
 | **Discogs**    | Artist photos and profile text                        | `DISCOGS_TOKEN`   |
 | **Deezer**     | Artist photos, particularly for niche electronic/dance acts other sources miss (no key required) | built-in |
-| **Last.fm**    | Listener/play counts, top tracks, tags, similar artists, bio | `LASTFM_API_KEY` |
+| **Last.fm**    | Listener and play counts and top tracks. Tags, similar artists and a bio are kept with the popularity data | `LASTFM_API_KEY` |
 
 ---
 

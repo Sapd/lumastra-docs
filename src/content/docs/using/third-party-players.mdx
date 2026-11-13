@@ -33,8 +33,9 @@ by code: approve the client's code in **Connect a Jellyfin app** under
 **Settings → Connections**, or through a Quick Connect footer link if your admin added one.
 
 Library browsing, search, playback, progress sync, ratings, favorites, and configured
-Live TV are supported. Watch Together and server administration are unavailable
-through Jellyfin-compatible apps.
+Live TV channels, the programme guide and live playback are supported. Recordings and
+timers are not: Jellyfin apps show them empty. Watch Together and server administration
+are unavailable through Jellyfin-compatible apps.
 
 A Jellyfin app's remote control can control the Lumastra devices on your own account.
 The Lumastra remote can in turn control Jellyfin clients that announce remote control,
@@ -82,12 +83,14 @@ client offers it; password mode also accepts the generated token. Apps supportin
 OpenSubsonic `apiKey` extension can use that token as their API key.
 
 Browsing, search, streaming, transcoding, playlists, bookmarks, queues, scrobbling,
-favorites, and ratings are supported. Internet radio, podcasts, jukebox, and sharing
-aren't implemented.
+favorites, and ratings are supported. Internet radio stations are listed but can't be
+added or changed from a Subsonic app. Podcasts, jukebox, and sharing aren't implemented.
 
-Lumastra's Sound Search, Music Map, Song Paths, Mixing Desk, personalised discovery rows,
-and smart queue stay in its own apps. Scrobbled plays from Subsonic apps still feed your
-listening history and recommendations.
+Apps that support the OpenSubsonic sonic-similarity extension can ask for similar songs
+and for a path between two songs. Lumastra answers these from its sound embeddings. If
+embeddings are not set up, the lists come back empty. Sound Search, Music Map, Mixing
+Desk, personalised discovery rows, and smart queue stay in Lumastra's own apps. Scrobbled
+plays from Subsonic apps still feed your listening history and recommendations.
 
 ## TV apps and device-authorization login
 

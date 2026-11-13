@@ -81,8 +81,8 @@ A new party is **private**: only people who have the code or link can join. Choo
 it if you want it to appear in the **Watch Parties** widget for others on the server.
 Join through the widget (listed parties) or the shared link.
 
-- Anyone can pause or resume for everyone.
-- Only the host can seek, skip segments, change speed, or move to another title.
+- Anyone can pause, resume or change the playback speed for everyone.
+- Only the host can seek, skip segments, or move to another title.
 - The next episode waits at the start until someone presses Play.
 - Leaving as a guest affects only you. Ending as host stops the party for everyone;
   a party also ends after the host has been gone for about 10 minutes.

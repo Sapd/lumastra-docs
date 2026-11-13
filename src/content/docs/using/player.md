@@ -49,7 +49,7 @@ automatic intro/credits skipping. Enable **Ask if you're still watching** under
 interaction and is off by default.
 
 In a [Watch Together party](/using/for-viewers/#watch-together), only the host can seek,
-skip segments, change speed, or advance the party. Anyone can pause or resume.
+skip segments, or advance the party. Anyone can pause, resume or change speed.
 
 ## Test your connection
 
