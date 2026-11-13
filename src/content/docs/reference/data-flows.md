@@ -17,9 +17,9 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | Push token request: every ~6 hours while push is on and the default relay is used; it waits until you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created). Update check: once a day, at a random time <!-- VERIFY with agpl-update-check --> | Push token request: the install ID and the Lumastra version ([details](#lumastraorgapipushrelay-token-the-push-relay-token)). Update check: the version only ([details](#update-check)) <!-- VERIFY with agpl-update-check --> | **Contact lumastra.org** (Admin → Settings → General → Push relay, also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`. With it off, the update check goes to GitHub directly (next row) <!-- VERIFY with agpl-update-check --> |
+| `lumastra.org` | Push token request: every ~6 hours while push is on and the default relay is used; it waits until you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created). Update check: once a day, at a random time | Push token request: the install ID and the Lumastra version ([details](#lumastraorgapipushrelay-token-the-push-relay-token)). Update check: the version only ([details](#update-check)) | **Contact lumastra.org** (Admin → Settings → General → Push relay, also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`. With it off, the update check goes to GitHub directly (next row) |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
-| `api.github.com` | Only when **Contact lumastra.org** is off: about once a day, at a random time <!-- VERIFY with agpl-update-check --> | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | `UPDATE_CHECK_ENABLED=false` (also under Admin → Settings → General → Diagnostics) |
+| `api.github.com` | When **Contact lumastra.org** is off, or when `lumastra.org` does not answer the update check: about once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | `UPDATE_CHECK_ENABLED=false` (also under Admin → Settings → General → Diagnostics) |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
 | `raw.githubusercontent.com` | Every 48 hours, once the library has a movie or show with a TMDB id | Nothing; a download of a public anime id list ([Fribb anime list](#fribb-anime-list)) | `DISABLE_FRIBB_ANIME_SYNC=true` |
 | `huggingface.co` and its CDN | First start of the optional sonic sidecar | Nothing; a download of the model weights ([sonic sidecar](#sonic-sidecar-model-weights)) | `SONIC_MODEL_FP` pointing at a local copy |
@@ -32,7 +32,11 @@ notifications in the iOS app.
 
 The project maintainer (Denis Arnst, Austria/EU, `git@sapd.eu`) operates `lumastra.org`
 and the push relay. These are the only places an install sends anything to the project.
-There are no licence keys and no usage reporting.
+There are no licence keys and no usage reporting. (Old 0.1.x installs still call
+the retired licence endpoints, `/api/license/issue` and `/refresh`, until they are switched
+off after 0.2.0: they send the install ID, version and a status code, and the worker records
+the version, country and a keyed hash of the install ID for three months. Updating to 0.2.0
+ends those calls.)
 
 ### `push.lumastra.org`: the iOS push relay
 
@@ -179,23 +183,22 @@ weights file to skip it; see
 
 ### Update check
 
-About once a day, at a time that differs per install, the server looks up the newest
-Lumastra release. <!-- VERIFY with agpl-update-check -->
+About once a day, at a time that differs per install (24 hours, give or take two, plus a
+few random minutes), the server looks up the newest Lumastra release.
 
-<!-- VERIFY with agpl-update-check -->
 - **Contact lumastra.org on (the default):** `GET https://lumastra.org/api/update-check?v=<version>`.
-  The request carries the Lumastra version and nothing else: no install ID and no
-  token. The project counts answered requests per day and version (with the country
-  Cloudflare derives from the connection), to see which versions are in use. No IP
-  address, no ID. Nothing links two requests. Cloudflare's short-lived request logs
-  can contain the IP address, as for any request. If the call fails, the server falls
-  back to GitHub.
+  The request carries the Lumastra version and nothing else: no install ID, no token, no
+  cookie, no body. The project counts answered requests per day and version (with the
+  country Cloudflare derives from the connection), to see which versions are in use: one
+  anonymous data point per request in Cloudflare Workers Analytics Engine, which keeps it
+  for three months. No IP address, no ID. Nothing links two requests. Cloudflare's
+  short-lived request logs can contain the IP address, as for any request. If the call
+  fails, the server falls back to GitHub in the same run.
 - **Contact lumastra.org off:** the server reads the public release list from
   `https://api.github.com/repos/Sapd/lumastra/releases`. It sends no token and no
   version; the User-Agent is a plain `Lumastra-update-check` (GitHub requires one).
   GitHub sees your server's IP address.
 
-<!-- /VERIFY -->
 Admins then see a newer version in the bell, on the admin home and on Admin → System →
 Instance; a release marked as a security fix shows in red until the install runs it
 (`:edge` and other development builds get the quiet notice only). If you have checked
@@ -280,7 +283,7 @@ disabled, and prevent the default contacts:
 - `SONIC_MODEL_FP` if you run the sonic sidecar;
 - `FEATURE_PUSH_NOTIFICATIONS=false`, unless you use your own Apple key.
 
-If you leave contact on but block `lumastra.org` instead, the install keeps trying: push through the standard relay stays off and the update check finds nothing.
+If you leave contact on but block `lumastra.org` instead, the install keeps trying: push through the standard relay stays off, and the update check falls back to GitHub when `lumastra.org` does not answer.
 
 ## Where this is shown in the app
 
