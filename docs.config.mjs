@@ -17,7 +17,6 @@ export const sidebar = [
 	{
 		label: 'Start Here',
 		items: [
-			{ label: 'Introduction', slug: 'start/introduction' },
 			{ label: 'Quick Start', slug: 'start/quick-start' },
 			{ label: 'Features', slug: 'start/features' },
 		],
@@ -36,9 +35,7 @@ export const sidebar = [
 			{
 				label: 'Accounts & access',
 				items: [
-					{ label: 'Overview', slug: 'guides/authentication' },
-					{ slug: 'guides/sso-authentik' },
-					{ slug: 'guides/sso-oidc' },
+					{ label: 'Authentication', slug: 'guides/authentication' },
 					{ slug: 'guides/parental-controls' },
 					{ slug: 'guides/sharing-privacy' },
 				],
@@ -60,11 +57,11 @@ export const sidebar = [
 			{
 				label: 'Deployment & operations',
 				items: [
-					{ slug: 'guides/deployment' },
 					{ slug: 'guides/deploy-docker' },
 					{ slug: 'guides/reverse-proxy' },
 					{ slug: 'guides/deploy-kubernetes' },
-						{ slug: 'guides/zero-downtime-updates' },
+					{ slug: 'guides/deploy-kubernetes-advanced' },
+					{ slug: 'guides/zero-downtime-updates' },
 					{ slug: 'guides/gpu-transcoding' },
 					{ slug: 'guides/performance-tuning' },
 					{ slug: 'guides/windows-media-shares' },
@@ -160,6 +157,18 @@ export const starlightDocs = {
 	// Pagefind site search is on by default.
 	customCss: ['./src/styles/theme.css'],
 	sidebar,
+};
+
+/**
+ * Pages that were merged into others. Both sites must serve these paths, so lumastra.org
+ * spreads this map into its own `redirects` (see astro.config.mjs in this repository).
+ * Keep a path here for as long as outside links (blog posts, search results) may use it.
+ */
+export const redirects = {
+	'/start/introduction/': '/start/quick-start/',
+	'/guides/deployment/': '/start/quick-start/',
+	'/guides/sso-oidc/': '/guides/authentication/#if-you-use-another-oidc-provider',
+	'/guides/sso-authentik/': '/guides/authentication/#set-up-authentik',
 };
 
 /** Options for starlight-links-validator, shared by both sites. */

@@ -5,12 +5,12 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
-import { starlightDocs, linksValidatorOptions } from './docs.config.mjs';
+import { starlightDocs, linksValidatorOptions, redirects } from './docs.config.mjs';
 
 export default defineConfig({
 	site: 'https://lumastra.org',
 	// The landing page is not part of this repository; open the docs instead.
-	redirects: { '/': '/start/introduction/' },
+	redirects: { '/': '/start/quick-start/', ...redirects },
 	integrations: [
 		starlight({
 			...starlightDocs,

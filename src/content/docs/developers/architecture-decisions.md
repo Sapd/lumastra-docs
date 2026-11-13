@@ -183,7 +183,7 @@ file scan) can only ever occupy its own task's slots.
 overhead. Each queue needs its own dedicated Valkey connections for blocking pop
 and event notifications, which can't be shared no matter how the client connections
 are pooled. This is the main reason the worker's memory floor is higher than a
-single-queue design would need; see [Memory](/start/quick-start/#memory) and
+single-queue design would need; see [Performance tuning](/guides/performance-tuning/#small-or-constrained-hosts) and
 `LUMASTRA_LOW_RAM_MODE` in [Performance tuning](/guides/performance-tuning/#small-or-constrained-hosts).
 
 ### Invalidation events come from database triggers, not app hooks

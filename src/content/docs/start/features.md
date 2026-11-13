@@ -5,8 +5,7 @@ description: Everything Lumastra does, area by area, with links to the guide for
 
 Lumastra is a self-hosted server for movies, series and music, with audiobooks through
 Audiobookshelf and Live TV from your own sources. This page lists what it does, area by
-area. The [introduction](/start/introduction/) gives the short version; the
-[quick start](/start/quick-start/) gets an instance running.
+area. The [quick start](/start/quick-start/) gets an instance running.
 
 ## Movies and series
 
@@ -167,8 +166,8 @@ See [Authentication](/guides/authentication/).
 - A tracked background pipeline, an admin task system and health monitoring, and web and
   worker replicas. See the [architecture overview](/architecture/overview/) and the
   [task system](/architecture/task-system/).
-- **Deployment:** Docker Compose, or Kubernetes with a Helm chart (beta). See
-  [Deployment](/guides/deployment/).
+- **Deployment:** Docker Compose, or Kubernetes with a Helm chart. See the
+  [quick start](/start/quick-start/) and [Deploy on Kubernetes](/guides/deploy-kubernetes/).
 
 ## Next
 

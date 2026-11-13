@@ -2,7 +2,7 @@
 
 This repository holds the documentation for [Lumastra](https://github.com/Sapd/lumastra),
 a self-hostable media server. The pages are published at
-[lumastra.org](https://lumastra.org/start/introduction/).
+[lumastra.org](https://lumastra.org/start/quick-start/).
 
 Every page on the site has an "Edit page" link that opens the file here. Fixes,
 clarifications and new pages are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
