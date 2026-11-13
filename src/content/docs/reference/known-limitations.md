@@ -140,10 +140,8 @@ get `503` with `Retry-After`, not a sign-out: the apps retry and stay signed in.
 deliberate, so that a signed-out device can't keep working just because the cache
 couldn't be checked.
 
-**Kubernetes support is in beta.** Lumastra ships a Helm chart, and lumastra.org's own
-instance runs on it. It is the only production install so far. Docker Compose stays the
-main supported way to run Lumastra, and Kubernetes support is best-effort until 1.0. The
-manifests in [`deploy/k8s/`](https://github.com/sapd/lumastra/tree/main/deploy/k8s) are
+**Kubernetes and Docker Compose are both supported.** Lumastra ships a Helm chart, and
+lumastra.org's own instance runs on it. The manifests in [`deploy/k8s/`](https://github.com/sapd/lumastra/tree/main/deploy/k8s) are
 minimal examples. See [Deploy on Kubernetes](/guides/deploy-kubernetes/).
 
 ## Set `TRUSTED_PROXY_IPS` if you run behind a reverse proxy

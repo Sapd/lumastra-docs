@@ -1,225 +1,86 @@
 ---
 title: Deploy on Kubernetes
-description: Run Lumastra on Kubernetes with the Helm chart (beta). Web pods behind an affinity router, one worker, Valkey, PostgreSQL, storage, GPU, upgrades with Argo CD, and moving over from Docker Compose.
+description: Install Lumastra on Kubernetes with the Helm chart. One node, a managed PostgreSQL, an Ingress and your media folder, in about ten steps.
 ---
 
-import DeployDiagram from '../../../components/diagrams/DeployDiagram.astro';
-
-The Helm chart runs multiple web pods behind a playback-affinity router, one worker,
-and optional Live TV/sonic components. It requires Kubernetes 1.29+, Helm, PostgreSQL,
-and an Ingress controller or Gateway API gateway.
-
-:::caution[Beta chart]
-The chart is beta and has one production install (k3s, Argo CD, CloudNativePG). Values
-and defaults may change; review chart changes before upgrading. Kubernetes support
-is best-effort until 1.0. [Docker Compose](/guides/deploy-docker/) is the primary
-supported option for a single host.
-:::
-
-Install from the public repository checkout; no chart repository or OCI package is
-available yet. This guide assumes familiarity with pods, Services, Secrets, PVCs,
-Helm values, and your cluster's storage and ingress configuration.
-
-## How it fits together
-
-<DeployDiagram />
-
-One image, `ghcr.io/lumastra/lumastra`, runs every app role. The start script picks the
-role. The sonic sidecar has its own image, `ghcr.io/lumastra/lumastra-sonic-embedder`
-(amd64 only).
-
-| Component                   | What it does                                                             | Default                                       |
-| --------------------------- | ------------------------------------------------------------------------ | --------------------------------------------- |
-| `web`                       | UI, API and HLS (`WORKER_MODE=disabled`). A StatefulSet: `web-0` to `web-N` | 2 replicas, one-at-a-time updates, PDB       |
-| `worker`                    | Lean TypeScript tasks/plugins and supervised Rust watcher child                                         | 1, Recreate                            |
-| `router`                    | nginx. Keeps HLS sessions on one web pod. Optional forward-auth          | on, 2 replicas                                |
-| `proxy`                     | Live TV stream proxy                                                     | off                                           |
-| `sonic`                     | Sonic embedder sidecar (music similarity)                                | off                                           |
-| `valkey-cache`, `valkey-tasks` | Separate cache and persistent task/shared-coordination Valkeys                  | on                                            |
-| CloudNativePG `Cluster`     | PostgreSQL, with `database.mode: cnpg` (recommended)                     | off (you bring a database)                    |
-
-`mode: split` runs web pods and exactly one dedicated lean TypeScript worker
-separately. The watcher is a child in the worker container. Combined mode is
-unsupported; use the same topology for small and large installations.
-
-Resource names start with the release name. This guide uses the release name
-`lumastra`, which gives names like `lumastra-web-0`, `lumastra-worker` and the entry
-Service `lumastra`. With a release name that does not contain `lumastra`, the prefix is
-`<release>-lumastra`.
-
-### Why there is a router
-
-An HLS session's FFmpeg job runs on the web pod that started it. The app records that
-pod in `active_transcode_jobs.pod_name`. If another pod receives a request for that
-session, it answers `503` with `Retry-After: 2` while the owner is still serving it.
-After the owner has been idle for 15 seconds, the new pod takes the session over. It
-serves segments already on the shared transcode volume or restarts FFmpeg. Playback
-survives, but every misrouted request costs retries and latency, so requests for one
-session must reach one pod.
-
-The router is nginx (1.27.3 or newer) and hashes each request on a key:
-
-1. the `grant` query argument (the playback grant), if present
-2. otherwise `PlaySessionId`, except `preview-*` ids
-3. otherwise the client IP
-
-The app adds `grant` and `PlaySessionId` to every playlist, segment and init URL it
-emits, so a whole session hashes to the same pod by its `PlaySessionId`.
-
-The router has one upstream `server` line per web pod, using the pod's own DNS name
-(`lumastra-web-0.lumastra-web-headless…`), re-resolved every `router.dnsValid`. That is
-why web is a StatefulSet. Open-source nginx round-robins the addresses of a single name
-that resolves to several pods, so a plain Deployment cannot be hashed. Only Ready pods
-have a DNS record, and a slot without one is skipped. Several router replicas agree on
-the target, because the hash depends only on the configured server lines.
-
-**Client address.** Playback grants and token IP allowlists are pinned to the client
-address, but web's TCP peer is a router pod. So the router adds `X-Lumastra-Router-Hop`,
-a value derived from your `LUMASTRA_MASTER_KEY`, and the app believes the forwarded client
-address only on requests that carry it (it then removes the header). There is nothing to
-configure: the quick start Secret already has the key, and a router init container derives
-the value, so the key never reaches nginx. The hop gives no forward-auth identity trust.
-Restart the router pods after rotating the key. Use a random 64-hex key
-(`openssl rand -hex 32`), not a passphrase.
-
-The hop proves a request came through the router, not that the router's
-`X-Forwarded-For` is honest. By default the router accepts `X-Forwarded-For` from all
-private ranges, so any pod that can reach the router can choose its client address (per-IP
-login limits, IP-pinned grants, a stolen token's IP allowlist). Set
-`networkPolicy.enabled: true` with `networkPolicy.ingressFrom` set to your ingress
-controller's pods, or narrow `router.realIp.fromCIDRs` to them. The chart warns until you
-do.
-
-What sits in front of the router (your Ingress or gateway) needs no session affinity. It
-must set or append the real client address in `X-Forwarded-For`, never pass a
-client-supplied one through untouched. With `externalTrafficPolicy: Cluster` the client
-address is lost to SNAT. It also needs:
-
-- no response buffering (HLS and server-sent events)
-- long timeouts, at least 1 hour
-- a request body limit of at least `app.bodySizeLimit` (50 MB by default, for artwork
-  uploads). Client diagnostics bundles need at least 3 MiB.
-- WebSocket upgrade for `/j/socket`
+The Helm chart runs Lumastra as web pods, one worker, two Valkeys and a PostgreSQL
+database. This page installs the smallest useful setup: one node, a database that
+CloudNativePG manages for you, and an Ingress. For several web pods, shared storage,
+GPUs and other options, see [Advanced Kubernetes](/guides/deploy-kubernetes-advanced/).
+Docker Compose is the other fully supported way to run Lumastra: see the
+[Quick Start](/start/quick-start/).
 
 ## What you need
 
-**Kubernetes 1.29 or newer.**
+- Kubernetes 1.29 or newer, with `kubectl` and `helm` working. `kubectl get nodes` should
+  list your node as `Ready`.
+- An Ingress controller. k3s ships Traefik.
+- A folder with your media on the node.
+- A DNS name that points at the node. Without one, see the end of this page.
 
-**Storage.** The chart creates these volumes. Every one takes `storageClassName`,
-`accessModes`, `size` and `existingClaim`.
+No cluster yet? A single machine is enough. See "If you have no cluster" below.
 
-| Value                                     | Mounted on                     | Access mode  | `ReadWriteOnce` works when                          | What it holds                                                                                          |
-| ----------------------------------------- | ------------------------------ | --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `persistence.config` (`/config`)          | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | `settings.json`, artwork, trickplay, caches. Both roles need it.                               |
-| `persistence.transcode` (`/transcode`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | HLS output. One shared volume, so a pod that takes a session over serves the segments already written. `type: emptyDir` needs no volume: each pod then has its own, and FFmpeg restarts on takeover. |
-| `persistence.plugins` (`/app/plugins`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | Installed external plugins. With `enabled: false` each pod gets an empty directory, and installed plugins are lost on restart. |
-| `persistence.appCache` (`/app/.cache`)    | web, worker                    | `ReadWriteMany` | every web and worker pod on one node | Rebuildable caches: artwork, extracted subtitles, library backdrops. `enabled: auto` leaves it off. Enable it when shared storage is available (see below). |
-| `persistence.ffmpegCache` (`/config/bin`) | web, worker, proxy (read-only) | `ReadWriteMany` | every pod that mounts it on one node                | Off by default. Needed when the Live TV proxy is on. Without it the FFmpeg download lives in `/config`. |
-| `valkey.tasks.persistence`                | the tasks Valkey               | `ReadWriteOnce`                   | always                                              | AOF data.                                                                                              |
-| `sonic.persistence`                       | the sonic sidecar              | `ReadWriteOnce`                   | always                                              | The downloaded model.                                                                                  |
-| `libraries[]`                             | web, worker (sonic for music)  | your volume                       | every pod that mounts it on one node                | Your media. `hostPath`, `existingClaim` or `nfs`. See below.                                           |
+## 1. Choose your settings
 
-With `accessModes: []` (the default) the chart asks for `ReadWriteMany`. The web
-pods and worker mount
-config, transcode and plugins at the same time, usually on different nodes. Without
-`ReadWriteMany` storage, pin every pod to one node and set
-`accessModes: [ReadWriteOnce]` on shared volumes (including `ffmpegCache` when enabled).
+Set these once. The next steps use them.
 
-**Keep the app cache.** Set `persistence.appCache.enabled: true` in split mode whenever you
-have `ReadWriteMany` storage or run every web and worker pod on one node. Without it each
-pod caches into its own empty directory, which every restart clears: after each deploy
-artwork is fetched from the providers again, and the first viewer of a title waits while
-its subtitles are extracted again.
+```bash
+export LUMASTRA_HOST=media.example.com   # the address people will type
+export MEDIA_DIR=/srv/media              # your media folder on the node
+export INGRESS_CLASS=traefik             # "nginx" for ingress-nginx; see: kubectl get ingressclass
+export NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+```
 
-The web pods need your media libraries too. Direct play and transcoding read the files
-there, so mount each library on web and worker. Libraries are read-only by default. If
-you set `app.metadataStorageLocation` to `alongside` or `alongside-prefer`, Lumastra
-writes artwork, lyrics and trickplay next to the media, and the chart mounts libraries
-read-write. See [Media enrichment](/guides/media-enrichment/) for what that setting
-does.
+With more than one node, set `NODE` to the node that has the media folder.
 
-Pods run as uid and gid 1000 with `fsGroup: 1000`. Many NFS setups ignore `fsGroup`, so
-make the volumes writable by uid 1000 on the server side.
-
-**PostgreSQL 17 or newer** with the `vector` (pgvector), `pg_trgm`, `pgcrypto` and
-`unaccent` extensions. We recommend letting the chart render a
-[CloudNativePG](https://cloudnative-pg.io/) cluster; you can also use your own server.
-The app's role does not need to be
-a superuser, but the extensions must exist before the first start. PostgreSQL 16 does
-not work.
-
-**A way in.** An Ingress controller or a Gateway API gateway with the settings above.
-
-## Quick start
-
-This installs a small setup: one web pod, the worker, the two Valkeys (tasks and cache),
-the router and an Ingress. Web and worker are always separate pods, and they share the
-config, transcode and plugins volumes. You need a PostgreSQL server you can reach, an
-Ingress controller, and either a `ReadWriteMany` storage class or a single node (see
-[Single node (k3s)](#single-node-k3s) below).
-
-Clone the repository at the release you want to run and change into it:
+## 2. Get the chart
 
 ```bash
 git clone --branch v0.1.4 https://github.com/Sapd/lumastra
 cd lumastra
 ```
 
-Create the database. Run this as a superuser, for example with `psql` against your
-server:
+You should now see `deploy/helm/lumastra`.
 
-```sql
-CREATE ROLE lumastra LOGIN PASSWORD 'change-me';
-CREATE DATABASE lumastra OWNER lumastra;
-\c lumastra
-CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+## 3. Install the database operator
+
+CloudNativePG creates a PostgreSQL 18 database with pgvector and the other extensions
+Lumastra needs. Install its operator once per cluster:
+
+```bash
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg cnpg/cloudnative-pg -n cnpg-system --create-namespace --wait
 ```
 
-pgvector is not a trusted extension, so the role cannot create it itself. That is why a
-superuser creates the extensions here.
+You should see `STATUS: deployed`.
 
-Create the namespace and the Secret. The chart never generates a password. Every secret
-is a reference to a Secret you create, so Argo CD and other tools can render the chart
-without cluster access.
+## 4. Create the secrets
 
 ```bash
 kubectl create namespace lumastra
 kubectl -n lumastra create secret generic lumastra \
   --from-literal=LUMASTRA_MASTER_KEY="$(openssl rand -hex 32)" \
-  --from-literal=CACHE_PASSWORD="$(openssl rand -hex 24)" \
-  --from-literal=DATABASE_URL='postgresql://lumastra:change-me@postgres.example.com:5432/lumastra'
+  --from-literal=CACHE_PASSWORD="$(openssl rand -hex 24)"
 ```
 
-| Key                   | Used for                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `LUMASTRA_MASTER_KEY` | Encrypts stored secrets. 64 hex characters.                                                     |
-| `CACHE_PASSWORD`      | The bundled Valkey password. It goes into `redis://` URLs, so use hex only (letters, digits, `-._~`). |
-| `DATABASE_URL`        | The connection string. URL-encode special characters in the password.                           |
-
-:::caution[Back up the master key now]
-Lose `LUMASTRA_MASTER_KEY` and the secrets stored in the database cannot be decrypted.
-Read it back and store it somewhere other than the cluster:
+Print the master key and store it outside the cluster. Without it, stored API keys cannot
+be decrypted.
 
 ```bash
-kubectl -n lumastra get secret lumastra -o jsonpath='{.data.LUMASTRA_MASTER_KEY}' | base64 -d
+kubectl -n lumastra get secret lumastra -o jsonpath='{.data.LUMASTRA_MASTER_KEY}' | base64 -d; echo
 ```
 
-See [Backup & recovery](/guides/backup-recovery/).
-:::
+## 5. Write the values file
 
-Write a values file, `my-values.yaml`:
-
-```yaml
+```bash
+cat > my-values.yaml <<EOF
 mode: split
 
 image:
-  tag: 0.1.4 # the release you cloned. Pin it: with the default moving tag, helm upgrade changes nothing.
+  tag: 0.1.4
 
 app:
-  origin: https://lumastra.example.com
+  origin: http://$LUMASTRA_HOST
 
 secrets:
   existingSecret: lumastra
@@ -227,79 +88,15 @@ secrets:
 web:
   replicas: 1
 
-worker:
-  replicas: 1
-
-libraries:
-  - name: media
-    mountPath: /data/media
-    existingClaim: lumastra-media # a PVC you created. Or use hostPath or nfs.
-
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: lumastra.example.com
-  tls:
-    - hosts: [lumastra.example.com]
-      secretName: lumastra-tls
-```
-
-`app.origin` must match the address your users type. Secure cookies and CSRF checks use
-it. Each `libraries` entry takes exactly one of `hostPath`, `existingClaim` or `nfs`:
-
-```yaml
-libraries:
-  - name: movies
-    mountPath: /data/movies
-    nfs:
-      server: 10.0.0.1
-      path: /export/movies
-```
-
-Install:
-
-```bash
-helm install lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
-kubectl -n lumastra get pods -w
-```
-
-The first start runs the database migrations and downloads FFmpeg. The startup probe
-allows about 15 minutes. Follow the logs with
-`kubectl -n lumastra logs -f statefulset/lumastra-web` and
-`kubectl -n lumastra logs -f deploy/lumastra-worker`. If pods stay `Pending`, check
-`kubectl -n lumastra get pvc`: a PVC stuck in `Pending` usually means your storage class
-has no `ReadWriteMany`. Use the single-node values below.
-`helm status lumastra -n lumastra` repeats the chart's notes, including warnings about
-missing values.
-
-The `tls` block expects a certificate Secret `lumastra-tls` that you create, or that
-cert-manager creates for you. Without it the Ingress controller serves its own default
-certificate. Remove the `tls` block to test over plain HTTP first.
-
-Then open `https://lumastra.example.com/setup`. Pick the sign-in method, create the
-first admin, and add your library paths in the admin area. Use the `mountPath` values
-from `libraries`. With `className: nginx` the chart adds the ingress-nginx body size,
-buffering and timeout annotations for you.
-
-With no OIDC and no forward-auth in the values, the chart turns built-in login on
-(`AUTH_NATIVE_LOGIN_ENABLED=true`), the same as the Compose quick start.
-
-### Single node (k3s)
-
-A stock k3s install has one storage class, `local-path`, which only offers
-`ReadWriteOnce`. The chart's default `ReadWriteMany` volumes then stay `Pending`. On a
-single node, keep every pod on that node and ask for `ReadWriteOnce` instead. Add this to
-`my-values.yaml` and replace the quick start's `libraries` block with the one below
-(modelled on the chart's `ci/single-node-values.yaml`, plus the app cache):
-
-```yaml
 router:
   enabled: false
 
 global:
   nodeSelector:
-    kubernetes.io/hostname: my-node # kubectl get nodes
+    kubernetes.io/hostname: $NODE
+
+database:
+  mode: cnpg
 
 persistence:
   config:
@@ -316,1247 +113,126 @@ persistence:
 libraries:
   - name: media
     mountPath: /data/media
-    hostPath: /srv/media # a folder that already exists on the node, readable by uid 1000
-```
+    hostPath: $MEDIA_DIR
 
-The router only matters with more than one web pod, so it is off here. k3s ships Traefik
-as its Ingress controller: set `ingress.className: traefik` instead of `nginx`. The chart
-adds body-size and timeout annotations only for ingress-nginx; with Traefik, check its
-timeouts if large admin uploads fail.
-
-Other things a fresh k3s needs:
-
-- **kubectl and helm as a normal user.** k3s writes its kubeconfig to
-  `/etc/rancher/k3s/k3s.yaml`, readable by root only. Copy it:
-  `mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $USER ~/.kube/config`.
-- **PostgreSQL.** The quick start assumes a server you already run. Inside the cluster,
-  use CloudNativePG (`database.mode: cnpg`, see [Database](#database)); it needs the
-  CloudNativePG operator installed first.
-- **No DNS yet.** `app.origin` must match the address in the browser. To test before DNS
-  exists, add the host name to your computer's hosts file, pointing at the node's IP.
-
-The chart's `ci/` directory holds example values for every topology: `single-node`, `scaled`, `cnpg`, `external`, `gateway`, `ingress`, `proxy`, `sonic`, `cpu-only`,
-`full`, `icu`, `migration` and `stopped`.
-
-## Configuration
-
-Every value is documented in the chart's
-[`values.yaml`](https://github.com/Sapd/lumastra/blob/main/deploy/helm/lumastra/values.yaml)
-and `README.md`. This section covers the choices you have to make.
-
-### Mode and replicas
-
-Scale the web replicas while keeping exactly one worker:
-
-```yaml
-mode: split
-
-app:
-  origin: https://lumastra.example.com
-
-secrets:
-  existingSecret: lumastra
-
-web:
-  replicas: 2
-
-router:
-  realIp:
-    fromCIDRs: [10.42.0.0/16] # the address range of your ingress controller or gateway
-
-persistence:
-  config: { storageClassName: nfs-rwx }
-  transcode: { storageClassName: nfs-rwx }
-  plugins: { storageClassName: nfs-rwx }
-```
-
-Split mode needs [shared storage](#what-you-need) and a Secret containing the same
-`LUMASTRA_MASTER_KEY` for all pods. Otherwise pods can generate different keys.
-The chart sets `INSTANCE_ID` to the pod name.
-
-| Value                                               | Allowed          | Effect of `0`                              |
-| --------------------------------------------------- | ---------------- | ------------------------------------------ |
-| `web.replicas`                                      | 0 or more        | Stops web. The router answers `502`.       |
-| `worker.replicas`                                   | 0 or 1           | Stops background tasks.                    |
-| `router.replicas`                                   | 0 or more        | No traffic reaches the web pods.           |
-| `proxy.replicas`, `sonic.replicas`                  | 0 or 1           | Stops it. `proxy` drops every live channel. |
-| `valkey.cache.replicas`, `valkey.tasks.replicas`    | 0 or 1           | Stops that Valkey.                         |
-
-Replica count `0` preserves Services, volumes, and the database. Singleton components
-reject counts above 1. `ci/stopped-values.yaml` stops all workloads; set
-`database.cnpg.hibernate: true` to pause the database too.
-
-### Authentication
-
-Unset auth values preserve settings saved in `/config/settings.json`; explicitly set
-values override and lock their admin UI settings. See
-[Environment variables and settings.json](#environment-variables-and-settingsjson).
-
-| Value                                | Env                                                    | Notes                                                                                           |
-| ------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `auth.native.enabled`                | `AUTH_NATIVE_LOGIN_ENABLED`                            | Unset renders `true` when neither forward-auth nor OIDC is enabled. Otherwise it stays unset.   |
-| `auth.deviceAuth`                    | `FEATURE_DEVICE_AUTH`                                  | Apple and third-party apps, device flow, `/api/v1` tokens. App default `true`.                  |
-| `auth.userPats`                      | `FEATURE_USER_PATS`                                    | Users create personal access tokens. App default `false`.                                       |
-| `auth.adminGroups`                   | `ADMIN_GROUPS`                                         | Comma-separated groups that are admins. App default `admin`.                                    |
-| `auth.watchPermissionGroups`         | `WATCH_PERMISSION_GROUPS`                              |                                                                                                 |
-| `auth.forwardAuth.enabled`           | `FORWARD_AUTH_ENABLED`                                 | `true` when set (chart 0.1.0-beta.4+). The app ignores identity headers without it.             |
-| `auth.forwardAuth.*`                 | `USERHEADER`, `GROUPHEADER`, `NAMEHEADER`, `TRUSTED_PROXY_IPS` | Rendered with `auth.forwardAuth.enabled`.                                               |
-| `auth.oidc.*`                        | `AUTH_OIDC_*`                                          | Rendered with `auth.oidc.enabled`. The client secret goes in `secrets.env`.                     |
-
-`true` and `false` render that value. `null` leaves the setting to the app. See
-[Authentication](/guides/authentication/) for what each sign-in method does.
-
-The app refuses to start when built-in login is off and neither OIDC nor forward auth
-is configured. The chart checks the same rule when it renders, so
-`auth.native.enabled: false` without `auth.oidc` or `auth.forwardAuth` fails with a "no
-sign-in method" error. Settings in `app.env` and `secrets.env` count too. The chart
-cannot see `settings.json`. If OIDC is configured only there, set
-`auth.oidc.configuredInAdminUi: true`.
-
-**Built-in login.** Nothing to set.
-
-**OIDC** is the simplest way to use an identity provider. Register the callback URL
-`https://lumastra.example.com/auth/oidc/callback` with it, as described in
-[OIDC single sign-on](/guides/sso-oidc/). Add the client secret to your Secret as
-`OIDC_CLIENT_SECRET`, then:
-
-```yaml
-secrets:
-  existingSecret: lumastra
-  env:
-    LUMASTRA_MASTER_KEY: LUMASTRA_MASTER_KEY
-    AUTH_OIDC_CLIENT_SECRET: OIDC_CLIENT_SECRET
-
-auth:
-  native:
-    enabled: false
-  oidc:
-    enabled: true
-    issuer: https://idp.example.com/application/o/lumastra/
-    clientId: lumastra
-```
-
-**Forward auth** lets an identity proxy sign users in and pass identity headers.
-`auth.forwardAuth.enabled: true` turns it on in the app (`FORWARD_AUTH_ENABLED`). The app
-trusts those headers only from the addresses in `auth.forwardAuth.trustedProxyIps`. With
-the router, those are the router pods, which in practice means your whole pod network.
-Any pod that can reach `web:3000` could then claim any user. So the chart requires
-`networkPolicy.enabled: true`: web then accepts traffic only from the router and from
-`networkPolicy.metricsFrom`. The chart refuses to render forward auth without it, unless
-you set `auth.forwardAuth.allowWithoutNetworkPolicy: true` because a mesh or CNI policy
-already restricts who can reach `web:3000`.
-
-Exclude the node's CNI gateway address (usually `.1` of the node's pod CIDR) from
-`trustedProxyIps`. Kubelet probes and every `hostNetwork` process on the node arrive
-from it. The app warns when the list covers a gateway.
-
-You then have two ways to authenticate requests. The first is the router's own
-`auth_request` gate, which is what this example uses:
-
-```yaml
-auth:
-  native:
-    enabled: false
-  forwardAuth:
-    enabled: true
-    userHeader: X-authentik-username
-    groupHeader: X-authentik-groups
-    nameHeader: X-authentik-name
-    trustedProxyIps: 10.42.0.0/16 # the pod network, minus the node gateway addresses
-
-router:
-  realIp:
-    fromCIDRs: [10.42.0.0/16]
-  forwardAuth:
-    enabled: true
-    url: https://auth.example.com/outpost.goauthentik.io/auth/nginx
-    signinUrl: /outpost.goauthentik.io/start?rd=$lumastra_proto://$http_host$request_uri
-    responseHeaders:
-      [X-authentik-username, X-authentik-groups, X-authentik-name]
-    stripRequestHeaders:
-      [X-authentik-username, X-authentik-groups, X-authentik-name]
-    outpost:
-      enabled: true
-      origin: https://auth.example.com
-
-networkPolicy:
-  enabled: true
-  ingressFrom:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: traefik
-      podSelector:
-        matchLabels:
-          app.kubernetes.io/name: traefik
-```
-
-The header names above are Authentik's. Use your provider's. See
-[Authentik single sign-on](/guides/sso-authentik/) for the provider side. How the router
-treats paths:
-
-- `bypassPaths` (`/j/`, `/subsonic/`, `/oauth/`, `/api/plugin-webhooks/`, `/api/health`,
-  `/metrics`) skip the identity provider, because the app authenticates those itself.
-- `/api/v1/` tries the identity provider first. On a `401` it passes the request through
-  without an identity, so personal access tokens and device tokens work.
-  `extraPassthroughPaths` adds more prefixes with this behaviour, for example
-  `/api/playback/` for cookieless players that fetch media URLs carrying a `grant`.
-- `/oauth/links/` (the MyAnimeList account-linking callback) behaves like `/api/v1/` even
-  though `/oauth/` bypasses the identity provider, because linking needs the signed-in
-  user (`forwardAuth.oauthLinksPassthrough`, on by default). Don't add `/oauth/links/` to
-  `bypassPaths`.
-- If the auth endpoint answers with an error (a 3xx, 400, 404, 405, 408, 429 or 5xx) or
-  times out, the router treats it as a `401`. On `/api/v1/` and the passthrough paths the
-  request goes on without an identity, so tokens still work. Everything else gets the
-  sign-in fallback, never the app. During an identity provider outage, browsers are
-  therefore sent to a sign-in page that is also down. A `404` usually means the identity
-  provider doesn't know the request's Host, for example an in-cluster caller using
-  `<release>.<namespace>.svc.cluster.local`.
-- The app's user, group and name headers, plus everything in `stripRequestHeaders`, are
-  blanked on every request, so clients cannot forge them.
-- HTTPS auth and outpost endpoints are TLS-verified (`router.forwardAuth.sslVerify`,
-  `caFile`).
-- The auth request sends the endpoint's own host as `Host` and the app's host in
-  `X-Forwarded-Host` and `X-Original-URL`. Authentik picks the application from
-  `X-Forwarded-Host`. Change `hostHeader` and `outpost.hostHeader` only for an endpoint
-  that must see the app's host as `Host`.
-
-The second way is to authenticate at your own edge and set
-`router.forwardAuth.enabled: false`. The router then passes the edge's headers through.
-Only do this if nothing else can reach the router.
-
-**Trusted proxies and client IPs.** Lumastra believes `X-Forwarded-For` only from the
-addresses in `TRUSTED_PROXY_IPS`. See [Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-you-run-behind-a-reverse-proxy).
-The chart renders that variable only with forward auth. With built-in login or OIDC,
-set it yourself to the pod range the router runs in. `10.42.0.0/16` is the k3s default;
-use your cluster's pod CIDR. A range this wide is safe only because the chart's
-NetworkPolicy lets nothing but the router reach the app; the Security Self-Check reports
-it as information on Kubernetes:
-
-```yaml
-app:
-  env:
-    TRUSTED_PROXY_IPS: 10.42.0.0/16
-```
-
-Set `router.realIp.fromCIDRs` to the addresses of the edge in front of the router. The
-router then sees the real client IP. That IP feeds the hash fallback, and the router
-passes it to the app as a single-entry `X-Forwarded-For`.
-
-### Database
-
-Migrations run inside the web and worker pods at startup, under a PostgreSQL advisory
-lock. No Job or init container is involved. The first pod to boot migrates and the
-others wait.
-
-**CloudNativePG (recommended)** (`database.mode: cnpg`). This is the setup the chart is
-tested with in production. The CloudNativePG operator must be installed first; the chart
-does not install it, because it is a cluster-wide component. The chart's default stays
-`external`, so an install never creates a database you didn't ask for.
-The chart renders a `Cluster` with a non-superuser owner and creates the extensions in
-`postInitApplicationSQL`. The app reads `DATABASE_URL` from the operator's `<cluster>-app`
-Secret. The Valkey password and the master key still come from your own Secret. While the
-cluster bootstraps, the app pods restart a few times, for about a minute. That is
-expected.
-
-```yaml
-database:
-  mode: cnpg
-  cnpg:
-    instances: 2
-    storage:
-      size: 50Gi
-      storageClass: fast-block
-```
-
-The `Cluster` uses the same Postgres settings as the Docker Compose file:
-`shared_buffers: 512MB` and raised JIT thresholds. Add your own under
-`database.cnpg.parameters`; they are merged into these, so you can raise
-`shared_buffers` on a large node (together with the pod's memory).
-
-**Your own database** (`database.mode: external`, the chart default). `DATABASE_URL` comes
-from the Secret named in `database.external.existingSecret`, or from
-`secrets.existingSecret` when that is unset. The key defaults to `DATABASE_URL` and is set
-by `database.external.urlKey`. Create the extensions once as shown in the quick start. The
-chart can't tune a database it doesn't run: set at least `shared_buffers` above the 128MB
-default and raise `jit_above_cost` to `10000000` (with `jit_optimize_above_cost` and
-`jit_inline_above_cost` at `50000000`), as the Compose file does.
-
-**Locale and collation.** CloudNativePG initialises the database with locale `C` unless
-told otherwise. That is fine for a new install. If you move an existing database into a
-`C` cluster, `ORDER BY` on text changes (case and accents sort differently), and so does
-the default text search configuration. `database.cnpg.initdb` is applied at bootstrap
-only, so decide before the first sync. Check the source database:
-
-```sql
-SHOW server_encoding; SHOW lc_collate; SHOW lc_ctype; SHOW default_text_search_config;
-SELECT datlocprovider, datcollate, datctype, datlocale FROM pg_database WHERE datname = current_database();
--- datlocprovider: c = libc, i = ICU (daticulocale on PostgreSQL before 17), b = builtin
-```
-
-Then match it:
-
-```yaml
-database:
-  cnpg:
-    # libc source (the usual Docker postgres image: en_US.utf8)
-    initdb: { encoding: UTF8, localeCollate: en_US.utf8, localeCType: en_US.utf8 }
-    # ICU source instead: { localeProvider: icu, icuLocale: en-US, locale: en_US.utf8 }
-    parameters: { default_text_search_config: pg_catalog.english }
-```
-
-The allowed `initdb` keys are `encoding`, `locale`, `localeCollate`, `localeCType`,
-`localeProvider` (`libc`, `icu` or `builtin`), `icuLocale`, `icuRules`, `builtinLocale`,
-`dataChecksums` and `walSegmentSize`. The `*-standard-*` CloudNativePG images ship the
-glibc locales. The `minimal` images only have `C` and `C.UTF-8`. Run the same `SELECT`
-after bootstrap to confirm.
-
-**Backups with CloudNativePG.** The chart can render a Barman Cloud `ObjectStore` and a
-`ScheduledBackup`. This needs the Barman Cloud plugin installed in the cluster.
-
-```yaml
-database:
-  cnpg:
-    backup:
-      enabled: true
-      configuration:
-        destinationPath: s3://backups/lumastra
-        endpointURL: https://s3.example.com
-        s3Credentials:
-          accessKeyId: { name: lumastra-backup-s3, key: ACCESS_KEY_ID }
-          secretAccessKey: { name: lumastra-backup-s3, key: ACCESS_SECRET_KEY }
-        wal: { compression: gzip }
-      retentionPolicy: 30d
-      schedule: '0 0 3 * * *'
-```
-
-`database.cnpg.backup.instanceSidecarConfiguration` sets the Barman sidecar's resources.
-Other optional keys: `database.cnpg.hibernate` stops the instance pods and keeps the
-volume, `database.cnpg.walStorage` puts the WAL on its own volume, and
-`database.cnpg.sonicReader` creates the sonic role (see [Sonic embedder](#sonic-embedder)).
-
-### Valkey
-
-The chart runs Valkey for you in `valkey.mode: bundled`, as two instances:
-
-- **cache**: `allkeys-lru` under `valkey.cache.maxmemory` (768 MB by default), no
-  persistence. Watch Together keeps its live state here, so do not size it so small that
-  it evicts constantly.
-- **tasks**: `noeviction`, with no memory cap, and AOF on a volume. The task system keeps
-  run state, locks and BullMQ jobs here. An evicting policy could drop them and run a
-  job twice.
-
-Keep the two stores separate. `valkey.mode: external` requires `CACHE_URL` and
-`TASK_CACHE_URL` in the Secret, pointing to the evictable cache and persistent
-`noeviction` task/shared-coordination instances respectively. Single-store mode
-is unsupported.
-
-Coming from a chart release or values file with one Valkey: with `bundled` nothing else
-changes, but the new tasks instance starts empty. To keep queued jobs, import the old
-snapshot with `valkey.tasks.rdbImport` (see the chart README). With `external`, add
-`TASK_CACHE_URL` to the Secret, pointing at your existing Valkey, and point `CACHE_URL` at a
-second, disposable Valkey. If that Valkey has only ever saved RDB snapshots, switch AOF on
-in the running server first (`CONFIG SET appendonly yes`, wait for the rewrite to finish);
-restarting it with `--appendonly yes` would start it empty. The steps, in order, are in
-[Upgrading to the dedicated worker and two Valkeys](/guides/deploy-docker/#upgrading-to-the-dedicated-worker-and-two-valkeys).
-Pods refuse to start until both URLs are set.
-
-The bundled password comes from `valkey.auth.passwordKey` and is embedded into `redis://`
-URLs at pod start, where the chart cannot percent-encode it, so use only letters, digits and
-`-._~` (hex). To give the tasks Valkey its own password, add a second key to the Secret (for
-example `TASK_CACHE_PASSWORD`) and set `valkey.auth.taskPasswordKey` to it. The Live TV proxy
-also receives `TASK_CACHE_URL`, for its cluster heartbeat.
-
-### Storage and media libraries
-
-Each volume in the [table above](#what-you-need) accepts the same four keys. Bring your
-own claim with `existingClaim`, or let the chart create one:
-
-```yaml
-persistence:
-  dataAnnotations:
-    argocd.argoproj.io/sync-options: Prune=false,Delete=false
-  config:
-    storageClassName: nfs-rwx
-    size: 20Gi
-  transcode:
-    storageClassName: nfs-rwx
-    size: 100Gi
-```
-
-Every chart-created volume gets the annotations in `persistence.dataAnnotations`, and
-`helm.sh/resource-policy: keep` while `persistence.keepOnUninstall` is `true`. Helm
-honours that keep annotation and Argo CD ignores it, so use `dataAnnotations` for Argo's
-`Prune=false,Delete=false`.
-
-Register each library's mount path in the admin area. A library can set
-`readOnly: { web: true, worker: true }` per component, and `music: true` mounts it read-only on the sonic sidecar too. `hostPath`
-libraries only work if the pod lands on the node that has the path, so use `nfs` or
-`existingClaim` on a multi-node cluster.
-
-For libraries on NFS, see the mount options in [Performance
-tuning](/guides/performance-tuning/#nfs-mount-options-media-library). The Rust watcher
-watches network mounts and reconciles them every 15 minutes by default to find writes
-made by other hosts. Set `LUMASTRA_WATCH_NETWORK_RECONCILE_SECS` to change the interval.
-This is the same as on Docker.
-
-**Media on object storage.** You can mount an S3 bucket read-only with the
-[Mountpoint for Amazon S3 CSI driver](https://github.com/awslabs/mountpoint-s3-csi-driver)
-and point a library at the resulting claim with `existingClaim`. Mountpoint supports
-static provisioning only. The example
-[`deploy/k8s/media-s3-mountpoint.yaml`](https://github.com/sapd/lumastra/tree/main/deploy/k8s)
-has the PersistentVolume and claim. The mount options that matter are `uid 1000` and
-`gid 1000` (the image's user), `allow-other` (without it the container user gets
-`EACCES`), `read-only`, and `metadata-ttl indefinite`. The last one makes a full scan
-list-bound instead of one request per file. Object storage sends no file-system events,
-so Lumastra finds new files with the scheduled scan. After a bulk upload, start a scan
-from **Library → Sources & scanning**. To push exact changes from bucket events, use the
-[library ingest API](/developers/api-routes/#post-apiv1librariesingest).
-
-### GPU transcoding
-
-Two modes give pods access to the GPU. In both, `gpu.acceleration` sets
-`GPU_ACCELERATION` (`none`, `qsv`, `vaapi`, `nvenc` or `amf`), and `gpu.components`
-decides which pods get the GPU device. The default is `[web, worker]`. Add `proxy`
-if the Live TV proxy should use it. `GPU_ACCELERATION` and `gpu.env` reach web and worker
-whichever components you list; for a component you leave out, set
-`GPU_ACCELERATION: none` in its own `env`.
-
-**Device plugin** (`gpu.mode: resource`). The chart adds your `gpu.resources` to the
-requests and limits of every component in `gpu.components`, and adds `gpu.renderGroupId`
-to the pod's `supplementalGroups`. Each pod then needs its own GPU slot. Two web pods
-and a worker need three.
-
-Intel:
-
-```yaml
-gpu:
-  mode: resource
-  acceleration: qsv
-  resources:
-    gpu.intel.com/i915: 1
-  renderGroupId: 993 # GID of the host's render group
-  env:
-    QSV_DEVICE: /dev/dri/renderD128
-```
-
-Find the GID on the node with `stat -c '%g' /dev/dri/renderD128`.
-
-AMD uses VA-API. Use the resource name your AMD device plugin advertises:
-
-```yaml
-gpu:
-  mode: resource
-  acceleration: vaapi
-  resources:
-    amd.com/gpu: 1
-  renderGroupId: 109
-  env:
-    VAAPI_DEVICE: /dev/dri/renderD128
-```
-
-NVIDIA uses `acceleration: nvenc` with the resource your NVIDIA device plugin
-advertises, usually `nvidia.com/gpu: 1`. Tuning variables such as `NVENC_PRESET` go in
-`gpu.env`. Some clusters run NVIDIA pods under a separate runtime class. The NVIDIA GPU
-Operator, for example, creates one named `nvidia`. Set it per component for the pods
-that use the GPU:
-
-```yaml
-gpu:
-  mode: resource
-  acceleration: nvenc
-  resources:
-    nvidia.com/gpu: 1
-
-web:
-  runtimeClassName: nvidia
-worker:
-  runtimeClassName: nvidia
-```
-
-The value exists for `web`, `worker` and `proxy`, and is unset by default.
-Intel and AMD device plugins do not need it.
-
-**Host path** (`gpu.mode: hostPath`). Mounts `gpu.hostPath` (`/dev/dri` by default) and
-usually needs `gpu.privileged: true`. Use it when you have no device plugin.
-
-`gpu.env` also takes `TRICKPLAY_HWACCEL` and `TRICKPLAY_HWACCEL_DEVICE`. See the [GPU
-transcoding guide](/guides/gpu-transcoding/) for what each variable does and which
-hardware has been tested.
-
-### Resources and sizing
-
-`web.resources.limits.memory` covers the pod's FFmpeg child processes. The limit is per
-pod. The numbers below were measured on lumastra.org's instance and a k3s rehearsal
-(2026-10-01).
-
-| Load                                 | Memory                                                    |
-| ------------------------------------ | --------------------------------------------------------- |
-| Web process without transcodes       | Budget about 1.5 GiB (not measured on its own)            |
-| Each CPU transcode (libx264, 1080p)  | About 1 GiB. Three jobs OOM-killed a pod at 4 Gi.         |
-| GPU transcodes (QSV)                 | Small. A QSV production web pod peaked at 1.4 GiB in 30 days. |
-
-Plan a limit of about 1.5 GiB plus 1 GiB per concurrent CPU transcode per pod. 4K and
-HEVC sources need more. The app's cap `LUMASTRA_MAX_CONCURRENT_TRANSCODES` is per pod and
-defaults to 3 times the CPU cores (12 to 32). That is far above what a 4 Gi pod survives
-without a GPU, so set it to match the limit. When a pod is at its cap, a new stream only
-replaces one nobody has played for 2 minutes (`LUMASTRA_TRANSCODE_EVICTION_MIN_IDLE_SECONDS`);
-if everyone is still watching, the new stream gets a 503 with `Retry-After` instead. If a GPU install can fall back to the CPU
-(no free device plugin slot, GPU moved), size for the CPU case. The worker follows the
-same rule for its own FFmpeg jobs (thumbnails, trickplay, audio analysis).
-
-A CPU-only example. It caps each pod at 6 transcodes: 1.5 GiB plus 6 times 1 GiB is
-7.5 GiB, under the 8 Gi limit.
-
-```yaml
-gpu:
-  mode: none
-  acceleration: none
-
-concurrency:
-  LUMASTRA_MAX_CONCURRENT_TRANSCODES: 6
-
-web:
-  replicas: 2
-  resources:
-    requests: { cpu: '4', memory: 2Gi }
-    limits: { memory: 8Gi }
-
-worker:
-  resources:
-    requests: { cpu: '1', memory: 1Gi }
-    limits: { memory: 6Gi }
-```
-
-`concurrency` sets any concurrency or pool variable, for example
-`LUMASTRA_CONCURRENCY_CPU` or `LUMASTRA_DB_POOL_TASK_MAX`. See [Performance
-tuning](/guides/performance-tuning/).
-
-Defaults for the other components:
-
-| Component | Requests              | Limits       |
-| --------- | --------------------- | ------------ |
-| web       | 250m CPU, 768 Mi      | 4 Gi memory  |
-| worker    | 500m CPU, 1 Gi        | 6 Gi memory  |
-| router    | 50m CPU, 64 Mi        | 256 Mi memory |
-| proxy     | 250m CPU, 256 Mi      | 2 Gi memory  |
-| sonic     | 1 CPU, 2 Gi           | 6 Gi memory  |
-
-### Ingress and Gateway API
-
-The entry Service `lumastra` (port 80) fronts the router, or the pods directly when the
-router is off. Point your Ingress or HTTPRoute at it. Both objects can be rendered by
-the chart.
-
-**Ingress:**
-
-```yaml
 ingress:
   enabled: true
-  className: nginx
+  className: $INGRESS_CLASS
   hosts:
-    - host: lumastra.example.com
+    - host: $LUMASTRA_HOST
+EOF
+```
+
+This keeps every pod on one node, so the volumes need only `ReadWriteOnce` and no router
+is needed. Volume settings cannot change after the first install, so get them right now.
+The media folder must be readable by user ID 1000.
+
+## 6. Install
+
+```bash
+helm install lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
+kubectl -n lumastra get pods -w
+```
+
+Stop watching with Ctrl+C. After one to three minutes, the web pod `lumastra-web-0`, the
+worker, both Valkeys and the `lumastra-postgres` pod should all be `Running` and ready.
+The first start downloads FFmpeg and migrates the database, and the pods may restart a
+few times while the database starts. That is normal.
+
+## 7. Open the setup wizard
+
+Open `http://media.example.com/setup`, with your own host name. You should see **Check
+your install**. Create the admin with **Built-in login**, then add your library folders.
+The folder shown is `/data/media`. The steps are the same as in the
+[Quick Start](/start/quick-start/#5-create-your-admin).
+
+## 8. Switch to HTTPS
+
+The Apple apps need HTTPS. The Ingress reads the certificate from a Secret named
+`lumastra-tls`. With cert-manager, add its annotation under `ingress.annotations` and it
+creates the Secret. With your own certificate files, create it yourself:
+
+```bash
+kubectl -n lumastra create secret tls lumastra-tls --cert=fullchain.pem --key=privkey.pem
+```
+
+Then point the values at HTTPS and upgrade:
+
+```bash
+sed -i.bak 's|origin: http://|origin: https://|' my-values.yaml && rm my-values.yaml.bak
+cat >> my-values.yaml <<EOF
   tls:
-    - hosts: [lumastra.example.com]
+    - hosts: [$LUMASTRA_HOST]
       secretName: lumastra-tls
-```
-
-With `className: nginx`, `ingress.nginxDefaults` (on by default) adds the ingress-nginx
-body size, `proxy-buffering: "off"` and 3600-second read and send timeouts. Annotations
-you set yourself win. With another controller, set the equivalent annotations in
-`ingress.annotations`.
-
-**Gateway API:**
-
-```yaml
-httpRoute:
-  enabled: true
-  parentRefs:
-    - name: my-gateway
-      namespace: gateway-system
-      sectionName: websecure
-  hostnames:
-    - lumastra.example.com
-```
-
-If your gateway enforces a default request timeout that cuts long streams, set
-`httpRoute.timeouts` (the Gateway API `request` and `backendRequest` fields).
-
-With Traefik, three version and permission problems fail without an error. The
-manifest [`deploy/k8s/gateway-traefik.yaml`](https://github.com/sapd/lumastra/tree/main/deploy/k8s)
-shows a working setup.
-
-1. **Match the Gateway API CRDs to your Traefik version.** Traefik 3.7 expects Gateway
-   API v1.5.x. With older CRDs its informers never sync and every Gateway stays at
-   "Waiting for controller".
-2. **cert-manager Gateway API support is a config value.** Since cert-manager 1.15 it is
-   `config.enableGatewayAPI=true`. Restart cert-manager after the CRDs exist. The old
-   `ExperimentalGatewayAPISupport` feature gate is ignored on current versions.
-3. **Grant Traefik `*/status` RBAC.** Without it Traefik cannot write Gateway statuses and
-   the Gateway never programs.
-
-**Network policies.** `networkPolicy.enabled: true` renders policies for the chart's
-pods. `networkPolicy.ingressFrom` lists the peers allowed to reach the entry point, for
-example your gateway's namespace and pods. `networkPolicy.metricsFrom` lists the peers
-that may scrape `/metrics`. A NetworkPolicy cannot filter by path, so those peers reach
-all of port 3000. With forward auth they are as trusted as the router. Your cluster's
-CNI must enforce NetworkPolicy.
-
-`networkPolicy.internal` (default `true`) is separate and renders even while
-`networkPolicy.enabled` is `false`. It isolates the parts that never need outside traffic:
-the worker accepts ingress only from `networkPolicy.metricsFrom`, both bundled Valkeys accept
-only the web, worker and proxy pods, and the proxy and sonic accept only web and worker. The
-router and web entry policies stay opt-in. With `serviceMonitor.enabled`, set
-`networkPolicy.metricsFrom` to your Prometheus pods, because the chart refuses to render
-otherwise (the worker policy would block the scrape). Upgrading with a ServiceMonitor
-therefore needs that value first. Set `networkPolicy.internal: false` only if a mesh or CNI
-policy already does this job.
-
-**Compression.** Lumastra does not compress its dynamic responses. Enable compression at
-your Ingress controller, but never for `text/event-stream`, media or images. See
-[Compression](/guides/deploy-docker/#compression) for the reasoning and for nginx and
-Traefik settings. For ingress-nginx:
-
-```yaml
-# ingress-nginx controller ConfigMap
-data:
-  use-gzip: 'true'
-  gzip-level: '5'
-  enable-brotli: 'true'
-  brotli-level: '5'
-```
-
-### Live TV proxy
-
-The stream proxy is a separate role for [Live TV](/guides/live-tv/). Turn on the feature
-flag and the proxy:
-
-```yaml
-features:
-  FEATURE_LIVETV: true
-
-proxy:
-  enabled: true
-  image:
-    digest: 'sha256:<digest of the proxy image you want>' # or tag: '0.1.0'
-
-persistence:
-  ffmpegCache:
-    enabled: true
-```
-
-The proxy needs `STREAM_PROXY_SECRET` in the Secret:
-
-```bash
-kubectl -n lumastra patch secret lumastra --type merge \
-  -p '{"stringData":{"STREAM_PROXY_SECRET":"'"$(openssl rand -hex 24)"'"}}'
-```
-
-The chart sets `STREAM_PROXY_URL` on the app pods for you.
-
-- **Give it its own image tag or digest.** A proxy restart drops every live channel, so
-  do not tie it to app releases. Release images are tagged `X.Y.Z`, for example `0.1.0`.
-  A digest pins the exact build. Without `proxy.image`, it uses the app image and
-  restarts whenever that changes.
-- **Update it when a release says so.** Each release's notes start with
-  "Live TV proxy: update needed (reason)" or "Live TV proxy: no update needed".
-  Admin → System → Health → Cluster also warns when the running proxy has changed since its
-  image ("Update the Live TV proxy image to …"), and the attention board raises an alert
-  when the proxy and the app no longer work together.
-- **The proxy mounts the shared FFmpeg cache read-only** (`persistence.ffmpegCache`) and
-  re-checks for the binary every 5 seconds, so it starts working once a web or worker
-  pod has downloaded FFmpeg. The chart refuses to render the proxy with
-  `ffmpeg.autoDownload` and no `ffmpegCache`, unless you set
-  `proxy.ffmpegCacheReadOnly: false` so the proxy downloads its own.
-- **Recreate strategy.** A rolling surge would double your upstream IPTV connections.
-- **Draining.** On shutdown the proxy waits up to `proxy.drainSeconds` (240 by default)
-  for `activeChannels` to reach 0. See [Known limitations](#known-limitations-on-kubernetes).
-
-### Sonic embedder
-
-The sonic sidecar powers the music similarity features. It is amd64 only. It downloads
-its model into its own volume on first start, so its startup probe allows about 6
-minutes.
-
-```yaml
-features:
-  FEATURE_MUSIC_SONIC: true
-
-sonic:
-  enabled: true
-  threads: 4 # keep at or below the CPU limit, and raise memory with it
-
-libraries:
-  - name: music
-    mountPath: /data/music
-    existingClaim: lumastra-music
-    music: true # also mounts it read-only on the sonic pod
-```
-
-The sidecar needs the same media paths as the app, so use `music: true` on the library.
-See the [Docker page](/guides/deploy-docker/#sonic-embedder-sidecar) for the feature
-flags. The sidecar sizes itself from its `limits.memory` (6 Gi by default). 3 Gi is
-enough for the 30-minute analysis default; 6 Gi takes tracks up to the sidecar's
-2-hour cap, and 10 Gi or more keeps the text encoder loaded. See
-[Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory) for the sizing
-table, the tuning variables and what a `Sonic sidecar memory too small` failure means.
-
-The sidecar reads the database as a read-only role, `sonic_reader`, with `SELECT` on
-`media_audio_embeddings` only.
-
-- **External database.** Create the role, put the full connection URL in a Secret, and
-  point `sonic.database.existingSecret` at it:
-
-  ```sql
-  CREATE ROLE sonic_reader LOGIN PASSWORD '<hex password>';
-  ```
-
-  ```yaml
-  sonic:
-    database:
-      existingSecret: lumastra-sonic
-      urlKey: url
-  ```
-
-  An init container connects as the app role and runs the grants once the app has
-  created the table. To grant by hand instead, set `sonic.database.grant.enabled: false`
-  and run:
-
-  ```sql
-  GRANT CONNECT ON DATABASE lumastra TO sonic_reader;
-  GRANT USAGE ON SCHEMA public TO sonic_reader;
-  GRANT SELECT ON media_audio_embeddings TO sonic_reader;
-  ```
-
-- **CloudNativePG.** Let the operator manage the role. Create a basic-auth Secret with a
-  hex password and name it in `database.cnpg.sonicReader.passwordSecret`. The chart
-  builds the URL from it.
-
-  ```bash
-  kubectl -n lumastra create secret generic lumastra-sonic-reader \
-    --type=kubernetes.io/basic-auth \
-    --from-literal=username=sonic_reader \
-    --from-literal=password="$(openssl rand -hex 24)"
-  ```
-
-  ```yaml
-  database:
-    cnpg:
-      sonicReader:
-        enabled: true
-        passwordSecret: lumastra-sonic-reader
-  ```
-
-### Integrations and extra settings
-
-`integrations.<name>` takes `url`, `publicUrl` and `apiKey` for each supported
-integration, for example `audiobookshelf`, `kavita` and `jellyfin`. `values.yaml` lists
-all of them. Some have no `publicUrl`.
-
-- `url` is what the app's server calls. An in-cluster Service URL works, for example
-  `http://jellyfin.media.svc.cluster.local:8096`. A NetworkPolicy on the target side must
-  allow this namespace.
-- `publicUrl` is what browsers and apps are sent to. It must be reachable by your users.
-- `apiKey` is `{secret, key}`, read from a Secret. `secret` defaults to
-  `secrets.existingSecret`.
-
-```yaml
-integrations:
-  jellyfin:
-    url: http://jellyfin.media.svc.cluster.local:8096
-    publicUrl: https://jellyfin.example.com
-    apiKey: { secret: lumastra-integrations, key: jellyfin }
-```
-
-Everything else goes through a few generic values:
-
-- `secrets.env` maps an environment variable to a key in a Secret. A plain string names
-  a key in `secrets.existingSecret`. A map names another Secret and can be optional.
-
-  ```yaml
-  secrets:
-    existingSecret: lumastra
-    env:
-      LUMASTRA_MASTER_KEY: LUMASTRA_MASTER_KEY
-      JWT_SECRET: JWT_SECRET
-      TMDB_API_KEY: { secret: lumastra-integrations, key: tmdb, optional: true }
-  ```
-
-- `features` sets `FEATURE_*` flags, `concurrency` sets pool and concurrency variables,
-  `app.publicUrls` sets `PUBLIC_*` links shown in the UI, and `app.env` sets any other
-  non-secret variable for web and worker. Later groups win, and `app.env`
-  wins over everything structured above it.
-- `web`, `worker` and `proxy` take `env` (a map), `extraEnv` (a list of `name`/`value`
-  or `valueFrom` entries), `extraEnvFrom`, `extraVolumes` and `extraVolumeMounts`.
-  `sonic` takes `env` and `extraEnv`.
-
-  ```yaml
-  web:
-    extraEnv:
-      - name: SOME_SETTING
-        valueFrom:
-          secretKeyRef: { name: my-secret, key: some-key }
-  ```
-
-- `app.timezone`, `app.logLevel`, `app.lowRamMode`, `app.protocolHeader` and
-  `branding.existingConfigMap` (custom branding files) are also available.
-- `global.nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `podLabels` and
-  `imagePullSecrets` apply to the chart's own pods. The CloudNativePG pods use
-  `database.cnpg.*` instead. Each component takes its own `nodeSelector`, `tolerations`
-  and `affinity`; a component's `affinity` replaces the global one instead of merging.
-
-Secrets are not watched. Pods roll when the rendered environment or the router
-configuration changes. They do not roll when the content of a Secret you reference
-changes. Restart them yourself (`kubectl rollout restart`) or use a tool such as
-Reloader.
-
-### Environment variables and settings.json
-
-Settings resolve in this order: environment variable, then `/config/settings.json`
-(what the admin UI saves), then the built-in default.
-
-- A non-empty environment value from the chart always wins, and the admin UI will not
-  save over it.
-- A value that is only in `settings.json` stays active while the chart does not set that
-  variable. That includes a URL or flag saved in the admin UI of an old install.
-- An empty environment value does not clear a `settings.json` value.
-
-When you copy `/config` from an old install, review **Admin → Settings**, or
-`settings.json` itself, for entries that no longer apply: old integration URLs, Jellyfin
-settings and feature flags. Revert or delete them there.
-
-## Upgrades and GitOps
-
-**Pin the image.** Every image block (`image`, `proxy.image`, `sonic.image`,
-`router.image`) takes `registry`, `repository`, `tag` and `digest`. The digest wins over
-the tag. With the moving `stable` tag a `helm upgrade` renders the same pod spec, so
-nothing rolls. Pin a digest or a release tag in production. Without a digest, the moving
-tags `stable`, `latest` and `main` default to `pullPolicy: Always`. To find a digest:
-
-```bash
-docker buildx imagetools inspect ghcr.io/lumastra/lumastra:stable
-```
-
-```yaml
-image:
-  digest: 'sha256:<the Digest line from the command above>'
-```
-
-`global.imageRegistry` replaces the registry of every image, for a pull-through mirror.
-
-**Upgrade.** Back up the database and `/config` first. Then update your checkout of the
-repository to the chart version you want, edit the digest, and run:
-
-```bash
-git pull
+EOF
 helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
 ```
 
-The chart renders deterministically: no `lookup`, no random values and no Helm hooks. A
-render needs no cluster access, so Argo CD can render it offline.
+Open `https://media.example.com`. The browser should show a valid certificate. Without
+the Secret, the Ingress controller serves its own certificate and the browser warns.
 
-**What a rollout looks like.**
+## If something differs
 
-1. The web StatefulSet updates one pod at a time, highest ordinal first. It waits
-   `web.minReadySeconds` (10) between pods, with no surge. Capacity is N-1 during the
-   roll. `web.pdb.minAvailable: 1` (rendered when `web.replicas` is above 1) also serialises
-   node drains.
-2. A web pod that is being replaced first keeps serving for `web.preStopSleepSeconds`
-   (15) while the router and the endpoints drop it. Then it drains: its readiness turns
-   `503`, it stops accepting connections and ends open event streams (browsers
-   reconnect to another pod), and requests that are already running finish, for up to
-   `web.drainSeconds` (30). A request that still reaches it gets `503` with
-   `Retry-After: 2` and the code `shutting_down`, never a `500`. Only then does it stop
-   its transcodes and close its database and Valkey connections. The chart refuses a
-   `web.terminationGracePeriodSeconds` (90) below `preStopSleepSeconds + drainSeconds + 30`.
-3. A session whose pod is being replaced moves to another pod. It waits there through
-   one 503 and retry cycle (at most 15 seconds, about 10 measured) and moves back once
-   the pod returns, with no further 503s. The restarted pod keeps its name, so it
-   reclaims its sessions without waiting.
-4. The worker is a Deployment with the Recreate strategy. The old pod is gone before the
-   new one starts. Tasks pause and resume. Update the worker together with the web tier,
-   so new web code never talks to an old worker. One `helm upgrade` does that.
-5. The router rolls with `maxSurge: 1` and `maxUnavailable: 0`. On shutdown nginx stops
-   accepting and finishes in-flight requests for up to
-   `router.terminationGracePeriodSeconds` (60). Long-lived streams still open then are
-   cut.
-6. The Live TV proxy uses Recreate and waits for its channels to end. Leave it alone
-   during app updates, so Live TV carries on. Change `proxy.image` only when the release
-   notes say "Live TV proxy: update needed" or Admin → System → Health → Cluster asks for it,
-   and do it when nobody is watching Live TV.
+**You have no cluster.** On a Linux machine, install k3s and give your user access:
 
-Migrations run at startup under a lock, and the first pod to start applies them. The old
-pods keep serving during the roll, so for a short time they run against the new schema.
-So far migrations have only added tables, columns and indexes, or relaxed constraints,
-which old code handles. If a release ever needs downtime for a migration, its release
-notes will say so.
+```bash
+curl -sfL https://get.k3s.io | sh -
+mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $USER ~/.kube/config
+```
 
-**A stuck rollout needs a manual step.** A web pod that never becomes Ready (bad image,
-broken configuration) stalls the rollout. A `helm rollback` or an Argo CD sync does not
-replace it on its own. After you fix the values, run `kubectl delete pod lumastra-web-N`.
-Argo CD shows the StatefulSet as Progressing.
+Install `helm` from [helm.sh](https://helm.sh/docs/intro/install/).
 
-**Argo CD.** An Application that installs the chart from the repository with inline
-values:
+**You have no DNS name yet.** Add the node's address to the hosts file of the computer you
+browse from, for example `203.0.113.10 media.example.com`. The name must match
+`app.origin`.
+
+**Pods stay `Pending`.** Run `kubectl -n lumastra get pvc`. A claim stuck in `Pending`
+usually means the storage class has no `ReadWriteMany`. Check that the `persistence`
+settings from step 5 are in your values file. Volume settings cannot change on an existing
+claim: run `helm uninstall lumastra -n lumastra`, delete the empty claims with
+`kubectl -n lumastra delete pvc --all` (on a fresh install only: this removes every claim in
+the namespace), and install again.
+
+**Your media is on a volume or NFS share, not on the node.** Replace `hostPath` in the
+`libraries` entry with one of these:
 
 ```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: lumastra
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/Sapd/lumastra
-    targetRevision: <a release tag or commit SHA>
-    path: deploy/helm/lumastra
-    helm:
-      releaseName: lumastra
-      valuesObject:
-        app:
-          origin: https://lumastra.example.com
-        secrets:
-          existingSecret: lumastra
-        image:
-          digest: 'sha256:<digest>'
-        web:
-          replicas: 2
-        persistence:
-          dataAnnotations:
-            argocd.argoproj.io/sync-options: Prune=false,Delete=false
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: lumastra
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+    existingClaim: my-media-claim
+    # or
+    nfs: { server: 10.0.0.1, path: /export/media }
 ```
 
-Pin `targetRevision` to a tag or commit. The chart is in beta and `main` can change its
-values. Create the Secrets before the first sync (or manage them with your secret
-tooling), because the chart only references them. `persistence.dataAnnotations` is
-applied to every chart-created volume and to the CloudNativePG `Cluster`, so Argo CD
-does not prune your data. Upgrading is then a commit that changes the digest.
+**You run your own PostgreSQL.** Use PostgreSQL 17 or newer. As a superuser, run this in
+the Lumastra database, put the connection URL in the `lumastra` Secret as `DATABASE_URL`
+and remove `database.mode: cnpg` from the values:
 
-## Migrating from Docker Compose
-
-This moves an existing Compose install to the chart on the same data. Plan a maintenance
-window. Back up first: see [Backup & recovery](/guides/backup-recovery/).
-
-**1. Install with everything stopped.** Keep web and worker at 0 until the database is
-restored. If either runs against an empty database, it migrates that database at
-startup, and your restore then collides with that schema. Start from
-`ci/migration-values.yaml` in the chart, and also keep the tasks Valkey at 0 until its
-snapshot is copied (step 5), or it starts with an empty AOF and skips the import:
-
-```yaml
-web:
-  replicas: 0
-worker:
-  replicas: 0
-
-valkey:
-  tasks:
-    replicas: 0
-    rdbImport:
-      enabled: true
+```sql
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
 ```
 
-With CloudNativePG, add the
-`initdb` locale from the [database section](#database) before the first sync, and check
-the source locale with the `SELECT` shown there.
+**You want more than one web pod, or your nodes share storage.** See
+[Advanced Kubernetes](/guides/deploy-kubernetes-advanced/).
 
-**2. Put the master key in the Secret.** If you set `LUMASTRA_MASTER_KEY` in `.env`, use
-the same value. If you never set it, the old install generated one in
-`/config/master.key`: put that value in the Secret. A restored database with a different
-key starts but cannot decrypt stored secrets.
+**The setup wizard warns that `TRUSTED_PROXY_IPS` is not set.** Lumastra then sees the
+Ingress pod as every client. See
+[Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-you-run-behind-a-reverse-proxy).
 
-**3. Copy `/config`.** Copy the old `config` volume into the new config volume, owned by
-uid 1000. A helper pod that mounts the claim does it. The claim must not be in use, so
-keep the app at 0.
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: config-copy
-  namespace: lumastra
-spec:
-  restartPolicy: Never
-  containers:
-    - name: copy
-      image: busybox:1.37
-      command: ['sleep', '3600']
-      volumeMounts:
-        - { name: config, mountPath: /config }
-  volumes:
-    - name: config
-      persistentVolumeClaim:
-        claimName: lumastra-config
-```
+**You want to read the logs.**
 
 ```bash
-kubectl apply -f config-copy.yaml
-kubectl -n lumastra wait --for=condition=Ready pod/config-copy
-tar -C /path/to/old/config -cf - . | kubectl -n lumastra exec -i config-copy -- tar -C /config -xf -
-kubectl -n lumastra exec config-copy -- chown -R 1000:1000 /config
-kubectl -n lumastra delete pod config-copy
+kubectl -n lumastra logs -f statefulset/lumastra-web
+kubectl -n lumastra logs -f deploy/lumastra-worker
 ```
 
-**4. Dump and restore PostgreSQL.** A dump of one database does not contain roles, so
-create the role first. The extensions must exist before the restore. With an external
-database, run the SQL from the quick start. With CloudNativePG, the chart creates the
-role and the extensions.
+**You want to update.** Check out the new tag, then upgrade with the new image version:
 
 ```bash
-# on the old host
-pg_dump -U lumastra -d lumastra --no-owner --no-acl -F c -f lumastra.dump
+git fetch --tags && git checkout v0.1.5   # example: the release you want
+helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml --set image.tag=0.1.5
 ```
 
-Restore as the app role, without the extension entries, which a non-superuser cannot
-restore:
-
-```bash
-pg_restore -l lumastra.dump | grep -v ' EXTENSION ' > restore.list
-pg_restore -U lumastra -h 127.0.0.1 -p 15432 -d lumastra --no-owner --no-acl -L restore.list lumastra.dump
-```
-
-The host and port above assume a `kubectl port-forward` to the database service
-(for CloudNativePG, the `<cluster>-rw` Service) on local port 15432. Get the password
-from the `<cluster>-app` Secret.
-
-**5. Import the tasks Valkey (optional).** The chart's tasks Valkey runs AOF, and an AOF
-server ignores a `dump.rdb`. On its first shutdown it then overwrites the dump with an
-empty snapshot. `rdbImport` adds an init container that runs only when `/data/dump.rdb`
-exists and there is no complete AOF. It loads the dump, switches AOF on, shuts down and
-renames the dump to `dump.rdb.imported-<UTC time>`. On any failure it removes the
-partial AOF and exits non-zero, so the pod stays in `Init:` and retries. Without the
-import, the task system starts with an empty keyspace and rebuilds from PostgreSQL.
-
-1. Sync with `valkey.tasks.replicas: 0` and `rdbImport.enabled: true`. The volume is
-   created and no pod starts. Keep web and worker at 0 too.
-2. On the old host, run `valkey-cli SAVE` (or `redis-cli SAVE`), then stop the writers.
-3. Copy `dump.rdb` into the root of the tasks volume, owned by uid 1000, with a helper
-   pod like the one above. The volume must contain no `appendonlydir`. Delete it if a
-   tasks pod ever started on this claim.
-4. Set `valkey.tasks.replicas: 1`. The `rdb-import` init container logs the loaded
-   keyspace (`db0:keys=…`) and `done`. Compare it with `INFO keyspace` on the old
-   instance. Keys with a TTL may expire in the meantime.
-5. Start the worker and web.
-
-Valkey loads dumps from Valkey and from Redis up to 7.2. A newer Redis format may not
-load. The init container then fails with `Init:Error` and leaves the dump untouched.
-
-**6. Clean up `settings.json`.** The admin UI settings you copied still apply wherever
-the chart sets nothing. Open **Admin → Settings** and remove entries that no longer fit:
-old integration URLs (use the in-cluster `url` and the public `publicUrl` pair from the
-chart instead), Jellyfin settings and feature flags. A chart value pins a setting and
-locks it in the UI, so compare the table in [Authentication](#authentication) with what
-your old install had saved. With SSO configured only in the admin UI of the old install,
-set `auth.native.enabled` explicitly. The chart cannot see that configuration, and
-without the value it turns built-in login on and locks it. To keep built-in login off,
-set `auth.native.enabled: false` together with `auth.oidc.configuredInAdminUi: true`.
-
-**7. Scale up and check the image.** Set the replicas back to their normal values. Before
-you switch DNS, check which image each side runs. A Compose host on `:stable` may be a
-build behind or ahead of the one the chart pulls.
-
-```bash
-# the old host
-docker inspect --format '{{index .RepoDigests 0}}' <the lumastra container>
-
-# the cluster
-kubectl -n lumastra get pods -l app.kubernetes.io/component=web \
-  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[0].imageID}{"\n"}{end}'
-```
-
-Then point your DNS or ingress at the cluster, open the site, and check **System →
-Health** for the cluster view. Keep the old install stopped but intact for a while.
-
-## Operations
-
-### Health checks
-
-| Endpoint                  | Where             | Meaning                                                              |
-| ------------------------- | ----------------- | -------------------------------------------------------------------- |
-| `/api/health`             | web, worker       | Liveness. Always `200`, no dependency checks. Used for startup and liveness probes. |
-| `/api/health/ready`       | web, worker | Readiness, `200` or `503`. Web returns only `{status}`, plus per-component `checks` for admins and `metrics:read` tokens; the worker lists its `reasons`. A web pod is not ready without PostgreSQL or task Valkey, and from the moment it receives SIGTERM. The worker is not ready during startup, shutdown or a prepared upgrade, while another worker holds the singleton lease, without PostgreSQL or task Valkey, or when the library watcher has failed. |
-| `/__router/healthz`       | router            | The router's own probes.                                             |
-| `/status`                 | proxy             | Reports `healthy` and `activeChannels`.                              |
-| `/health`                 | sonic             | Probes.                                                              |
-
-Worker readiness reports task-host capability even though it serves no application traffic.
-The chart gives the worker a readiness probe on `/api/health/ready`; the plain Kubernetes
-manifests and the Compose healthcheck use the same path. Worker liveness fails when the
-scheduler and consumer loops make no progress for `TASK_RUNTIME_LIVENESS_STALL_SECONDS`
-(default `600`). Run exactly one worker: a durable singleton lease (table `task_worker_lease`)
-enforces it. A second worker logs `Another worker holds the singleton lease` and stays
-unready. After a hard kill the replacement waits up to 30 s for the lease to expire.
-**System → Health → Cluster** shows pod CPU/memory usage and requests.
-
-For Prometheus, enable `serviceMonitor.enabled`, put `LUMASTRA_METRICS_BEARER_TOKEN`
-in your Secret, map it through `secrets.env`, and set `serviceMonitor.bearerTokenSecret`.
-
-### Logs and the router access log
-
-```bash
-kubectl -n lumastra logs lumastra-web-0
-kubectl -n lumastra logs deploy/lumastra-worker
-kubectl -n lumastra logs -l app.kubernetes.io/component=router --prefix --tail=100
-```
-
-The router logs one line per request to stdout. It logs the path only. Query strings
-carry playback grants, so they stay out of the log. Fields:
-
-| Field               | Meaning                                                              |
-| ------------------- | -------------------------------------------------------------------- |
-| timestamp           | ISO 8601                                                             |
-| client address      | The real client IP, if `router.realIp` is set up                     |
-| `"METHOD /path"`    | Method and path                                                      |
-| status, bytes       | Response status and body size                                        |
-| `upstream=`         | The web pod's IP and port that served it                             |
-| `rt=`               | Total request time                                                   |
-| `urt=`, `ust=`      | Upstream response time and upstream status                           |
-| `key=`              | Which hash key routed it: `token`, `session` or `ip`. Never the value. |
-| `session=`          | The `PlaySessionId`                                                  |
-| `aus=`              | The auth endpoint's status (only with forward auth)                  |
-
-To see which pod served a session, and whether it stayed on one:
-
-```bash
-kubectl -n lumastra logs -l app.kubernetes.io/component=router --prefix --since=2h --max-log-requests=4 \
-  | grep 'session=<PlaySessionId>' | grep -o 'upstream=[^ ]*' | sort | uniq -c
-```
-
-One `upstream=` value means the affinity worked. Map pod IPs to names with
-`kubectl -n lumastra get pods -l app.kubernetes.io/component=web -o wide`. To list
-requests slower than 2 seconds:
-
-```bash
-kubectl -n lumastra logs -l app.kubernetes.io/component=router --since=2h --max-log-requests=4 \
-  | awk '{for(i=1;i<=NF;i++) if($i ~ /^rt=/){split($i,a,"="); if(a[2]>2) print; break}}'
-```
-
-Set `router.accessLog: false` to turn the log off.
-
-### Scaling and maintenance
-
-Scale through Helm or Argo CD so the router is re-rendered:
-
-```bash
-helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml --set web.replicas=3
-```
-
-Do not use `kubectl scale`: pods beyond the router's slots receive no traffic, and the
-next sync resets the replica count. Leave `router.webSlots: 0` unless autoscaling;
-for HPA, set it to `maxReplicas`. Empty slots produce DNS-resolution errors in router
-logs every `router.dnsValid`; these are expected.
-
-The worker is a singleton: give it more CPU/memory and tune
-[concurrency](/guides/performance-tuning/) rather than adding replicas.
-
-For maintenance, set web and worker replicas to `0`. Do not restart
-them until a database restore is complete.
-
-### Backups
-
-Back up three things: the database, the master key, and `/config`. Lumastra has no
-built-in scheduler. See [Backup & recovery](/guides/backup-recovery/) for what each
-contains and how to restore. On Kubernetes:
-
-- With CloudNativePG, use the chart's Barman Cloud backups, or your own tooling.
-- With an external database, use `pg_dump` on a schedule, or your provider's snapshots.
-- Keep `LUMASTRA_MASTER_KEY` outside the cluster.
-- Snapshot the config volume with your storage's snapshot support or a tool such as
-  Velero.
-
-### Troubleshooting
-
-**HLS segments or `/api/playback/…` answer `403 ip_mismatch`.** The grant's pinned address
-differs from the request's. Check the router pods have a `hop-secret` init container and
-`kubectl -n lumastra get cm lumastra-env -o yaml | grep ROUTER_REALIP` shows a value. If
-not, `LUMASTRA_MASTER_KEY` is missing from the Secret, `router.hop.enabled` is false, or the
-chart predates the router hop: as a stopgap, run one router replica. After a key rotation,
-restart the router pods. Don't set `TRUSTED_PROXY_IPS` to the pod network as a workaround:
-that trusts every pod for forward-auth too.
-
-**Playback stalls or answers `503`, and the router log shows one session on several
-pods.** A pod that does not own a session answers `503` with `Retry-After: 2` while the
-owner is still serving it. If you see a lot of these, requests for one session reach
-more than one pod, so affinity is broken. Check these in order:
-
-- Your Ingress or HTTPRoute points at the entry Service `lumastra` (the router), and not
-  at the web pods or the headless Service.
-- `router.enabled` is `true` when `web.replicas` is above 1. The chart prints a warning
-  for this.
-- The router log shows `key=token` or `key=session` for playback requests. `key=ip`
-  means the URL carried neither, and the client IP is the fallback. If every request
-  shows the same ingress controller address as client address, set
-  `router.realIp.fromCIDRs`.
-- `kubectl -n lumastra get pods` shows every web pod Ready. A pod that is not Ready has
-  no DNS record, and the router skips it, which moves its sessions to another pod.
-
-**The router log fills with "could not be resolved" for pod names.** The router has
-upstream lines for web slots with no pod. Either `router.webSlots` is above
-`web.replicas`, or a web pod is not Ready right now. Reduce `webSlots` to match, or
-leave it at `0` if you do not autoscale. During a rollout a few of these lines are
-normal.
-
-**`PreStopHook failed` events on the router during a rollout.** This is expected. The
-router's preStop hook waits for nginx to finish its graceful quit. When nginx exits, the
-container stops while the hook is still waiting, and the kubelet records the failure.
-Returning earlier would let the kubelet's SIGTERM cut the graceful quit short.
-
-**A web pod is `OOMKilled`, usually during several CPU transcodes.** Check
-`kubectl -n lumastra describe pod lumastra-web-0` for `Last State: Terminated, Reason:
-OOMKilled`. Each CPU transcode uses about 1 GiB on top of the web process. Lower
-`LUMASTRA_MAX_CONCURRENT_TRANSCODES` in `concurrency`, raise `web.resources.limits.memory`,
-or add a GPU. See [Resources and sizing](#resources-and-sizing).
-
-**Redirects point to `:8080`.** The router's own redirects must stay relative, and the
-chart sets `absolute_redirect off` for that. If you see a redirect to port 8080, check
-that you run a current chart and that your own `router.extraServerConfig` does not
-override it.
-
-**The chart fails to render with "no sign-in method".** The app refuses to start without
-a sign-in method, and the chart checks the same rule before anything is deployed. You
-set `auth.native.enabled: false` without enabling OIDC or forward auth. Enable one in the
-values, or set `auth.native.enabled` back to `null`. If OIDC is configured only in the
-admin UI of a migrated install, set `auth.oidc.configuredInAdminUi: true`.
-
-**Signed-in users are sent back to sign-in, or API calls without a token get `401`.**
-Check `aus=` in the router access log. A `404` means the identity provider doesn't know
-the request's Host: add that host to its application, or route the caller through the
-public hostname. A `5xx` or a missing value means the identity provider is down or slow.
-The router treats both as "not signed in".
-
-**Pods stay `Pending`, or a claim stays unbound.** The chart asks for `ReadWriteMany`
-volumes by default. Check `kubectl -n lumastra get pvc` and your storage class. See
-[What you need](#what-you-need), or [Single node (k3s)](#single-node-k3s) for a cluster
-without `ReadWriteMany` storage.
-
-**The first start takes minutes.** The first boot runs migrations and downloads FFmpeg.
-The startup probe allows about 15 minutes. Check the pod log.
-
-**The app does not pick up a changed Secret.** Pods do not roll when the content of a
-referenced Secret changes. Run `kubectl -n lumastra rollout restart statefulset/lumastra-web`
-and the same for the worker, or use Reloader.
-
-**A rollout hangs.** See [Upgrades and GitOps](#upgrades-and-gitops). Delete the stuck
-pod after fixing the values.
-
-## Known limitations on Kubernetes
-
-- **Long downloads are cut after the drain.** A web pod lets running requests finish for
-  `web.drainSeconds` (30 seconds) after SIGTERM. A file download or direct-play stream
-  that runs longer is cut then, and the client resumes it with a new range request. Keep
-  `web.preStopSleepSeconds` at least `router.dnsValid` plus your DNS TTL, so the router
-  has dropped the pod before the drain starts.
-- **The Live TV proxy has no drain mode yet.** The chart's `preStop` hook polls the
-  proxy's `/status` until no channels are active, for at most `proxy.drainSeconds`. A
-  restart still drops channels that are open when that time runs out.
-- **Web is a StatefulSet.** Updates and drains are serial, capacity is N-1 during a
-  roll, and a stuck rollout needs a manual `kubectl delete pod`.
+Back up the database and your master key first. See
+[Backup & recovery](/guides/backup-recovery/).

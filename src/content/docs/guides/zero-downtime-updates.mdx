@@ -35,7 +35,7 @@ The proxy in front of the web tier **must**:
 
 On Kubernetes, the Helm chart's router does this for you: it hashes the playback grant, then
 the playback session id, then the client IP, over one upstream line per web pod.
-See [Deploy on Kubernetes → Why there is a router](/guides/deploy-kubernetes/#why-there-is-a-router).
+See [Advanced Kubernetes → Why is there a router?](/guides/deploy-kubernetes-advanced/#why-is-there-a-router).
 With your own load balancer, hash on those URL arguments or the source IP at the layer that
 fans out across the web instances, not at the Kubernetes Service behind an Ingress.
 
@@ -99,7 +99,7 @@ PostgreSQL or the task Valkey is unreachable, or when the library watcher has fa
 
 ## On Kubernetes: mostly native
 
-The [Helm chart](/guides/deploy-kubernetes/#upgrades-and-gitops) provides the router,
+The [Helm chart](/guides/deploy-kubernetes-advanced/#upgrades-and-gitops) provides the router,
 shared storage, and serial StatefulSet rollout. For a hand-written Deployment, use
 at least two replicas, `maxUnavailable: 0`, readiness on `/api/health/ready`, session
 affinity, and shared config/transcode volumes:

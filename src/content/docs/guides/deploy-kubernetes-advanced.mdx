@@ -1,0 +1,371 @@
+---
+title: Advanced Kubernetes
+description: Several web pods behind the playback router, shared storage, your own database, sign-in, GPUs, sizing, upgrades with Argo CD and moving over from Docker Compose.
+---
+
+import DeployDiagram from '../../../components/diagrams/DeployDiagram.astro';
+
+Read [Deploy on Kubernetes](/guides/deploy-kubernetes/) first. This page covers the
+options it leaves out. Every value is documented in the chart's
+[`values.yaml`](https://github.com/Sapd/lumastra/blob/v0.1.4/deploy/helm/lumastra/values.yaml),
+and `deploy/helm/lumastra/ci/` has example values for each setup.
+
+## How do the pieces fit together?
+
+<DeployDiagram />
+
+One image runs every role. Resource names start with the release name, for example
+`lumastra-web-0`.
+
+| Component | Role | Default |
+| --- | --- | --- |
+| `web` | UI, API and HLS. A StatefulSet. | 2 pods |
+| `worker` | Background jobs. Exactly one. | 1 |
+| `router` | nginx. Keeps one playback session on one web pod. | on, 2 pods |
+| `valkey-cache`, `valkey-tasks` | Disposable cache, and the durable job queue | on |
+| `proxy`, `sonic` | Live TV proxy, music sidecar | off |
+
+Why there are several containers: [architecture overview](/architecture/overview/).
+
+## Why is there a router?
+
+An HLS session's FFmpeg job runs on the web pod that started it. A request that reaches
+another pod gets `503` until the owner has been idle for 15 seconds. The router hashes each
+request by its `grant` argument, then `PlaySessionId`, then the client address, so one
+session reaches one pod. Your Ingress needs no affinity. It must not buffer responses, and
+it must allow timeouts of at least one hour, bodies of at least 50 MB and WebSocket
+upgrades for `/j/socket`.
+
+The router passes the client address to the app with a hop value derived from
+`LUMASTRA_MASTER_KEY`, so keep that key in your Secret. Any pod that can reach the router
+can still choose the client address. Set `networkPolicy.enabled: true` with `ingressFrom`
+set to your ingress controller pods, or narrow `router.realIp.fromCIDRs`. The chart warns
+until you do.
+
+## How do I run several web pods?
+
+You need `ReadWriteMany` storage, because pods on different nodes mount the same volumes.
+
+```yaml
+mode: split
+web:
+  replicas: 2
+router:
+  realIp:
+    fromCIDRs: [10.42.0.0/16] # the address range of your ingress controller or gateway
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: traefik } }
+persistence:
+  config: { storageClassName: nfs-rwx }
+  transcode: { storageClassName: nfs-rwx }
+  plugins: { storageClassName: nfs-rwx }
+  appCache: { enabled: true, storageClassName: nfs-rwx }
+```
+
+Scale with `helm upgrade --set web.replicas=3`, never `kubectl scale`. The worker and the
+Valkeys accept one replica at most.
+
+## Which storage does each volume need?
+
+Every volume takes `storageClassName`, `accessModes`, `size` and `existingClaim`. An empty
+`accessModes` asks for `ReadWriteMany`.
+
+| Value | Mounted on | Holds |
+| --- | --- | --- |
+| `persistence.config` | web, worker | Settings, artwork, trickplay |
+| `persistence.transcode` | web, worker | HLS output. `type: emptyDir` gives each pod its own. |
+| `persistence.plugins` | web, worker | Installed plugins |
+| `persistence.appCache` | web, worker | Rebuildable caches. Off by default: turn it on. |
+| `persistence.ffmpegCache` | web, worker, proxy | FFmpeg binary. Needed with the Live TV proxy. |
+| `valkey.tasks.persistence` | task Valkey | Queue data. Always `ReadWriteOnce`. |
+
+`ReadWriteOnce` works when every pod that mounts the volume runs on one node. Pods run as
+user 1000. Many NFS servers ignore `fsGroup`, so make the share writable for user 1000.
+Chart-created claims stay after `helm uninstall`.
+
+## How do I mount my media?
+
+Each `libraries` entry takes exactly one of `hostPath`, `existingClaim` or `nfs`. Mount
+every library on web and worker. Add the same paths as libraries in the admin area.
+
+```yaml
+libraries:
+  - name: movies
+    mountPath: /data/movies
+    nfs: { server: 10.0.0.1, path: /export/movies }
+  - name: music
+    mountPath: /data/music
+    existingClaim: media-music
+    music: true # also mounts it on the sonic pod
+```
+
+Libraries are read-only, unless `app.metadataStorageLocation` is `alongside`. A `hostPath`
+works only on the node that has the path. For NFS tuning, see
+[Performance tuning](/guides/performance-tuning/#nfs-mount-options-media-library).
+
+## Which database options do I have?
+
+With `database.mode: cnpg`, the chart renders a CloudNativePG `Cluster`. The app pods
+restart a few times while it starts. Everything below is optional.
+
+```yaml
+database:
+  mode: cnpg
+  cnpg:
+    instances: 2
+    storage: { size: 50Gi, storageClass: fast-block }
+    parameters: { shared_buffers: 2GB } # merged into the chart defaults
+    backup: # needs the Barman Cloud plugin
+      enabled: true
+      configuration:
+        destinationPath: s3://backups/lumastra
+        endpointURL: https://s3.example.com
+        s3Credentials:
+          accessKeyId: { name: lumastra-backup-s3, key: ACCESS_KEY_ID }
+          secretAccessKey: { name: lumastra-backup-s3, key: ACCESS_SECRET_KEY }
+```
+
+CloudNativePG creates the database with locale `C`. If you move an existing database in,
+match its locale with `database.cnpg.initdb` before the first start. On your own server,
+raise `shared_buffers` and set `jit_above_cost=10000000`, as the Compose file does.
+Your own Valkey works with `valkey.mode: external` and both `CACHE_URL` and
+`TASK_CACHE_URL` in the Secret. The task Valkey must use `noeviction` and persistence.
+
+## How do I set up sign-in?
+
+With no OIDC or forward auth, the chart turns on built-in login. The chart refuses to
+render with no sign-in method at all.
+
+```yaml
+secrets:
+  existingSecret: lumastra
+  env:
+    LUMASTRA_MASTER_KEY: LUMASTRA_MASTER_KEY
+    AUTH_OIDC_CLIENT_SECRET: OIDC_CLIENT_SECRET # a key in your Secret
+auth:
+  native: { enabled: false }
+  oidc:
+    enabled: true
+    issuer: https://idp.example.com/application/o/lumastra/
+    clientId: lumastra
+```
+
+Register `https://<host>/auth/oidc/callback` at the provider. See
+[Authentication](/guides/authentication/). Forward auth needs `auth.forwardAuth.enabled`,
+`trustedProxyIps`, `networkPolicy.enabled: true` and the `router.forwardAuth` block. Leave
+the node's gateway address out of the trusted range.
+
+## How do I expose Lumastra?
+
+Point an Ingress or HTTPRoute at the Service `lumastra` (port 80), which fronts the router.
+With `className: nginx` the chart adds the body size, buffering and timeout annotations.
+For other controllers, set the equivalents in `ingress.annotations`.
+
+```yaml
+httpRoute:
+  enabled: true
+  parentRefs:
+    - { name: my-gateway, namespace: gateway-system, sectionName: websecure }
+  hostnames: [media.example.com]
+```
+
+Compress at the Ingress, but never `text/event-stream` or media. With Traefik and the
+Gateway API, match the CRDs to your Traefik version and grant Traefik `*/status` RBAC.
+
+## How do I use a GPU?
+
+Set `gpu.acceleration` to `qsv`, `vaapi` or `nvenc`, then give the pods the device. Each
+pod that transcodes needs its own GPU slot.
+
+```yaml
+gpu:
+  mode: resource
+  acceleration: qsv
+  resources: { gpu.intel.com/i915: 1 }
+  renderGroupId: 993 # stat -c '%g' /dev/dri/renderD128 on the node
+  env: { QSV_DEVICE: /dev/dri/renderD128 }
+```
+
+For NVIDIA, use `acceleration: nvenc` and `nvidia.com/gpu: 1`. Some clusters also need
+`web.runtimeClassName: nvidia`. Without a device plugin, use `mode: hostPath`. See
+[GPU transcoding](/guides/gpu-transcoding/).
+
+## How much memory do the pods need?
+
+Plan 1.5 GiB per web pod plus 1 GiB per concurrent CPU transcode. Three transcodes
+killed a 4 Gi pod. Cap them to match your limit:
+
+```yaml
+concurrency:
+  LUMASTRA_MAX_CONCURRENT_TRANSCODES: 6
+web:
+  resources:
+    requests: { cpu: '4', memory: 2Gi }
+    limits: { memory: 8Gi }
+```
+
+The default web limit is 4 Gi and the worker limit 6 Gi. See
+[Performance tuning](/guides/performance-tuning/).
+
+## How do I add Live TV or the sonic sidecar?
+
+```yaml
+features:
+  FEATURE_LIVETV: true
+  FEATURE_MUSIC_SONIC: true
+proxy:
+  enabled: true
+  image: { tag: '0.1.4' } # its own tag: a proxy restart drops every live channel
+persistence:
+  ffmpegCache: { enabled: true }
+sonic:
+  enabled: true # amd64 only
+```
+
+The proxy needs `STREAM_PROXY_SECRET` in your Secret. Change its image only when the
+release notes say "Live TV proxy: update needed". The sonic sidecar needs a read-only
+database role: with CloudNativePG, set `database.cnpg.sonicReader` to
+`{ enabled: true, passwordSecret: <basic-auth Secret for sonic_reader> }`. See
+[Live TV](/guides/live-tv/) and [Music discovery](/guides/music-discovery/).
+
+## How do I set integrations and other options?
+
+`integrations.<name>` takes `url`, `publicUrl` and `apiKey`. `secrets.env` maps a variable
+to a Secret key. `features`, `concurrency` and `app.env` set other variables. Pods do not
+restart when a Secret changes: restart them yourself.
+
+```yaml
+integrations:
+  jellyfin:
+    url: http://jellyfin.media.svc.cluster.local:8096
+    publicUrl: https://jellyfin.example.com
+    apiKey: { secret: lumastra-integrations, key: jellyfin }
+```
+
+A value from the chart wins over `settings.json` and locks the field in the admin UI.
+
+## Upgrades and GitOps
+
+With the moving `stable` tag, `helm upgrade` changes nothing, so pin a version or a digest:
+
+```bash
+docker buildx imagetools inspect ghcr.io/lumastra/lumastra:stable   # prints the digest
+```
+
+```yaml
+image:
+  digest: 'sha256:<the Digest line from the command above>'
+```
+
+Back up first, check out the chart version you want and run `helm upgrade`. Web pods roll
+one at a time. The worker restarts, so jobs pause and resume. The Live TV proxy stays
+untouched. A web pod that never becomes ready stalls the roll: fix the values, then delete
+that pod. See [Zero-downtime updates](/guides/zero-downtime-updates/).
+
+An Argo CD Application can install the chart from the repository. Pin `targetRevision` to
+a tag and create the Secrets before the first sync:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: lumastra, namespace: argocd }
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Sapd/lumastra
+    targetRevision: v0.1.4
+    path: deploy/helm/lumastra
+    helm:
+      releaseName: lumastra
+      valuesObject:
+        app: { origin: 'https://media.example.com' }
+        secrets: { existingSecret: lumastra }
+        image: { tag: 0.1.4 }
+        persistence:
+          dataAnnotations: { argocd.argoproj.io/sync-options: 'Prune=false,Delete=false' }
+  destination: { server: 'https://kubernetes.default.svc', namespace: lumastra }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
+```
+
+## How do I move from Docker Compose?
+
+Plan a maintenance window and back up first.
+
+1. Install with `web.replicas: 0`, `worker.replicas: 0` and `valkey.tasks.replicas: 0`
+   (see `ci/migration-values.yaml`). A running app would migrate an empty database.
+2. Put the old master key in the Secret. If you never set one, it is in `/config/master.key`.
+3. Copy the old `config` volume into the new claim, owned by user 1000, with a helper pod
+   that mounts the claim (`kubectl apply -f config-copy.yaml`):
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata: { name: config-copy, namespace: lumastra }
+   spec:
+     restartPolicy: Never
+     containers:
+       - name: copy
+         image: busybox:1.37
+         command: ['sleep', '3600']
+         volumeMounts: [{ name: config, mountPath: /config }]
+     volumes:
+       - name: config
+         persistentVolumeClaim: { claimName: lumastra-config }
+   ```
+
+   ```bash
+   kubectl -n lumastra wait --for=condition=Ready pod/config-copy
+   tar -C /path/to/old/config -cf - . | kubectl -n lumastra exec -i config-copy -- tar -C /config -xf -
+   kubectl -n lumastra exec config-copy -- chown -R 1000:1000 /config
+   kubectl -n lumastra delete pod config-copy
+   ```
+
+4. Dump and restore the database. Skip the extension entries, which a non-superuser
+   cannot restore:
+
+   ```bash
+   pg_dump -U lumastra -d lumastra --no-owner --no-acl -F c -f lumastra.dump
+   pg_restore -l lumastra.dump | grep -v ' EXTENSION ' > restore.list
+   pg_restore -U lumastra -h 127.0.0.1 -p 15432 -d lumastra --no-owner --no-acl -L restore.list lumastra.dump
+   ```
+
+   Port 15432 is a `kubectl port-forward` to the `<cluster>-rw` Service.
+5. Optional, to keep queued jobs: set `valkey.tasks.rdbImport.enabled: true`, copy
+   `dump.rdb` into the tasks volume, then scale the tasks Valkey to 1.
+6. Scale web and worker up. In **Admin → Settings**, remove old integration URLs. If your
+   SSO lived only in the admin UI, set `auth.oidc.configuredInAdminUi: true`.
+7. Compare the image of both installs, then switch DNS. Keep the old install, stopped.
+
+## How do I check and troubleshoot it?
+
+`/api/health/ready` on web and worker answers `200` when the database and the task Valkey
+are reachable. **Admin → System → Health → Cluster** shows pod usage. The router logs one
+line per request, path only. One `upstream=` value for a session means affinity works:
+
+```bash
+kubectl -n lumastra logs -l app.kubernetes.io/component=router --prefix --since=2h --max-log-requests=4 \
+  | grep 'session=<PlaySessionId>' | grep -o 'upstream=[^ ]*' | sort | uniq -c
+```
+
+**Playback answers `403 ip_mismatch`.** Check that `LUMASTRA_MASTER_KEY` is in the Secret
+and `router.hop.enabled` is true. Restart the router pods after a key rotation. Do not
+trust the whole pod network as a workaround.
+
+**Playback stalls with `503`.** One session reaches several pods. Your Ingress must point
+at the Service `lumastra`, `router.enabled` must be true and every web pod ready. The
+router log should show `key=token` or `key=session`, not `key=ip`.
+
+**A web pod is `OOMKilled`.** Lower `LUMASTRA_MAX_CONCURRENT_TRANSCODES`, raise the memory
+limit or use a GPU.
+
+## What does not work yet?
+
+- Downloads and direct-play streams that run longer than `web.drainSeconds` (30) are cut
+  during a roll. The client resumes with a range request.
+- The Live TV proxy has no drain mode. A restart drops channels that are still open.
+- Web is a StatefulSet. Rolls are serial, capacity is one less during a roll, and a stuck
+  roll needs a manual `kubectl delete pod`.
