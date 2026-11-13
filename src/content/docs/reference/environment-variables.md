@@ -90,7 +90,7 @@ Mostly relevant for **very large libraries** or busy servers. See
 | `LUMASTRA_FS_MAX_CONCURRENCY`      | `24`    | Process-wide cap on concurrent guarded filesystem ops; kept under `UV_THREADPOOL_SIZE` so a slow NFS mount can't saturate the pool. |
 | `LUMASTRA_FS_TIMEOUT_MS`           | `15000` | Per-op timeout for guarded filesystem ops (a hung NFS read fails fast instead of hanging the task). |
 | `LUMASTRA_CONCURRENCY_*`           | varies  | Per-resource-class task caps (the heavy-job parallelism knobs): `CPU` _auto_ `floor(cores/2)` 1–6, `IO` _auto_ `cores` 4–12, `INGEST` 2, `BULK` 3, `EMBEDDING` 1, `ANALYSIS` 1, `MAINTENANCE` 1, `DISCOVERY` 1. Under per-task queues `INGEST`+`BULK` fold into `IO` and `ANALYSIS` into `CPU` (caps summed). |
-| `LUMASTRA_LOW_RAM_MODE`            | `false` | Caps the Node.js heap and reduces Valkey connection overhead on the worker. Recommended on constrained hosts (Raspberry Pi-class, <4 GB). See [Memory](/start/quick-start/#memory). |
+| `LUMASTRA_LOW_RAM_MODE`            | `false` | Caps the Node.js heap and reduces Valkey connection overhead on the worker. Recommended on constrained hosts (Raspberry Pi-class, <4 GB). See [Performance tuning](/guides/performance-tuning/#small-or-constrained-hosts). |
 
 > Pool totals are per instance; the sum across all replicas must stay under Postgres'
 > `max_connections` (default 100). Raise `max_connections` if you scale pools or replicas.
@@ -202,7 +202,7 @@ runtime, not bundled by Lumastra (review the
 | `MODEL_ID`               | sidecar           | No                | `msclap-2023`              | Model identifier recorded with the embeddings                                                         |
 | `HF_HOME`                | sidecar           | No                | `/app/.cache/huggingface`  | HuggingFace cache for the downloaded CLAP weights. Mount a persistent volume here to download once    |
 | `SONIC_MODEL_FP`         | sidecar           | No                | —                          | Absolute in-container path to a local CLAP weights `.pth`. Set it (with a read-only mount) for air-gapped / offline installs; the sidecar then loads locally and never reaches HuggingFace |
-| `SONIC_MEMORY_LIMIT_MB`  | sidecar           | No                | container limit            | Memory the sidecar plans its jobs with. Normally leave unset; see [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory) |
+| `SONIC_MEMORY_LIMIT_MB`  | sidecar           | No                | container limit            | Memory the sidecar plans its jobs with. Normally leave unset; see [Sonic embedder sidecar](/guides/deploy-docker/#sonic-embedder-sidecar) |
 | `SONIC_MEMORY_RESERVE_MB` | sidecar          | No                | max(512, 10 % of limit)    | Headroom kept out of the job budget                                                                   |
 | `SONIC_MAX_CONCURRENT_JOBS` | sidecar        | No                | CPUs ÷ threads, max 2      | Heavy jobs at once; the memory gate may run fewer                                                     |
 | `SONIC_ADMISSION_QUEUE_TIMEOUT_SEC` | sidecar | No               | `120`                      | How long a request may wait for memory before the sidecar answers 429                                 |
@@ -268,7 +268,7 @@ assets and keep the Lumastra identity. See
 :::tip[Behind a reverse proxy?]
 Keep `manifest.json` and the icon files reachable **without** authentication, or the
 PWA install prompt shows a generic icon: the browser fetches them credential-less.
-See [SSO with Authentik](/guides/sso-authentik/#2-wire-up-the-reverse-proxy).
+See [Authentication](/guides/authentication/#if-you-use-forward-authentication).
 :::
 
 ## Navigation links
@@ -344,7 +344,7 @@ the default relay is run by the Lumastra maintainer and is covered on that page.
 | `DOWNLOAD_SESSIONS_MAX_PER_USER` | `10` | Audiobook download sessions one user may hold at once. Values are rounded down and clamped to 1–100. A further start answers `422 quota_exceeded`. |
 
 Keep query strings out of your access logs: these download links carry a credential in
-the URL. See [Access logs: keep credentials out](/guides/deploy-docker/#access-logs-keep-credentials-out).
+the URL. See [Reverse proxy: keep credentials out of access logs](/guides/reverse-proxy/#keep-credentials-out-of-access-logs).
 
 See [Audiobooks](/guides/audiobooks/) for the rest of the setup.
 

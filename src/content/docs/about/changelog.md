@@ -82,7 +82,7 @@ Authentik, Authelia or another forward-auth proxy. **If you ran a pre-release bu
 forward auth, add that line before you upgrade**, or nobody can sign in. With forward
 auth off, a proxy trusted only for client IP addresses can no longer sign anyone in by
 passing an `X-Forwarded-User` header through. See
-[Authentication](/guides/authentication/#forward-authentication).
+[Authentication](/guides/authentication/#if-you-use-forward-authentication).
 
 #### Changes since the 2026-10-15 release candidate
 
@@ -112,7 +112,7 @@ passing an `X-Forwarded-User` header through. See
 - Each release now says whether the Live TV proxy needs an update, and Admin → System
   health → Cluster warns when the running proxy is behind or no longer works with the app.
   Update the proxy image to this release once, so later checks can tell. See
-  [Live TV proxy](/guides/deploy-kubernetes/#live-tv-proxy).
+  [Live TV proxy](/guides/deploy-kubernetes-advanced/#how-do-i-add-live-tv-or-the-sonic-sidecar).
 - One remote control for every Lumastra device on your account. From the iPhone app or
   the web, start a title on another device, pause, seek, pick tracks, skip an intro, set a
   sleep timer, manage the music queue, tune Live TV, join a party or send a message.
@@ -143,7 +143,7 @@ passing an `X-Forwarded-User` header through. See
   the new grouping to its existing channels.
 - The sonic sidecar analyses long tracks in chunks, so it needs far less memory (a
   30-minute track about 0.9 GB instead of 8 GB). See
-  [Sonic sidecar memory](/guides/deploy-docker/#sonic-sidecar-memory).
+  [Sonic sidecar memory](/guides/deploy-docker/#sonic-embedder-sidecar).
 - Albums no longer show another album's cover, GIF, TIFF and AVIF covers are converted
   instead of failing, and artist images are retried when a provider is down.
 - Provider images stay visible while the image host refuses requests.
