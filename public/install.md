@@ -193,7 +193,7 @@ the log still shows migration progress, run the same command again. Then check:
 ```bash
 cd ~/lumastra && \
   curl -fsS http://localhost:3000/api/health/ready && \
-  docker compose logs lumastra | grep -c 'Schema migration completed successfully' && \
+  docker compose logs lumastra | grep -c 'Migration completed successfully' && \
   docker compose exec lumastra ls /data/media
 ```
 

@@ -21,7 +21,7 @@ docker compose logs --tail 50 lumastra lumastra-worker
 ```
 
 All services should show `healthy`. Right after a start, the `lumastra` log contains
-`Schema migration completed successfully`. **Admin → System → Health** shows the state
+`Migration completed successfully`. **Admin → System → Health** shows the state
 of each part too.
 
 ## 3. Back up
@@ -89,6 +89,8 @@ echo "STREAM_PROXY_URL=http://lumastra-proxy:3000" >> .env
 echo "STREAM_PROXY_SECRET=$(openssl rand -hex 24)" >> .env
 docker compose --profile livetv-proxy up -d
 ```
+
+<a id="sonic-embedder-sidecar"></a>
 
 ### Add sound-based music features
 

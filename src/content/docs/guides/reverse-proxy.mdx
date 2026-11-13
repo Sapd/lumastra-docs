@@ -5,14 +5,12 @@ description: Put Lumastra behind HTTPS with Caddy, nginx or Traefik. One setup p
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-Lumastra speaks plain HTTP on port 3000. A reverse proxy adds HTTPS. The iPhone, iPad and
-Apple TV apps only connect to HTTPS with a certificate the device trusts.
+Lumastra speaks plain HTTP on port 3000. A reverse proxy adds HTTPS. The Apple apps only connect to HTTPS with a certificate the device trusts.
 
 ## 1. Prepare
 
 Point a DNS name such as `media.example.com` at your server and forward ports 80 and 443
-from your router to it. Use a name of its own: a subpath such as `example.com/lumastra/`
-is not supported.
+from your router to it. A subpath such as `example.com/lumastra/` is not supported.
 
 Then set `ORIGIN` to your public address, in the folder with your `.env`:
 
@@ -28,7 +26,7 @@ docker compose up -d
 
 Each setup forwards to port 3000, passes the client address, does not buffer streams,
 allows long timeouts and 50 MB uploads, and removes the sign-in headers (see
-[below](#sign-in-headers)). No proxy yet? Use Caddy: it gets certificates by itself.
+[below](#sign-in-headers)). No proxy yet? Use Caddy.
 
 <Tabs>
 <TabItem label="Caddy">
@@ -72,9 +70,8 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name media.example.com;
 
     ssl_certificate     /etc/letsencrypt/live/media.example.com/fullchain.pem;
@@ -114,7 +111,7 @@ docker network create --subnet 172.30.0.0/24 --ip-range 172.30.0.128/25 proxy
 ```
 
 Save this as `docker-compose.override.yml` next to `docker-compose.yml`. Compose merges
-it, so keep the `ports:` block (it listens on the host only).
+it, so keep the `ports:` block.
 
 ```yaml
 services:
@@ -174,7 +171,8 @@ the Traefik address and `TRUSTED_PROXY_IPS`.
 1. Run `curl -i https://media.example.com/api/health`. You should see `200` and
    `{"status":"pass"}`. A certificate error means the certificate is missing.
 2. Run the next command. It must print `401`. A `200` means anyone can sign in as any
-   user: stop and fix the proxy.
+   user: stop and fix the proxy. A default install prints `401` anyway, because forward auth
+   is off. The check matters once you turn it on.
 
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-User: admin' https://media.example.com/api/me
@@ -191,18 +189,18 @@ the Traefik address and `TRUSTED_PROXY_IPS`.
 With [forward auth](/guides/authentication/#if-you-use-forward-authentication), the proxy
 names the user in `X-Forwarded-User`, `X-Forwarded-Groups` and `X-Authentik-Name`. A proxy
 forwards headers it does not know, so anyone could send `X-Forwarded-User: admin`. Keep
-those lines in your config. If you changed `USERHEADER`, `GROUPHEADER` or `NAMEHEADER`,
+those lines. If you changed `USERHEADER`, `GROUPHEADER` or `NAMEHEADER`,
 remove those names instead.
 
 ### TRUSTED_PROXY_IPS
 
-Lumastra believes only the proxies on this list: it reads their `X-Forwarded-For` for the
-client address, and with `FORWARD_AUTH_ENABLED=true` their sign-in headers. Empty is safe,
-but every client then looks like the proxy.
+Lumastra believes only the proxies on this list: their `X-Forwarded-For` for the client
+address and, with `FORWARD_AUTH_ENABLED=true`, their sign-in headers. Empty is safe, but
+every client then looks like the proxy.
 
 - A proxy in the same compose file: give it a fixed address and list only that address.
-- A proxy installed on the Docker host: leave it empty. Lumastra sees the network
-  gateway, which every program on the host shares.
+- A proxy on the Docker host: leave it empty. Lumastra sees the network gateway, which
+  every program on the host shares.
 - Never list a range wider than `/24`. With forward auth on, every address in it could
   sign in as any user. With two proxies, such as Cloudflare and then nginx, list both. Or
   let nginx restore the client address, as shown below, and list only nginx.
@@ -218,7 +216,7 @@ but every client then looks like the proxy.
 
 **You use another proxy.** It must forward every path to Lumastra: `/api/v1/`, `/oauth/`,
 `/j`, `/subsonic/`, `/api/plugin-webhooks/`, `/api/health`, `/metrics` and `/manifest.json`.
-Apps sign in there themselves, so an auth layer such as Authentik must skip them.
+Apps sign in there themselves: skip them in an auth layer such as Authentik.
 
 **You use Nginx Proxy Manager.** It runs in a container and cannot reach `127.0.0.1`.
 Change `127.0.0.1:3000:3000` to `3000:3000` in `docker-compose.yml`, forward to
@@ -227,7 +225,7 @@ sign-in header and timeout lines into **Advanced**.
 
 ### Keep credentials out of access logs
 
-Apps send tokens in the query string, so log paths without it. Traefik 3.7.3 or newer:
+Apps send tokens in the query string: log paths without it. Traefik 3.7.3 or newer:
 `--accesslog.fields.queryparameters.defaultmode=drop`. nginx and Caddy need a log format
 without the query string.
 
@@ -239,16 +237,15 @@ video, audio and HLS.
 **502 Bad Gateway.** The upstream must be `http://` on port 3000. A proxy in a container
 cannot use `127.0.0.1`: use the service name `lumastra`.
 
-**504 on Traefik.** It picked the wrong network. Keep the `traefik.docker.network` label.
+**504 on Traefik.** Wrong network: keep the `traefik.docker.network` label.
 
 **Login fails with 403.** `ORIGIN` differs from the address in the browser. Remove any
 `:3000` and restart.
 
-**Sign-in works, then the sign-in page returns.** You opened the `http://` address while
-`ORIGIN` is `https://`.
+**Sign-in works, then the sign-in page returns.** You opened the `http://` address.
 
 **Updates arrive late, playback stops after a pause, or uploads fail with 413.** Turn
-buffering off, raise the timeouts and set the body limit to at least 50 MB.
+buffering off, raise the timeouts and allow 50 MB bodies.
 
 **The Apple app cannot connect.** Open your address in Safari on that device. A
 certificate warning there fails in the app too.

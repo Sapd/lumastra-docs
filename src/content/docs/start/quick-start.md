@@ -10,7 +10,7 @@ Subsonic apps. This page installs it with Docker Compose. To use Kubernetes inst
 
 ## What you need
 
-- Docker 24 or newer with Compose 2.20 or newer ([install Docker](https://docs.docker.com/engine/install/))
+- Docker 24 or newer with Compose 2.20 or newer ([install Docker](https://docs.docker.com/engine/install/)). Then run `sudo usermod -aG docker $USER` and log out and in again, or put `sudo` before each `docker` command.
 - 8 GB of RAM (a small library runs on 4 GB) and 20 GB of disk
 - An x86-64 CPU from 2011 or newer, or any 64-bit ARM CPU
 - Internet access on the first start. Lumastra downloads FFmpeg then.
@@ -80,13 +80,13 @@ Open `http://localhost:3000/setup` in a browser on the same machine. No browser 
 server? See "You open Lumastra from another computer" below. Choose **Built-in login**
 and pick a username and password. You should now see **Your account is ready**.
 
-The next page asks for a TMDB API key. It is free: see
-[how to get one](/guides/integrations/). Without it, titles and artwork come from file
-names only. Everything else can wait: use **Skip for now**.
+The next page is a list of optional settings, with a TMDB API key as one field. The key is
+free: see [how to get one](/guides/integrations/). Without it, titles and artwork come from
+file names only. Everything else can wait: use **Skip for now**.
 
 ## 6. Add your libraries
 
-The library step lists your media folder and the folders inside it under **Found these
+The library step lists the folders inside your media folder under **Found these
 folders**. Tick the ones you want and select the button that reads **Add N libraries and continue**. Lumastra
 scans them and your titles appear in the library. Folder layout is in
 [Organizing your media](/guides/organizing-media/).

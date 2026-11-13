@@ -184,9 +184,10 @@ the Secret, the Ingress controller serves its own certificate and the browser wa
 ```bash
 curl -sfL https://get.k3s.io | sh -
 mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $USER ~/.kube/config
+echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc && export KUBECONFIG=~/.kube/config
 ```
 
-Install `helm` from [helm.sh](https://helm.sh/docs/intro/install/).
+Without `KUBECONFIG`, plain `kubectl` on k3s tries `/etc/rancher/k3s/k3s.yaml` and fails with `permission denied`. Install `helm` from [helm.sh](https://helm.sh/docs/intro/install/).
 
 **You have no DNS name yet.** Add the node's address to the hosts file of the computer you
 browse from, for example `203.0.113.10 media.example.com`. The name must match
