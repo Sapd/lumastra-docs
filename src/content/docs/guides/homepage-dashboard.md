@@ -33,7 +33,7 @@ change before 1.0. Any change will be listed in the changelog.
 ## 1. Create a token
 
 Before you start, turn on the `FEATURE_DEVICE_AUTH` feature flag. Service tokens
-require it (see [Authentication](/guides/authentication/#service-tokens)).
+require it (see [Authentication](/developers/api/#service-tokens)).
 
 Create a dedicated integration token. It can read the integration endpoints and nothing
 else, so a leaked Homepage configuration exposes only the summary:

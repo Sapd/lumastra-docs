@@ -132,8 +132,8 @@ raise timeouts above the 10-second keepalive interval. On nginx, use
 `proxy_buffering off;` and an appropriate `proxy_read_timeout`.
 
 See [Authentication](/guides/authentication/) for the full proxy-trust model
-and [Single sign-on with Authentik](/guides/sso-authentik/) for a complete
-nginx example with all the bypass locations wired up.
+and [the forward-auth section of Authentication](/guides/authentication/#if-you-use-forward-authentication)
+for a complete nginx example with all the bypass locations wired up.
 
 ## Generated media paths
 

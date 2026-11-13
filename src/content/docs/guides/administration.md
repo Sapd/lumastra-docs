@@ -391,7 +391,7 @@ immediately ends that user's running Live TV streams.
 Taking someone out of every identity-provider group stops new admin/permission grants
 from applying, but a session or token issued earlier can keep working until it expires.
 To fully revoke a departing user's access, **disable their account**. See Offboarding
-in [Authentication](/guides/authentication/#offboarding).
+in [Authentication](/guides/authentication/#if-something-goes-wrong).
 :::
 
 The Admin toggle pins a user independently of their identity-provider groups.

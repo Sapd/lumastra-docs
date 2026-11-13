@@ -1,432 +1,229 @@
 ---
 title: Authentication
-description: The three ways users sign in (forward auth, built-in login, and OIDC), plus the setup wizard, proxy trust, and admin access.
+description: Sign in to Lumastra with built-in accounts, OIDC (step by step with Authentik) or forward auth, plus admin access and recovery.
 sidebar:
   order: 2
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import AuthFlowDiagram from '../../../components/diagrams/AuthFlowDiagram.astro';
-import SignInOptionsDiagram from '../../../components/diagrams/SignInOptionsDiagram.astro';
+Lumastra has three ways to sign in. You can use them side by side. The iPhone, iPad and
+Apple TV apps work with all three: the user approves a code in a signed-in browser.
 
-Built-in accounts, OIDC, and forward auth can run side by side. Single sign-on is
-part of the free core.
-
-| Method | Use when |
-| ------ | -------- |
-| **Built-in accounts** | You want local usernames and passwords without an identity provider. |
-| **OIDC** | You have an identity provider and want Lumastra to handle the login flow directly. |
-| **Forward auth** | Your reverse proxy already authenticates users through an identity provider. |
-
-The iPhone, iPad and Apple TV apps work with all three: approve their device code in a
-signed-in browser.
-
-<SignInOptionsDiagram />
-
-## First run: the setup wizard
-
-An empty database opens `/setup`. Its first screen, **Check your install**, shows what
-the server found before any account exists: the database, Valkey, the optional sidecars
-(sonic embedder, Live TV stream proxy), hardware transcoding and FFmpeg, whether the
-config volume keeps your settings, your reverse proxy and HTTPS, and the running nodes.
-Items marked with a warning are worth fixing first: a config folder that is not a
-mounted volume loses settings on restart, and a proxy missing from `TRUSTED_PROXY_IPS`
-breaks forward auth on the next screen. Nothing on that screen blocks setup;
-**Recheck** reads everything again after you fix something, and **Copy as text** gives
-you a summary to paste into a support request.
-
-The wizard then creates the first admin. Single sign-on is recommended and is
-pre-selected: OIDC, or forward auth when the wizard sees an identity from a trusted
-reverse proxy. Built-in login is one click away if you have no identity provider.
-
-- **OIDC:** configure the provider first; the first sign-in must belong to an
-  `ADMIN_GROUPS` group, otherwise no admin is created.
-- **Forward auth:** the forwarded user must belong to an `ADMIN_GROUPS` group.
-- **Built-in:** choose a username and password; this enables `AUTH_NATIVE_LOGIN_ENABLED`.
-
-The next step is titled **Your account is ready. Now the basics**. Everything on it is
-optional and can be changed later in the admin settings, and it only shows what is
-wrong, such as a background worker that does not answer or a configured service that is
-down. Then you add your media folders and, if you like, connect Audiobookshelf. See
-[Quick Start](/start/quick-start/#6-add-your-libraries).
-
-Setup stays locked after the first admin is created, even if the install later loses
-all admins. Restore the user's admin group at the IdP (effective on their next
-forward-auth request or OIDC sign-in), or set `SETUP_UNLOCK=1` in the container
-**environment** and restart. This reopens `/setup` only while no admin exists. Unset it
-once recovery is complete; `settings.json` cannot unlock setup. Local/dev recovery is
-also documented in `scripts/setup-unlock.ts`.
-
-:::note[When the session cookie is Secure]
-Built-in and OIDC sessions use a cookie that's marked `Secure` unless Lumastra detects
-plain HTTP. It detects that on the built-in sign-in request, from the `Origin` header the
-browser sends or from the `X-Forwarded-Proto` (or `Forwarded`) header your reverse proxy
-sends. Lumastra uses the proxy header only from an IP address in `TRUSTED_PROXY_IPS`, or
-from any IP address while that list is empty.
-
-This lets built-in sign-in work over plain HTTP on your local network, and HTTPS sites
-keep `Secure`. OIDC sign-in over plain HTTP needs `ORIGIN` set to that `http://` address.
-Behind a reverse proxy or on HTTPS, `ORIGIN=https://your-domain` is required: it marks
-the cookie `Secure` on every request, including an app sign-in that sends no `Origin`
-header through an inner proxy that reports `http`. Forward auth alone (no login cookie)
-is unaffected.
-:::
+| Method | Pick it when |
+| --- | --- |
+| Built-in accounts | You have no identity provider. Nothing to set up. |
+| OIDC | You have a provider such as Authentik or Keycloak. The simplest single sign-on. |
+| Forward auth | Your reverse proxy already signs users in. |
 
 ## Built-in login
 
-Lumastra stores accounts itself; users sign in at **`/login`**, and an admin creates
-and manages accounts in **Admin → Users**. No external service is involved.
-
-- Enabled by `AUTH_NATIVE_LOGIN_ENABLED` (set automatically when you create the first
-  admin via the built-in path; you can also set it in env or admin settings).
-- Session lifetime is controlled by `NATIVE_AUTH_SESSION_TTL_DAYS` (default 30).
-- Sessions are database-backed, so they work across replicas. There's no email-based
-  password reset yet: an admin resets passwords from **Admin → Users**.
-- Locked out of the only admin account? Set a new password from the host. It prints a
-  generated password and signs that user out everywhere:
-
-  ```bash
-  docker compose exec lumastra npx tsx --tsconfig tsconfig.scripts.json scripts/reset-password.ts <username>
-  ```
-
-  To choose the password yourself, add `-e LUMASTRA_NEW_PASSWORD='…'` after `exec`.
-
-## OIDC single sign-on
-
-Lumastra acts as an OpenID Connect **relying party** (Authorization Code + PKCE). When
-OIDC is enabled, the `/login` page (and the setup wizard) show a **"Sign in with
-&lt;provider&gt;"** button; the rest of the flow is your identity provider's. An OIDC
-session is the same `lumastra_session` cookie a built-in login produces, so everything
-downstream behaves identically.
-
-Enable it with three variables (it's off by default):
-
-```dotenv
-AUTH_OIDC_ENABLED=true
-AUTH_OIDC_ISSUER=https://idp.example.com/application/o/lumastra/
-AUTH_OIDC_CLIENT_ID=your-client-id
-AUTH_OIDC_CLIENT_SECRET=your-client-secret   # omit for a public (PKCE-only) client
-```
-
-- **Redirect URI** to register at your provider: `https://your-domain/auth/oidc/callback`
-  (auto-derived from `ORIGIN`; override with `AUTH_OIDC_REDIRECT_URI` only if needed).
-- **Admin** is granted by the groups claim: `AUTH_OIDC_GROUPS_CLAIM` (default `groups`)
-  matched case-insensitively against `ADMIN_GROUPS`, same as forward auth. Group
-  sync is **promote-only**: it can grant admin but never silently removes it.
-- **Account linking:** a first OIDC login auto-links to an existing account only when
-  the provider asserts a **verified** email matching just one account
-  (`AUTH_OIDC_LINK_BY_VERIFIED_EMAIL`, on by default; never links on an *unverified*
-  email). Linking by username is off by default (`AUTH_OIDC_LINK_BY_USERNAME`).
-
-:::caution[Allowlist the OIDC paths if a proxy is in front]
-If you *also* run a forward-auth proxy, it must let `/auth/oidc/login` and
-`/auth/oidc/callback` through **unauthenticated**, otherwise the proxy intercepts the
-login round-trip before it reaches Lumastra.
-:::
-
-For a full, provider-by-provider walkthrough (Authentik, Keycloak, Google, and a local
-Dex test stack), see [Single sign-on with OIDC](/guides/sso-oidc/).
-
-## Forward authentication
-
-Use this if you already run an identity provider and want SSO without per-app OIDC
-clients. Identity arrives in HTTP headers from your reverse proxy, and Lumastra trusts
-them only when forward auth is turned on and only from known peers.
-
-Forward auth is **off by default**. Turn it on with:
+The setup wizard creates the first admin with a username and password. Users sign in at
+`/login`. Sessions last 30 days (`NATIVE_AUTH_SESSION_TTL_DAYS`). Passwords are hashed with
+scrypt, and sign-in is rate-limited with account lockout. There is no built-in MFA. Admins
+add accounts and reset passwords at **Admin → Users**. There is no email reset. If you lock yourself out, set a new password from the host. It prints one
+and signs that user out everywhere:
 
 ```bash
-FORWARD_AUTH_ENABLED=true
+docker compose exec lumastra npx tsx --tsconfig tsconfig.scripts.json scripts/reset-password.ts <username>
 ```
 
-It can only be set as an environment variable (in `.env` or the container environment),
-like `TRUSTED_PROXY_IPS`. Admin → Settings shows its value but can't change it, and a
-value in `settings.json` is ignored with a warning in the startup log.
+## Set up Authentik
 
-While it's off, Lumastra ignores the identity headers from every address, so setting
-`TRUSTED_PROXY_IPS` to get real client IP addresses can never sign anyone in. The setup
-wizard tells you when your proxy sends identity headers while forward auth is off.
+These steps use Authentik as an OIDC provider. Lumastra must be reachable over HTTPS with
+`ORIGIN` set (see the [Reverse proxy guide](/guides/reverse-proxy/)).
 
-:::caution[Upgrading a forward-auth install]
-Installs from before October 2026 read the headers without this switch. If you sign in
-through forward auth, add `FORWARD_AUTH_ENABLED=true` **before** you upgrade, or nobody
-can sign in. With Helm, `auth.forwardAuth.enabled: true` sets it (chart 0.1.0-beta.4 or
-later).
-:::
+1. In Authentik, open **Directory → Groups** and create a group such as `lumastra-admins`.
+   Add yourself to it.
+2. Create an application with an **OAuth2/OpenID provider**. Set the client type to
+   confidential. Set the redirect URI to `https://media.example.com/auth/oidc/callback`,
+   matched exactly, with your own address.
+3. Select the scopes `openid`, `profile` and `email`. Make sure the ID token carries the
+   user's groups in a `groups` claim. If the built-in mappings do not, add a scope mapping
+   that does.
+4. Copy the client ID and the client secret. The issuer URL has the form
+   `https://auth.example.com/application/o/<application-slug>/`.
+5. Add the settings to `.env`. Use your own values:
 
-<AuthFlowDiagram />
+   ```bash
+   cat >> .env <<EOF
+   AUTH_OIDC_ENABLED=true
+   AUTH_OIDC_ISSUER=https://auth.example.com/application/o/lumastra/
+   AUTH_OIDC_CLIENT_ID=<client id>
+   AUTH_OIDC_CLIENT_SECRET=<client secret>
+   AUTH_OIDC_PROVIDER_NAME=Authentik
+   ADMIN_GROUPS=lumastra-admins
+   EOF
+   docker compose up -d
+   ```
 
-**Users are auto-provisioned** on their first authenticated request. You don't
-pre-create accounts; you manage users and their groups in your identity provider.
-Lumastra integrates with Jellyfin and matches usernames case-insensitively, so a
-forwarded username should match the corresponding Jellyfin username (case need not be
-identical).
+6. Open `https://media.example.com/login`. You should see **Sign in with Authentik**.
+   Sign in with the account from step 1. On a fresh install, use `/setup` instead: the
+   first account becomes admin only if it is in an `ADMIN_GROUPS` group.
 
-### Proxy trust: fail-closed
+Later users are created at their first sign-in. A user in an `ADMIN_GROUPS` group becomes
+admin. Group sync only promotes: removing a group never silently removes admin. An admin
+can pin a user's status at **Admin → Users**. On Kubernetes, see the `auth.oidc` values in
+[Advanced Kubernetes](/guides/deploy-kubernetes-advanced/#how-do-i-set-up-sign-in).
 
-Because identity arrives in plain HTTP headers, Lumastra only trusts them from known
-peers, and only with `FORWARD_AUTH_ENABLED=true`:
+## If you use another OIDC provider
 
-- Set **`TRUSTED_PROXY_IPS`** to your reverse proxy's address, or the address of every
-  proxy in a chain. **Required in production**. List proxies only: with forward auth on,
-  every address in a range such as `192.168.0.0/16` can send identity headers and sign
-  in as anyone. The Security Self-Check warns about IPv4 ranges wider than `/24`. See
-  [Reverse proxy](/guides/reverse-proxy/#trusted_proxy_ips).
-- Or set **`LUMASTRA_TRUST_ANY_PROXY=true`** on a single private host where the
-  container isn't directly reachable.
+Register the same redirect URI and set the same variables. On plain HTTP, built-in sign-in
+still works, but OIDC needs `ORIGIN` set to that `http://` address. Provider differences:
 
-The address Lumastra checks is the **TCP peer it sees**, which isn't always your proxy's
-own address. If the proxy runs on the Docker host and reaches the app through a
-published port, the peer is the Docker network's gateway (for example `172.21.0.1`), and
-trusting that trusts every process on the host. Run the proxy on the same compose
-network instead; see [Deploy with Docker → Reverse proxy](/guides/deploy-docker/#reverse-proxy--tls).
-If headers are rejected, the setup wizard and the logs (`identity headers ignored —
-untrusted TCP peer`) name the peer address that sent them.
+- **Keycloak:** groups arrive as `realm_access.roles`. Set
+  `AUTH_OIDC_GROUPS_CLAIM=realm_access.roles` and `AUTH_OIDC_SCOPES=openid profile email roles`.
+- **Google:** tokens carry no groups, so every user starts as non-admin. Promote them at
+  **Admin → Users**.
+- **A public client with no secret:** leave `AUTH_OIDC_CLIENT_SECRET` out.
 
-A trusted proxy must also remove the identity headers a client sends. With forward auth
-on, Lumastra believes them from every address in `TRUSTED_PROXY_IPS`, so a proxy that
-passes a client's `X-Forwarded-User` through lets anyone sign in as anyone. The setups
-in the [Reverse proxy guide](/guides/reverse-proxy/#sign-in-headers) remove them. With
-forward auth off, Lumastra ignores and logs such headers, and `npm run doctor` and the
-admin health page warn about them.
+Optional settings:
 
-:::caution
-If forward auth is on but neither is set, identity headers are rejected and **nobody can
-sign in via forward auth**. This is intentional anti-spoofing: without it, anyone able to reach the
-container could forge an admin header. (Built-in and OIDC login are unaffected.)
-:::
+```dotenv
+AUTH_OIDC_SCOPES=openid profile email   # must include openid
+AUTH_OIDC_GROUPS_CLAIM=groups           # a dot path works for nested claims
+AUTH_OIDC_LINK_BY_VERIFIED_EMAIL=true   # link a first sign-in to an account with the same verified email
+AUTH_OIDC_LINK_BY_USERNAME=false        # less safe; only for moving from built-in accounts
+```
 
-The header names are configurable: **`USERHEADER`** (default `X-Forwarded-User`) and
-**`GROUPHEADER`** (default `X-Forwarded-Groups`). An optional third header,
-**`NAMEHEADER`** (default `x-authentik-name`), carries the user's human-readable
-display name. If your proxy sends it, other users see it (for example, in "who else
-watched this"); leave it blank and Lumastra keeps showing the username. `NAMEHEADER`
-is trusted on the same terms as `USERHEADER` (forward auth on, `TRUSTED_PROXY_IPS` only).
+**The provider uses a private CA.** The server calls the provider itself, so it must trust
+the certificate. Mount the CA file, readable by user 1000, and set it:
 
-nginx drops a header whose value is empty, so if your proxy always sends the groups
-header (Authentik's outpost does), a user with no groups can be read as still having
-their previous groups (and admin rights). Either add the nginx `map` from the SSO
-guide (recommended), or turn on `FORWARD_AUTH_GROUPS_ALWAYS_SENT` (off by default) so
-a user with no groups is read as "no groups" instead. See
-[Setting up Authentik](/guides/sso-authentik/) for the full mechanism.
+```yaml
+services:
+  lumastra:
+    environment:
+      NODE_EXTRA_CA_CERTS: /certs/idp-ca.crt
+    volumes:
+      - ./certs/idp-ca.crt:/certs/idp-ca.crt:ro
+```
 
-### Setting it up
+The provider's host name must also resolve inside the container. A `*.localhost` name
+never does. The setup wizard's **Test connection** names the cause of a failure.
 
-For a concrete walkthrough with Authentik (provider, reverse-proxy config, and the
-exact Lumastra env), see [Single sign-on with Authentik](/guides/sso-authentik/).
+**Signing out at the provider should end the Lumastra session.** Set the provider's
+back-channel logout URL to `https://media.example.com/auth/oidc/backchannel-logout`. No
+Lumastra setting is needed. `AUTH_OIDC_BACKCHANNEL_LOGOUT_CASCADE=true` also revokes the
+user's device tokens.
 
-For local development only, set `DEFAULT_USER=<name>`: in dev mode, requests with no
-auth header fall back to that user. A `devUser` cookie override lets you switch users
-without restarting. Both are gated on the build-time dev flag and never active in a
-production build.
+## If you use forward authentication
 
-## How the methods coexist
+Your proxy signs the user in and sends the name and groups as headers. Lumastra believes
+them only when you turn it on and only from known proxies. Add to `.env`, with the header
+names your provider uses (these are Authentik's):
 
-All three can be on at once. For each request, Lumastra resolves identity in this
-order:
+```dotenv
+FORWARD_AUTH_ENABLED=true
+USERHEADER=X-authentik-username
+GROUPHEADER=X-authentik-groups
+ADMIN_GROUPS=admin
+TRUSTED_PROXY_IPS=172.30.0.2   # the proxy's own address, never a wide range
+```
 
-<Steps>
-1. **A valid session cookie** (built-in *or* OIDC) is honored first.
-2. Otherwise, **forward-auth headers** from a trusted proxy are used, if
-   `FORWARD_AUTH_ENABLED=true`.
-3. Otherwise, browser visits are sent to **`/login`** (where the password form and/or
-   the OIDC button appear, depending on what's enabled), or, if only forward auth is
-   configured, to your identity provider.
-</Steps>
+`TRUSTED_PROXY_IPS` and header removal are explained in the
+[Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips). Without both settings,
+the headers are ignored and nobody can sign in this way. Users are created at their first
+request. A forwarded name should match the Jellyfin user name if you sync with Jellyfin.
 
-One safety rule: if a trusted proxy asserts a *different* username than the cookie, the
-stale cookie is cleared and the proxy wins (so a proxy-level logout takes effect even
-with a lingering session).
+For Authentik with nginx, every location must either run `auth_request` or blank the
+identity headers. The apps check their own credentials on these paths, so they must skip
+Authentik: `/j/`, `/subsonic/`, `/api/v1/`, `/oauth/`, `/api/plugin-webhooks/`,
+`/api/health` and `/metrics`. Only `/oauth/links/` stays behind it. Gating the whole
+domain breaks Jellyfin and Subsonic apps, TV apps, tokens and AirPlay or Chromecast
+casting. Copy one bypass block per path:
 
-## Security considerations
+```nginx
+# In the http block: turn an empty groups value into "|" so nginx does not drop it.
+map $user $authentik_no_groups { "" ""; default "|"; }
+map $groups $authentik_groups_sent { "" $authentik_no_groups; default $groups; }
 
-### Forward auth: trust the network path
+# In the server block, once per bypass path (/j/, /subsonic/, /api/v1/, /oauth/, /api/plugin-webhooks/):
+location ^~ /j/ {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header X-authentik-username "";
+    proxy_set_header X-authentik-groups   "";
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+}
 
-Identity headers are unsigned. Turn forward auth on only if you use it, restrict access
-to the app port, and trust only the proxy's TCP peer, as described
-[above](#proxy-trust-fail-closed). Otherwise a caller
-can forge an admin identity. MFA, password policy, lockout, and central logout are
-handled by your IdP; Lumastra stores no forward-auth password or session cookie.
+# Also keep the web app manifest and icons public, so installing the web app works.
+location ~* ^/(manifest\.json|favicon\.(png|ico)|apple-touch-icon(-precomposed)?\.png|icon-(192|512)(-maskable)?\.png)$ {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header X-authentik-username "";
+    proxy_set_header X-authentik-groups   "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
 
-### Built-in login: the app is the credential custodian
+location / {
+    auth_request /outpost.goauthentik.io/auth/nginx;
+    error_page 401 = @authentik_signin;
+    auth_request_set $user   $upstream_http_x_authentik_username;
+    auth_request_set $groups $upstream_http_x_authentik_groups;
+    proxy_set_header X-authentik-username $user;
+    proxy_set_header X-authentik-groups   $authentik_groups_sent;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+}
 
-Passwords use scrypt hashing. Login is rate-limited per IP, with per-account lockout
-and a server-side password policy. Sessions are database-backed, stored as hashes,
-and revoked on password change. Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure`
-when the browser uses HTTPS (see the note above). Cross-site form posts are blocked by
-an origin check.
+location ^~ /oauth/links/ {   # same as location / above: needs the signed-in user
+    auth_request /outpost.goauthentik.io/auth/nginx;
+    error_page 401 = @authentik_signin;
+    auth_request_set $user   $upstream_http_x_authentik_username;
+    auth_request_set $groups $upstream_http_x_authentik_groups;
+    proxy_set_header X-authentik-username $user;
+    proxy_set_header X-authentik-groups   $authentik_groups_sent;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+}
 
-There is no built-in MFA or email password reset. Use strong passwords; admins reset
-user passwords at **Admin → Users**, or use the host command under
-[Built-in login](#built-in-login) for admin recovery.
+location /outpost.goauthentik.io {
+    proxy_pass http://your-authentik:9000/outpost.goauthentik.io;
+    proxy_set_header Host $host;
+    proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
+}
 
-### OIDC: standards-based delegation
+location @authentik_signin {
+    internal;
+    return 302 /outpost.goauthentik.io/start?rd=$scheme://$http_host$request_uri;
+}
+```
 
-OIDC verifies PKCE, state, nonce, and the ID-token signature, issuer, audience, and
-expiry. Login transactions are single-use, and redirects stay on the same origin.
+For Traefik, use a `forwardAuth` middleware at
+`http://<outpost>:9000/outpost.goauthentik.io/auth/traefik` with the two headers in
+`authResponseHeaders`. Apply the same bypass rules.
 
-Keep verified-email account linking enabled and username linking disabled unless
-you understand the implications. Never set `AUTH_OIDC_ALLOW_INSECURE` in production:
-it disables TLS verification for OIDC traffic. The client secret is readable by admins
-in Settings. Set `ORIGIN` for secure session cookies.
+**A user removed from every group keeps admin.** nginx drops empty headers, so Lumastra
+never learns the groups are empty. The `map` lines above fix that. If you cannot change
+the proxy, set `FORWARD_AUTH_GROUPS_ALWAYS_SENT=true`, but only when every proxy
+location that sends the user name also sends the groups.
 
-## Admin access
+**You added OIDC behind a forward-auth proxy.** Let `/auth/oidc/login`,
+`/auth/oidc/callback` and `/auth/oidc/backchannel-logout` through unauthenticated.
 
-Admin is granted by **any** of:
+**Nobody can sign in through forward auth.** Either `FORWARD_AUTH_ENABLED` is off, or
+`TRUSTED_PROXY_IPS` does not match the address the proxy connects from. The setup wizard
+and the log (`identity headers ignored`) name the address Lumastra saw.
 
-- **Forward auth**: membership in a group named in `ADMIN_GROUPS` (default `admin`,
-  matched case-insensitively); assign the group in your IdP.
-- **OIDC**: membership in an `ADMIN_GROUPS` group via the `AUTH_OIDC_GROUPS_CLAIM`
-  claim (some providers need a scope/mapper to emit it; see the
-  [OIDC guide](/guides/sso-oidc/)).
-- **Built-in login**: the first admin is created by the setup wizard; admins promote
-  other accounts in **Admin → Users** (a manual promotion pins the user, overriding
-  IdP groups).
+## If something goes wrong
 
-## Offboarding
+**The install has no admin left.** Restore the admin group at your provider. Or set
+`SETUP_UNLOCK=1` in `.env`, restart, and create an admin at `/setup`. Remove the line
+afterwards. It works only while no admin exists.
 
-Disable the account at **Admin → Users** to cut off sessions, device/refresh tokens,
-PATs, service tokens, and Jellyfin/Subsonic sessions at validation time. Credential
-revocation is additional best-effort cleanup; failures are reported in the disable
-result and logs. Re-applying disable is safe.
+**You turned forward auth on and upgraded from a release before October 2026.** Add
+`FORWARD_AUTH_ENABLED=true` before you upgrade, or nobody can sign in.
 
-Removing IdP groups alone depends on correct empty-group header handling. Without it,
-a proxy that drops empty headers can leave stored groups and admin rights unchanged.
-See [Removed-from-every-group users](/guides/sso-authentik/#removed-from-every-group-users-fix-the-empty-groups-header).
+**An employee or family member leaves.** Disable the account at **Admin → Users**. That
+ends their sessions, device tokens, personal tokens and Jellyfin and Subsonic sessions.
 
-## Programmatic & TV access
+**You need tokens for scripts, or want to know how apps sign in.** Apps use the device
+flow and `/api/v1` tokens, whatever the browser sign-in method is. See
+[API & tokens](/developers/api/) and [OAuth device-flow clients](/developers/oauth-clients/).
 
-Apps and scripts use bearer tokens regardless of how browser users sign in.
-The two URL surfaces are kept separate intentionally: `/api/*` stays behind the
-forward-auth proxy (the IdP checks every browser request); `/api/v1/*` is bypassed
-by the proxy so token clients are never redirected to a login page.
-
-| Route         | Auth                                                       | Use                           |
-| ------------- | ------------------------------------------------------------ | ----------------------------- |
-| `/api/*`      | Browser session (built-in / OIDC) or forward auth           | Browser UI only               |
-| `/api/v1/*`   | Bearer token (JWT / PAT / service)                          | TV apps, scripts, automation  |
-| `/oauth/*`    | Public                                                       | Device authorization flow     |
-| `/oauth/links/*` | Browser session (built-in / OIDC) or forward auth        | Account-linking callback (MyAnimeList) |
-| `/j/*`        | Emby token / `api_key` param / `jellyfin_compat` PAT scope   | Jellyfin-compatible clients   |
-| `/subsonic/*` | Subsonic `u`+`t`/`s`, `p`, or `apiKey` params                 | Subsonic/OpenSubsonic clients |
-
-### Token kinds
-
-Three token kinds are accepted on `/api/v1/*`. The middleware routes validation by
-prefix:
-
-| Kind | Prefix | Issued by | Feature flag | Notes |
-| ---- | ------ | --------- | ------------ | ----- |
-| Device flow JWT | *(none: compact JWT)* | `POST /oauth/token` | `FEATURE_DEVICE_AUTH` | Short-lived (~1 h, HS256); carries `device_session_id`. Refresh token rotates on every use. |
-| Personal Access Token | `pat_` | User: settings UI or `POST /api/v1/me/pats` | `FEATURE_USER_PATS` | Scoped; max 10 per user; tracked (last-used IP + timestamp). |
-| Service token | `svc_` | Admin: `POST /api/v1/service-tokens` | `FEATURE_DEVICE_AUTH` | Path/method-gated; optional act-as-user impersonation; IP allowlist. |
-| Playback grant | *(opaque, sent as `?grant=`)* | `POST /api/v1/play-sessions` | *(always on)* | Bound to one item and one playback session, expires (24 h for video and audiobooks, 6 h for music and Live TV), valid only on media URLs. Pinned to the requester's IP unless the client asked for a cast target (`castTarget`) and `STREAM_TOKEN_WILDCARD_IP` allows it (default: allowed). `STREAMING_SESSION_ENFORCE_IP=false` turns IP pinning off entirely. Replaces `stream_` tokens and `api_key` in media URLs. |
-
-All token values are shown once at creation and stored only as SHA-256 hashes. A
-signing secret is required for device JWTs and PATs. Set `JWT_SECRET`
-explicitly, or leave it unset and Lumastra derives one deterministically from
-`LUMASTRA_MASTER_KEY` (stable across restarts and replicas, so tokens keep working
-without extra configuration). If you do set it explicitly, keep the value identical
-everywhere: changing it invalidates every outstanding device and PAT token.
-
-:::note[jellyfin_compat scopes]
-The `jellyfin_compat` and `jellyfin_compat_read` scopes are **exclusive** to the `/j`
-Jellyfin-compatible surface. They cannot be granted by any coarse alias and are never
-accepted on `/api/v1/*` endpoints.
-:::
-
-### Scope taxonomy
-
-PATs and service tokens accept the grants `read`, `write`, and `admin`. Service tokens
-also accept `integrations:read` (see below); PATs also accept either exclusive
-Jellyfin-compatibility scope. Fine-grained scopes such as `media:read` or `tokens:admin`
-are internal gate names; they cannot be minted. Every operation in the API reference
-names the grant it needs (`x-required-grant`). The grants expand as follows:
-
-- `read`: `media:read`, `sessions:read`, and `requests:read`. Other read scopes are not granted by `read`.
-- `write`: read plus writable scopes; excludes `tasks:run`, `webhooks:write`, and
-  admin scopes.
-- `admin`: all scopes.
-
-See [API & tokens](/developers/api/) for the full scope reference. The
-`jellyfin_compat` scopes remain exclusive to `/j` and are not included in these aliases.
-
-### Device Authorization flow
-
-Device authorization is enabled by default (`FEATURE_DEVICE_AUTH`). Clients need no
-registration or secret: the user approves a device code at `/device`, and the client
-receives a roughly one-hour access token plus a rotating refresh token. Replaying a
-consumed refresh token revokes the device session.
-
-Set `FEATURE_DEVICE_AUTH=false` to disable it. Upgrades from the old disabled default
-turn it on unless you explicitly pin the flag. See
-[feature flags](/reference/feature-flags/#programmatic-access).
-
-For endpoint parameters, expiry settings, polling limits, and error handling, see
-[OAuth device-flow clients](/developers/oauth-clients/).
-
-:::caution[Proxy bypass required]
-Add `/oauth/.*`, `/api/v1/.*`, `/j/.*`, and `/subsonic/.*` to your proxy's
-unauthenticated (bypass) paths, but keep `/oauth/links/` behind forward auth: account
-linking needs the signed-in user. Every one of these surfaces authenticates itself per
-request and none of them can complete a forward-auth redirect, so gating them behind
-your IdP breaks Jellyfin clients, Subsonic clients, TV apps, and PAT/service-token
-clients alike. See [Connecting third-party apps](/using/third-party-players/) and the
-[Authentik](/guides/sso-authentik/) and [OIDC](/guides/sso-oidc/) guides for examples.
-:::
-
-### Personal Access Tokens
-
-Users create PATs in **Settings → Account → API tokens** (or via
-`POST /api/v1/me/pats`) once an admin turns on **User PAT Creation** under
-**Admin → Settings → Access → Public API & Device Auth** (`FEATURE_USER_PATS`, off by
-default). The toggle appears only while the Public API (`FEATURE_DEVICE_AUTH`) is on;
-with it off, set `FEATURE_USER_PATS` through the environment. Token creation needs a
-signing secret (explicit `JWT_SECRET` or one derived from the master key).
-`FEATURE_DEVICE_AUTH` matters only for where a minted PAT can *authenticate*: without
-it, a PAT still works against the `/j` Jellyfin-compatible surface, but is rejected on
-`/api/v1/*`. Turn both flags on to use PATs against `/api/v1/*`. Each PAT carries
-explicit scopes; only admins may request `admin` scope. Maximum 10 active PATs per
-user.
-
-Manage PATs:
-
-| Method | Endpoint | Auth required |
-| ------ | -------- | ------------- |
-| `GET` | `/api/v1/me/pats` | User session or bearer |
-| `POST` | `/api/v1/me/pats` | User session or bearer |
-| `DELETE` | `/api/v1/me/pats/{id}` | User session or bearer |
-
-### Service tokens
-
-Admins create service tokens (`POST /api/v1/service-tokens`) for automation and IaC.
-Service tokens support:
-
-- A grant list (`scopes`): `read`, `write`, `admin`, or `integrations:read`.
-- Optional **IP allowlist** (`allowedIps`): exact IPv4 or IPv6 addresses, no CIDR ranges.
-- Optional **path/method gate** (`allowedPathPrefixes`, `allowedMethods`).
-- Optional **act-as-user impersonation** (`actAsUserId`, a user id set at creation; the
-  `X-Act-As-User` header is ignored).
-- An owner: the admin who created it. The token follows that account by id, so renaming
-  the owner keeps it working, and disabling or deleting the owner stops it.
-- Minting by another service token: an `admin` service token can mint
-  tokens. They belong to that token's owner and can never exceed the minting
-  token. See [Tokens minted by a service token](/developers/api/#tokens-minted-by-a-service-token).
-
-**Integration tokens.** Dashboards and other read-only integrations use a service token
-with the single grant `integrations:read`. It works only on
-`GET /api/v1/integrations/homepage`, `/watch-history` and `/upcoming`, only while the admin
-who created it is still an admin, and it cannot act as a user. Admin sessions and `admin`
-tokens cannot read watch history or upcoming episodes. Upgrading converts existing
-admin tokens that were limited to those endpoints (GET only) into integration tokens.
-
-Manage service tokens:
-
-| Method | Endpoint | Auth required |
-| ------ | -------- | ------------- |
-| `GET` | `/api/v1/service-tokens` | `admin` grant |
-| `POST` | `/api/v1/service-tokens` | `admin` grant |
-| `DELETE` | `/api/v1/service-tokens/{id}` | `admin` grant |
-
-For the full walkthrough (device flow code samples, playback grants,
-and library automation), see [API & tokens](/developers/api/).
+**Which identity wins when several methods are on?** A valid session cookie, then forward
+auth headers from a trusted proxy, then the `/login` page. If a trusted proxy names a
+different user than the cookie, the proxy wins.

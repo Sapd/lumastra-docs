@@ -663,7 +663,7 @@ calls will be redirected to a login page.
 
 These locations skip forward auth entirely, so they must explicitly blank the
 identity headers. Otherwise a caller could set them directly and spoof an
-identity (see [SSO with Authentik](/guides/sso-authentik/) for where this rule
+identity (see [Authentication](/guides/authentication/#if-you-use-forward-authentication) for where this rule
 comes from).
 
 ```nginx
