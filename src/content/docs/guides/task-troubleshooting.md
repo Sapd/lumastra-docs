@@ -51,6 +51,8 @@ when diagnosing capacity.
 
 ---
 
+<a id="recipe-1--stuck-items-panel-shows-entries"></a>
+
 ## Recipe 1: "Stuck items" panel shows entries
 
 **Symptom:** the **Pipeline** page's Stuck Items panel (`/admin/tasks/pipeline`)
@@ -113,6 +115,8 @@ step is needed; see Recipe 11.
 
 ---
 
+<a id="recipe-2--queue-not-draining"></a>
+
 ## Recipe 2: Queue not draining
 
 **Symptom:** the **Pipeline** page shows a station with hundreds of pending
@@ -166,6 +170,8 @@ docker exec "$WORKER_CONTAINER" ps -ef | grep -E 'ffmpeg|chromaprint' | grep -v 
 | Wrong resource class for a task | Not fixable from the admin UI. Flag it upstream. |
 
 ---
+
+<a id="recipe-3--run-stuck-in-active-with-stale-heartbeat"></a>
 
 ## Recipe 3: Run stuck in 'active' with stale heartbeat
 
@@ -258,6 +264,8 @@ The scheduler re-fires on its next sweep once the blocking row is cleared.
 
 ---
 
+<a id="recipe-4--pending-pile-up-orphans-vs-legitimate-backlog"></a>
+
 ## Recipe 4: Pending pile-up: orphans vs. legitimate backlog
 
 **Symptom:** `SELECT count(*) FROM task_history WHERE state='pending'`
@@ -302,6 +310,8 @@ done
 | Identity-locked | Check `task:identity:<taskId>:<formula>` keys in Valkey. If the holder run is terminal but the key lingers, `DEL` it. |
 
 ---
+
+<a id="recipe-5--worker-not-picking-up-jobs"></a>
 
 ## Recipe 5: Worker not picking up jobs
 
@@ -405,6 +415,8 @@ it rather than fixing it live.
 
 ---
 
+<a id="recipe-8--stage-row-stuck-at-running-wedged"></a>
+
 ## Recipe 8: Stage row stuck at 'running' (wedged)
 
 **Symptom:** `media_item_stage_state.status = 'running'` for a row whose
@@ -458,6 +470,8 @@ UPDATE media_item_stage_state s
 ```
 
 ---
+
+<a id="recipe-9--item-never-goes-through-a-stage"></a>
 
 ## Recipe 9: Item never goes through a stage
 
