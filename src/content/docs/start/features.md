@@ -18,7 +18,7 @@ area. The [quick start](/start/quick-start/) gets an instance running.
 - **More than entertainment:** library types for home videos, training and educational
   content.
 - **AI assistant:** ask for something to watch in plain language, with your own AI provider
-  key. Part of the supporter tier. See [The AI assistant](/guides/ai-assistant/).
+  key. See [The AI assistant](/guides/ai-assistant/).
 
 ## Playback
 
@@ -172,5 +172,4 @@ See [Authentication](/guides/authentication/).
 ## Next
 
 - [Quick start](/start/quick-start/): get an instance running
-- [Editions and licensing](/guides/licensing/): what is free and what is a supporter feature
 - [Known limitations](/reference/known-limitations/): read before you commit to a host

@@ -8,7 +8,7 @@ sidebar:
 Every `FEATURE_*` flag resolves through the config layer's live precedence chain
 (admin-set value → environment variable → built-in default). It's read fresh on each
 access, not cached once at boot; some flags are documented as safe to flip with no
-restart (`FEATURE_PUBLIC_SHOWCASE` is one example). Without a feature-specific note
+restart (`FEATURE_LIVETV` is one example). Without a feature-specific note
 saying otherwise, treat a flag change as needing a container restart, since no
 admin-UI control writes most of these flags live. Most also appear as a read-only,
 lock-icon toggle on the matching Settings page for visibility, but can't be edited
@@ -34,7 +34,7 @@ feature, follow the linked guide.
 | Flag | Default | Gates |
 | ---- | ------- | ----- |
 | `FEATURE_AI_RECOMMENDATIONS` | `true` | Embedding-based recommendations and Quick Picks. |
-| `FEATURE_AI_ASSISTANT` | `true` | The RAG-powered chat assistant. A source-available supporter module, free during early access. See [Editions & Licensing](/guides/licensing/). |
+| `FEATURE_AI_ASSISTANT` | `true` | The RAG-powered chat assistant. |
 | `FEATURE_ASSISTANT_TOOLS` | `true` | Agentic tool-calling for the assistant instead of single-shot retrieval; falls back automatically for models without tool-calling. |
 | `FEATURE_ASSISTANT_WRITES` | `false` | Letting the assistant change a user's own data (watchlist, ratings, watched state, requests) on request. |
 | `FEATURE_ASSISTANT_SHARED_HISTORY` | `false` | Letting the assistant use another consenting user's watch history for joint recommendations. |
@@ -46,7 +46,7 @@ feature, follow the linked guide.
 | Flag | Default | Gates |
 | ---- | ------- | ----- |
 | `FEATURE_JELLYFIN_SYNC` | `true` | Background watch-state sync with a Jellyfin server (distinct from the `/j` client API below). |
-| `FEATURE_JELLYFIN_COMPAT` | `true` | The `/j` Jellyfin-compatible client API. Serves Lumastra's own catalog; no Jellyfin server required. More than one concurrent `/j` stream per server is a source-available supporter module, free during early access. See [Editions & Licensing](/guides/licensing/). |
+| `FEATURE_JELLYFIN_COMPAT` | `true` | The `/j` Jellyfin-compatible client API. Serves Lumastra's own catalog; no Jellyfin server required. |
 | `FEATURE_SUBSONIC_COMPAT` | `false` | The OpenSubsonic-compatible API. Per-client credentials are stored recoverable (plaintext at rest) by protocol design. See the self-check note in [Administration operations](/guides/administration-operations/#health-and-self-check-findings). |
 | `FEATURE_MEDIA_DOWNLOAD` | `false` | Downloading the original, untranscoded file. |
 | `FEATURE_DOWNLOAD_RENDITIONS` | `false` | Offline download renditions at a chosen quality. |
@@ -145,14 +145,6 @@ explicit `false`).
 An explicit `false` in the environment or in `settings.json` is unaffected.
 :::
 
-## Enterprise
-
-| Flag | Default | Gates |
-| ---- | ------- | ----- |
-| `FEATURE_ASSESSMENT` | `false` | The native quiz & certificate (LMS assessment) module. |
-| `FEATURE_TRAINING_ASSIGNMENTS` | `false` | Training assignments. |
-| `FEATURE_PUBLIC_SHOWCASE` | `false` | The public showcase surface. See [Administering Lumastra](/guides/administration/#public-showcase-enterprise). |
-
 ## Internal / infrastructure-only
 
 These have no admin-UI surface and are meant for advanced operators debugging a rollout,
@@ -168,4 +160,3 @@ not everyday configuration:
 
 - [Administering Lumastra](/guides/administration/)
 - [Administration: task and webhook operations](/guides/administration-operations/)
-- [Editions & Licensing](/guides/licensing/)

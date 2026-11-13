@@ -15,89 +15,75 @@ export const REPOS_PUBLIC = true;
 /** @type {import('@astrojs/starlight/types').StarlightUserConfig['sidebar']} */
 export const sidebar = [
 	{
-		label: 'Start Here',
+		label: 'Install',
 		items: [
-			{ label: 'Quick Start', slug: 'start/quick-start' },
-			{ label: 'Features', slug: 'start/features' },
+			{ label: 'Quick Start (Compose)', slug: 'start/quick-start' },
+			{ label: 'Docker in production', slug: 'guides/deploy-docker' },
+			{ label: 'Kubernetes', slug: 'guides/deploy-kubernetes' },
+			{ label: 'Kubernetes advanced', slug: 'guides/deploy-kubernetes-advanced' },
+			{ slug: 'guides/reverse-proxy' },
+			{ label: 'Sign-in', slug: 'guides/authentication' },
+			{ slug: 'guides/gpu-transcoding' },
+		],
+	},
+	{
+		label: 'Your media',
+		items: [
+			{ slug: 'guides/organizing-media' },
+			{ slug: 'guides/organizing-music' },
+			{ slug: 'guides/music-discovery' },
+			{ slug: 'guides/audiobooks' },
+			{ slug: 'guides/live-tv' },
+			{ slug: 'guides/live-tv-simple-mode' },
+			{ slug: 'guides/integrations' },
+			{ slug: 'guides/media-enrichment' },
+			{ slug: 'guides/ai-assistant' },
+			{ slug: 'guides/homepage-dashboard' },
 		],
 	},
 	{
 		label: 'Using Lumastra',
-		items: [{ autogenerate: { directory: 'using' } }],
+		items: [{ autogenerate: { directory: 'using' } }, { slug: 'guides/push-notifications' }],
 	},
 	{
-		label: 'Guides',
+		label: 'Running it',
 		items: [
-			{
-				label: 'Configuration',
-				items: [{ slug: 'guides/configuration' }, { slug: 'guides/integrations' }],
-			},
-			{
-				label: 'Accounts & access',
-				items: [
-					{ label: 'Authentication', slug: 'guides/authentication' },
-					{ slug: 'guides/parental-controls' },
-					{ slug: 'guides/sharing-privacy' },
-				],
-			},
-			{
-				label: 'Your media',
-				items: [
-					{ slug: 'guides/organizing-media' },
-					{ slug: 'guides/organizing-music' },
-					{ slug: 'guides/music-discovery' },
-					{ slug: 'guides/audiobooks' },
-					{ slug: 'guides/live-tv' },
-					{ slug: 'guides/live-tv-simple-mode' },
-					{ slug: 'guides/media-enrichment' },
-					{ slug: 'guides/ai-assistant' },
-					{ slug: 'guides/push-notifications' },
-				],
-			},
-			{
-				label: 'Deployment & operations',
-				items: [
-					{ slug: 'guides/deploy-docker' },
-					{ slug: 'guides/reverse-proxy' },
-					{ slug: 'guides/deploy-kubernetes' },
-					{ slug: 'guides/deploy-kubernetes-advanced' },
-					{ slug: 'guides/zero-downtime-updates' },
-					{ slug: 'guides/gpu-transcoding' },
-					{ slug: 'guides/performance-tuning' },
-					{ slug: 'guides/windows-media-shares' },
-					{ slug: 'guides/waf-ips-crowdsec' },
-					{ slug: 'guides/backup-recovery' },
-					{ slug: 'guides/master-key-rotation' },
-				],
-			},
-			{
-				label: 'Administration',
-				items: [
-					{ slug: 'guides/administration' },
-					{ slug: 'guides/administration-operations' },
-					{ slug: 'guides/plugins' },
-					{ slug: 'guides/task-basics' },
-					{ slug: 'guides/task-monitoring' },
-					{ slug: 'guides/task-troubleshooting' },
-					{ slug: 'guides/debugging-with-ai' },
-					{ slug: 'guides/library-troubleshooting' },
-					{ slug: 'guides/homepage-dashboard' },
-					{ slug: 'guides/licensing' },
-				],
-			},
+			{ slug: 'guides/administration' },
+			{ slug: 'guides/administration-operations' },
+			{ slug: 'guides/parental-controls' },
+			{ slug: 'guides/sharing-privacy' },
+			{ slug: 'guides/backup-recovery' },
+			{ slug: 'guides/master-key-rotation' },
+			{ label: 'Upgrading', slug: 'guides/zero-downtime-updates' },
+			{ slug: 'guides/task-basics' },
+			{ slug: 'guides/task-monitoring' },
+			{ slug: 'guides/task-troubleshooting' },
+			{ slug: 'guides/library-troubleshooting' },
+			{ slug: 'guides/debugging-with-ai' },
+			{ slug: 'guides/performance-tuning' },
+			{ slug: 'guides/windows-media-shares' },
+			{ slug: 'guides/waf-ips-crowdsec' },
+			{ slug: 'guides/configuration' },
 		],
 	},
 	{
-		label: 'Architecture',
-		items: [{ autogenerate: { directory: 'architecture' } }],
+		label: 'Reference',
+		items: [{ autogenerate: { directory: 'reference' } }],
 	},
 	{
-		label: 'Developers',
+		label: 'Developers & project',
 		items: [
+			{ label: 'The Lumastra story', slug: 'about/story' },
+			{ label: 'Changelog', slug: 'about/changelog' },
+			{ label: 'How it fits together', slug: 'architecture/overview' },
+			{ slug: 'architecture/live-tv' },
+			{ slug: 'architecture/playback-decisions' },
+			{ slug: 'architecture/task-system' },
 			{ slug: 'developers/api' },
 			{ slug: 'developers/api-routes' },
 			{ slug: 'developers/oauth-clients' },
 			{ slug: 'developers/plugins' },
+			{ slug: 'guides/plugins' },
 			{ slug: 'developers/client-diagnostics' },
 			{
 				label: 'Building a player',
@@ -121,14 +107,6 @@ export const sidebar = [
 				],
 			},
 		],
-	},
-	{
-		label: 'Reference',
-		items: [{ autogenerate: { directory: 'reference' } }],
-	},
-	{
-		label: 'About',
-		items: [{ label: 'The Lumastra story', slug: 'about/story' }, { label: 'Changelog', slug: 'about/changelog' }],
 	},
 ];
 
@@ -169,6 +147,7 @@ export const redirects = {
 	'/guides/deployment/': '/start/quick-start/',
 	'/guides/sso-oidc/': '/guides/authentication/#if-you-use-another-oidc-provider',
 	'/guides/sso-authentik/': '/guides/authentication/#set-up-authentik',
+	'/guides/licensing/': '/about/story/#licence',
 };
 
 /** Options for starlight-links-validator, shared by both sites. */

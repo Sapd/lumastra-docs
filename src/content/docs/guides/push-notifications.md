@@ -19,11 +19,12 @@ small **relay** the maintainer runs at `push.lumastra.org`. Your server hands
 each notification to the relay, and the relay forwards it to Apple.
 
 To use the relay, your server needs a credential. It gets one automatically:
-every six hours, the licence refresh your server already makes to
-`lumastra.org` also returns a **relay token**. That's a signed credential,
-valid for 24 hours and bound to your install's ID, that your server presents to
-the relay. Every install gets one, free tier included. Nothing needs to be
-copied, pasted or renewed by hand.
+about every six hours, your server asks `lumastra.org` for a **relay token**
+(it sends the install ID and the Lumastra version, nothing else). That's a signed
+credential, valid for 24 hours and bound to your install's ID, that your server
+presents to the relay. Every install gets one. Nothing needs to be copied, pasted or
+renewed by hand. The setting **Contact lumastra.org** (Admin → Settings → General →
+Push relay) controls this call.
 
 On the relay route the notification is **content-free**. The relay sees your
 users' device tokens and a generic banner ("New episode available"), never a
@@ -48,12 +49,11 @@ why:
 | --- | --- | --- |
 | `feature_disabled` | `FEATURE_PUSH_NOTIFICATIONS` is off | Turn it on under **Settings → Access → Push notifications** |
 | `device_auth_disabled` | `FEATURE_DEVICE_AUTH` (the Public API) is off, so the app cannot register a device | Turn it back on under **Settings → Access → Public API & Device Auth** (on by default) |
-| `not_entitled` | The licence doesn't include push | Should not happen today (every tier includes push); check **Settings → Licensing** |
 | `no_relay_credential` | No usable credential yet | See below |
 
 `no_relay_credential` right after a restart is normal: the first relay token
 arrives a few seconds after boot. If it stays, your server can't reach
-`lumastra.org`. The server log names the failure under `LicenseRefresh`.
+`lumastra.org`. The server log names the failure under `RelayTokenEnrol`. Also check that **Contact lumastra.org** is on.
 Outbound HTTPS to `lumastra.org` and `push.lumastra.org` must be allowed.
 
 ## Turning it off

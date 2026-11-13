@@ -1,6 +1,6 @@
 ---
 title: What Lumastra sends where
-description: "Every outbound connection a Lumastra server can make: what data leaves, when, which setting controls it, and who receives it. Includes the maintainer-operated services and what runs offline."
+description: "Every outbound connection a Lumastra server can make: what data leaves, when, which setting controls it, and who receives it. Includes the two calls to lumastra.org and what runs offline."
 sidebar:
     order: 4
 ---
@@ -17,9 +17,9 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | After you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created), then about once a week unless that check-in is switched off (every six hours while push uses the standard relay) | The install ID, the Lumastra version and a status code ([licence renewal](#lumastraorgapilicenserefresh-licence-renewal)) | To stop all of it: **Contact lumastra.org for the licence** in Admin → Settings → General → Licensing (also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`; the install then runs on the free tier ([what that means](#switch-off-all-contact)). To stop only the weekly check-in: **Weekly licence check-in** in the same place, or `LICENSE_CHECK_IN_ENABLED=false` |
+| `lumastra.org` | Push token request: every ~6 hours while push is on and the default relay is used; it waits until you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created). Update check: once a day, at a random time <!-- VERIFY with agpl-update-check --> | Push token request: the install ID and the Lumastra version ([details](#lumastraorgapipushrelay-token-the-push-relay-token)). Update check: the version only ([details](#update-check)) <!-- VERIFY with agpl-update-check --> | **Contact lumastra.org** (Admin → Settings → General → Push relay, also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`. With it off, the update check goes to GitHub directly (next row) <!-- VERIFY with agpl-update-check --> |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
-| `api.github.com` | About once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | Admin → Settings → General → Diagnostics, or `UPDATE_CHECK_ENABLED=false` |
+| `api.github.com` | Only when **Contact lumastra.org** is off: about once a day, at a random time <!-- VERIFY with agpl-update-check --> | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | `UPDATE_CHECK_ENABLED=false` (also under Admin → Settings → General → Diagnostics) |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
 | `raw.githubusercontent.com` | Every 48 hours, once the library has a movie or show with a TMDB id | Nothing; a download of a public anime id list ([Fribb anime list](#fribb-anime-list)) | `DISABLE_FRIBB_ANIME_SYNC=true` |
 | `huggingface.co` and its CDN | First start of the optional sonic sidecar | Nothing; a download of the model weights ([sonic sidecar](#sonic-sidecar-model-weights)) | `SONIC_MODEL_FP` pointing at a local copy |
@@ -30,9 +30,9 @@ notifications in the iOS app.
 
 ## Services run by the Lumastra maintainer
 
-The project maintainer (Denis Arnst, Austria/EU, `git@sapd.eu`) operates the
-licence endpoint and push relay. The signing-key file is a published mirror,
-not a runtime destination.
+The project maintainer (Denis Arnst, Austria/EU, `git@sapd.eu`) operates `lumastra.org`
+and the push relay. These are the only places an install sends anything to the project.
+There are no licence keys and no usage reporting.
 
 ### `push.lumastra.org`: the iOS push relay
 
@@ -43,7 +43,7 @@ Your server sends notifications to that relay for delivery.
 | --- | --- |
 | **On by default?** | **Yes**, but nothing is sent until a user has enabled notifications in the iOS app (which registers a device token with your server) and a notification fires for them. Turn it off with `FEATURE_PUSH_NOTIFICATIONS=false`. |
 | **When** | Each time a new-episode or request-available notification is queued for a user who registered an iOS device. |
-| **Sent** | `POST {PUSH_RELAY_URL}/api/push/send` with: the device tokens of the recipient's iOS devices, the app bundle id, the APNs environment (`sandbox`/`production`), a collapse id (the notification's UUID), an expiry timestamp, and the payload. Authenticated with a short-lived relay token your server obtains from the licence refresh below (or with `PUSH_RELAY_TOKEN` if you set one). The token carries only your install's random ID. |
+| **Sent** | `POST {PUSH_RELAY_URL}/api/push/send` with: the device tokens of the recipient's iOS devices, the app bundle id, the APNs environment (`sandbox`/`production`), a collapse id (the notification's UUID), an expiry timestamp, and the payload. Authenticated with a short-lived relay token your server gets from `lumastra.org` (next section), or with `PUSH_RELAY_TOKEN` if you set one. The token carries only your install's random ID. |
 | **What the payload contains** | On the relay route the payload is **content-free by design**: the banner title is your instance name, the body is a generic "you have a new notification" line, and the only extra fields are the notification UUID, its kind (e.g. `library.new_episode`), a badge count, and two signed URLs that point back at **your** server. The relay learns no media title, no media id and no artwork. The iOS app fetches the real text and picture from your server after the push arrives. |
 | **Not sent** | Usernames, e-mail addresses, media titles, watch history, library contents. |
 | **Setting** | `FEATURE_PUSH_NOTIFICATIONS` (default on), `PUSH_RELAY_URL` (default `https://push.lumastra.org`), `PUSH_RELAY_TOKEN` (optional), `PUSH_TRANSPORT`. See [iOS push notifications](/guides/push-notifications/). |
@@ -64,41 +64,24 @@ operate your own relay or use the direct Apple route.
 Apple, in turn, receives the token and the content-free payload from the relay
 under Apple's own terms, the same as with any iOS app.
 
-### `lumastra.org/api/license/refresh`: licence renewal
+### `lumastra.org/api/push/relay-token`: the push relay token
 
-Licence *verification* is fully offline against a baked-in public key; this
-endpoint (and `/api/license/issue` for the first key) only *issues and renews*
-keys, and hands out the push-relay token.
+The push relay accepts only requests with a token, and this call fetches it.
 
 | | |
 | --- | --- |
-| **On by default?** | **Yes.** |
-| **When** | 5 to 30 seconds after the server starts, then the server checks every six hours whether a call is needed. The call is made when the stored licence key is missing (then to `/api/license/issue`), invalid or expiring; when push is on and uses the default relay without a `PUSH_RELAY_TOKEN`; and otherwise about once a week (a check-in, at a time that differs per install, never in a server process's first hour). The last contact is shared through Valkey, so restarts and replicas do not add check-ins. A failed check-in leaves the stored key as it is and is tried again a day later. The relay token lasts 24 hours, so that second case renews it on every six-hour tick. The token is shared by all processes and replicas of the install through Valkey, so a restart or a split web/worker deployment does not add calls while the token is still fresh. Without a usable key a failed call is retried after about 30 minutes. |
-| **Sent** | A random per-install UUID, the Lumastra version string, and a one-digit licensing state code (the state code is left out on a build with licence enforcement off). |
-| **Received** | A signed licence key, and a relay token valid for 24 hours and bound to that UUID. |
-| **Not sent** | Titles, files, users, prompts, library contents. |
-| **What the server records** | For its install counts, per successful call: issue or refresh, the licence tier, the release number (`0.1.3`; anything after it is cut), the country Cloudflare derives from the connection, and a pseudonymised install ID (a keyed hash of the UUID) instead of the UUID. No IP address, no licence key. Kept for three months, to know how many installs exist and which versions they run. Cloudflare's short-lived request logs for lumastra.org can contain the IP address, as for any request. |
-| **Switch off the check-in** | **Weekly licence check-in** in Admin → Settings → General → Licensing, the same switch on the setup wizard's settings step, or `LICENSE_CHECK_IN_ENABLED=false`. The install then only calls when its key is missing, invalid, expired or within 14 days of expiring (retried about every 30 minutes while it has no usable key), and for the push relay token while push uses the standard relay. A moved early-access end date then reaches it only in that 14-day window. |
-| **Avoid it** | Blocking it leaves the server on its current key until that expires, then on the free tier (never a lockout), and turns push off unless you run your own relay or use your own Apple key. See [iOS push notifications](/guides/push-notifications/). |
+| **Request** | `POST https://lumastra.org/api/push/relay-token` |
+| **Sent** | A random per-install ID (UUID) and the Lumastra version. Nothing else: no library data, no users, no licence. |
+| **Received** | A signed token, valid for at most 24 hours and bound to that install ID. |
+| **When** | A first call 5 to 30 seconds after the server starts, then about every six hours. It happens only while push is on, the default relay is used, no `PUSH_RELAY_TOKEN` is set, and **Contact lumastra.org** is on. All processes and replicas of an install share one token through Valkey, so restarts add no calls while the token is still fresh. A failed call is retried after about 30 minutes. |
+| **What the server records** | Nothing: the call is not stored and not counted. The request is rate limited per IP address and per install ID. Cloudflare's short-lived request logs for lumastra.org can contain the IP address, as for any request. |
+| **Setting** | **Contact lumastra.org** in Admin → Settings → General → Push relay (also asked in the setup wizard), or `LICENSE_SERVER_CONTACT_ENABLED=false`. It applies without a restart and drops a held token. |
+| **Avoid it** | Switch the setting off, or use your own Apple key or your own relay. Without a token, push through the standard relay does not work; nothing else changes. |
 
-Full detail is in the repository's
-[`LICENSING.md`](https://github.com/Sapd/lumastra/blob/main/LICENSING.md)
-§3b: its "nothing else leaves the machine" refers to the licensing loop only,
-not to the features on this page.
-
-#### Switch off all contact
-
-**Contact lumastra.org for the licence** (Admin → Settings → General → Licensing,
-the same switch in the setup wizard, or `LICENSE_SERVER_CONTACT_ENABLED=false`)
-stops every call to the licensing server: no enrollment, no renewal, no weekly
-check-in and no push relay token. It applies without a restart. An install
-without a key then runs on the free tier from the start; a key that is already
-stored works until it expires and is not renewed. A new install makes its first call
-only after you answered whether to contact `lumastra.org` (in the setup wizard, in Admin →
-Settings or with the variable; an install set up without the wizard waits a day after its
-first admin was created), so switching it off there means nothing is ever sent. What the free tier lacks, and
-how to add a key by hand, is in
-[Licensing](/guides/licensing/#run-without-contacting-lumastraorg).
+A new install makes no call until you answered the contact question (in the setup
+wizard, in Admin → Settings, or with the variable). An install set up without the
+wizard waits a day after its first admin was created. Blocking `lumastra.org` at the
+firewall has the same effect as switching off, except that the server keeps retrying.
 
 ### `lumastra.org/.well-known/lumastra-signing-keys.json`: plugin signing keys
 
@@ -196,20 +179,31 @@ weights file to skip it; see
 
 ### Update check
 
-About once a day, at a time that differs per install, the server reads the list of
-Lumastra releases from `https://api.github.com/repos/Sapd/lumastra/releases`. It
-sends no token and nothing about your server: the User-Agent is a plain
-`Lumastra-update-check` without a version (GitHub requires one), and after the
-first answer an `If-None-Match` header makes unchanged answers free. GitHub sees
-your server's IP address. Admins then see a newer version in the bell, on the
-admin home and on Admin → System → Instance; a release marked as a security fix
-shows in red until the install runs it (`:edge` and other development builds get
-the quiet notice only). If you have checked that a security fix does not apply
-to your server, mark it as reviewed on Admin → System → Instance; it then shows
-as a normal update. If the check cannot reach GitHub for three days, admins get
-a quiet notice saying so. Turn it off with **Check for Lumastra updates** in Admin →
-Settings → General → Diagnostics (or `UPDATE_CHECK_ENABLED=false`). Then no
-request is made.
+About once a day, at a time that differs per install, the server looks up the newest
+Lumastra release. <!-- VERIFY with agpl-update-check -->
+
+<!-- VERIFY with agpl-update-check -->
+- **Contact lumastra.org on (the default):** `GET https://lumastra.org/api/update-check?v=<version>`.
+  The request carries the Lumastra version and nothing else: no install ID and no
+  token. The project counts answered requests per day and version (with the country
+  Cloudflare derives from the connection), to see which versions are in use. No IP
+  address, no ID. Nothing links two requests. Cloudflare's short-lived request logs
+  can contain the IP address, as for any request. If the call fails, the server falls
+  back to GitHub.
+- **Contact lumastra.org off:** the server reads the public release list from
+  `https://api.github.com/repos/Sapd/lumastra/releases`. It sends no token and no
+  version; the User-Agent is a plain `Lumastra-update-check` (GitHub requires one).
+  GitHub sees your server's IP address.
+
+<!-- /VERIFY -->
+Admins then see a newer version in the bell, on the admin home and on Admin → System →
+Instance; a release marked as a security fix shows in red until the install runs it
+(`:edge` and other development builds get the quiet notice only). If you have checked
+that a security fix does not apply to your server, mark it as reviewed on Admin →
+System → Instance; it then shows as a normal update. If the check cannot get an answer
+for three days, admins get a quiet notice saying so. Turn the check off with
+**Check for Lumastra updates** in Admin → Settings → General → Diagnostics (or
+`UPDATE_CHECK_ENABLED=false`). Then no request is made.
 
 ### Gravatar
 
@@ -265,8 +259,7 @@ LAN, is your choice.
 ## Runs fully offline?
 
 Core scanning, indexing, transcoding, playback, the web UI, compatible APIs,
-accounts, ratings, playlists, and watch history work offline. Licence verification
-also runs locally.
+accounts, ratings, playlists, and watch history work offline.
 
 What stops: new metadata, artwork and ratings (already-cached artwork keeps
 serving), the AI assistant and embedding-based recommendations and search
@@ -282,15 +275,12 @@ disabled, and prevent the default contacts:
   `FFMPEG_PATH` / `FFPROBE_PATH`;
 - `DISABLE_FRIBB_ANIME_SYNC=true`;
 - `UPDATE_CHECK_ENABLED=false` (or the switch in Admin → Settings);
-- `LICENSE_SERVER_CONTACT_ENABLED=false` (or **Contact lumastra.org for the licence** in Admin → Settings) to stop every call to the licensing server; the install then runs on the free tier ([details](#switch-off-all-contact));
+- `LICENSE_SERVER_CONTACT_ENABLED=false` (or **Contact lumastra.org** in Admin → Settings) to stop the push token request and send the update check to GitHub instead;
 - `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` before adding a music library;
 - `SONIC_MODEL_FP` if you run the sonic sidecar;
 - `FEATURE_PUSH_NOTIFICATIONS=false`, unless you use your own Apple key.
 
-If you leave contact on but block `lumastra.org` instead, the install keeps
-trying: it keeps its current key and then falls back to the free tier, as
-described [above](#lumastraorgapilicenserefresh-licence-renewal). A key-less
-install has the 30 day grace period first in that case.
+If you leave contact on but block `lumastra.org` instead, the install keeps trying: push through the standard relay stays off and the update check finds nothing.
 
 ## Where this is shown in the app
 

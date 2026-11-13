@@ -480,30 +480,6 @@ last-used timestamp and scopes but not the secret value.
 
 ---
 
-## Public showcase (enterprise)
-
-**Route:** `/admin/showcase` (Enterprise tier)
-
-Exposes a curated slice of your library as a public, unauthenticated browsing surface,
-for example a lobby display or a portfolio page, gated by `FEATURE_PUBLIC_SHOWCASE` (off
-by default). Key knobs: `SHOWCASE_PUBLIC_LIBRARY_GROUP_ID` (which library group is
-exposed), `SHOWCASE_REQUIRE_TOKEN` (require a share token rather than fully open access),
-`SHOWCASE_KIOSK_MODE` (a chromeless, self-cycling display), `SHOWCASE_MAX_CONCURRENT_TRANSCODES`
-(caps transcode load from anonymous viewers), and `SHOWCASE_ALLOW_EMBED` with
-`SHOWCASE_EMBED_ALLOWED_ORIGINS` (allow the showcase to be framed on a named list of
-origins). This is part of the Learning Management / compliance / showcase enterprise
-tier. See [Editions & Licensing](/guides/licensing/).
-
----
-
-## Licensing
-
-**Route:** `/admin/system/instance`. Licensing lives on the Instance page alongside this
-installation's profile info, not on a route of its own.
-
-View license status and configure a commercial key here. See
-[Editions & Licensing](/guides/licensing/) for component and tier terms.
-
 ## Recovering a locked-out install
 
 If every admin account has been deleted or demoted and nobody can reach `/admin` to
@@ -531,11 +507,9 @@ you've created the new admin.
 | Manage Live TV channels                   | `/admin/settings/livetv` → Channels tab |
 | Manage internet-radio stations            | `/admin/settings/music` → Radio tab |
 | Recover a locked-out install              | Set `SETUP_UNLOCK=1` and restart  |
-| Enter a commercial license key            | `/admin/system/instance`          |
 
 ## Next
 
 - [Administration: task and webhook operations](/guides/administration-operations/)
 - [Authentication](/guides/authentication/)
 - [Backup & key rotation](/guides/backup-recovery/)
-- [Editions & Licensing](/guides/licensing/)

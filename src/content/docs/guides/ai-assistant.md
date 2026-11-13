@@ -11,9 +11,8 @@ doesn't supply one.
 The assistant is a chat interface built on your library's metadata and AI
 embeddings. It answers questions about your catalog and makes recommendations in
 conversation, for example "something like *Metropolis* but shorter" or "what have
-I not finished from last month". It's one of Lumastra's two **supporter modules**
-(source-available, free during early access), next to the Jellyfin-compatible `/j`
-API.
+I not finished from last month". It is part of Lumastra and licensed
+under the AGPL like the rest.
 
 :::note[Bring your own key]
 Lumastra is **bring-your-own-key** for AI: it proxies your own OpenAI or

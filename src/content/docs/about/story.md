@@ -63,18 +63,28 @@ on iPhone and iPad and Top Shelf on Apple TV. The apps sign in with the standard
 device flow, so they also work when your server sits behind single sign-on. They're in
 public TestFlight now.
 
-## 2026: a name and a license
+## 2026: a name
 
 The project was internal at first, then called Stellar in early 2026, and in June 2026
-it became Lumastra. At the same time I chose the AGPL-3.0 license and an open-core model:
-a free open-source core plus two source-available supporter modules, the `/j` API and the
-AI chat assistant, which are free during early access.
+it became Lumastra.
 
 ## November 2026: v0.1
 
 On November 3, 2026 the code went public at
 [github.com/Sapd/lumastra](https://github.com/Sapd/lumastra) as v0.1. I use it for my
 own library every day, but it hasn't seen most hardware and setups yet. Expect bugs, and please [report them](https://github.com/Sapd/lumastra/issues).
+
+## Licence
+
+Since 0.2.0, all of Lumastra is licensed under the AGPL-3.0-only. There are no paid
+parts, no licence keys and no limits that depend on a licence. Earlier versions
+had a source-available part; 0.1.x is also available under the AGPL. The Apple apps
+(iPhone, iPad, Apple TV) are closed source and free.
+
+## Maintenance
+
+Lumastra is in maintenance mode: I fix bugs and security problems. There is no roadmap
+and no promise of new features.
 
 ## How I use AI
 
@@ -133,6 +143,6 @@ to understand and have actually run what you submit. See
 
 ## Next
 
-- [Quick start](/start/quick-start/)
-- [Editions & licensing](/guides/licensing/)
+- [Quick start with Docker Compose](/start/quick-start/)
+- [Deploy on Kubernetes](/guides/deploy-kubernetes/)
 - [Architecture overview](/architecture/overview/)

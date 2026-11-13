@@ -268,4 +268,3 @@ manifest fetches from reaching private network services.
 - [Writing a plugin](/developers/plugins/)
 - [Administering Lumastra](/guides/administration/)
 - [Authentication](/guides/authentication/)
-- [Editions & Licensing](/guides/licensing/)

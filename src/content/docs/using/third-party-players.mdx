@@ -42,16 +42,6 @@ The Lumastra remote can in turn control Jellyfin clients that announce remote co
 with basic transport, starting playback and messages. See
 [Remote control](/using/remote-control/).
 
-### Concurrent streams
-
-Two concurrent `/j` streams are included **across the whole server**. A third video
-stream plays a limit notice; music clients show an error. Stale sessions release their
-slots after a couple of minutes. Lumastra's web, iPhone, iPad, and Apple TV apps don't
-count towards this limit.
-
-Additional `/j` streams belong to the supporter module, free during early access; see
-[Editions & Licensing](/guides/licensing/).
-
 ### Token access
 
 For automations, use a PAT with `jellyfin_compat` or `jellyfin_compat_read` from

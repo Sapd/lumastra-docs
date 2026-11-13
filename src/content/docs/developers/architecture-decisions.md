@@ -322,20 +322,6 @@ Admin polling gets its own small pool so it can never delay video starts.
 **Trade-off:** importing the wrong pool in the wrong layer is an architectural
 violation; each connection carries a statement timeout as a backstop.
 
-### Supporter modules ship as pre-built modules, not plugins
-
-The source-available `/j` and AI-assistant supporter-module surfaces are pre-built
-modules bundled into the image by CI, not runtime plugins loaded from a directory.
-Both are free during early access.
-
-**Why:** the plugin architecture exists for *untrusted third-party* code with
-sandboxing overhead; the source-available supporter modules don't need that and
-benefit from direct access to the server. The open-source core defines stub
-extension points the modules fill in. See [Editions & Licensing](/guides/licensing/).
-
-**Trade-off:** those modules aren't operator-modifiable; a signed key is verified
-offline.
-
 ### Server-driven UI
 
 Content pages are assembled server-side as `PageSection[]` arrays of a unified

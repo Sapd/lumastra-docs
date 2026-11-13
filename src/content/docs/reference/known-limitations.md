@@ -30,22 +30,18 @@ assistants can read the
 as plain Markdown.
 :::
 
-## Early release
+## Status
 
-**Lumastra is at v0.1.** It runs real libraries every day, but it's an early release.
-Expect rough edges and bugs, especially on hardware and setups we haven't tested yet.
-Back up `/config` and the database before upgrading, and please
-[report what breaks](https://github.com/sapd/lumastra/issues).
+Lumastra is in maintenance mode. I fix bugs and security problems; there is no roadmap
+and no promise of new features. It runs real libraries every day, but expect rough edges
+on hardware and setups I haven't tested. Back up `/config` and the database before
+upgrading, and please [report what breaks](https://github.com/sapd/lumastra/issues).
+Feature ideas are welcome in
+[Discussions](https://github.com/Sapd/lumastra/discussions/categories/features), but
+replies may take a while.
 
 The iPhone, iPad and Apple TV apps have their own version numbers, which started at 1.0.1.
-That number says nothing about maturity: the apps are as early as the server.
-
-**No new features are planned before 1.0.** Lumastra is built by one person who uses it
-every day, and it has to work well for that setup first. Until a 1.0 release the focus is
-on fixing bugs and polishing what's there, based on feedback. Feature ideas are still
-welcome in [Discussions](https://github.com/Sapd/lumastra/discussions/categories/features),
-but replies and fixes may take a while. If the number of issues grows, features may later
-be split into a supported core and best-effort areas that are fixed when time allows.
+That number says nothing about maturity.
 
 ## Deployment shape
 

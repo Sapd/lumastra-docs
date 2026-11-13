@@ -34,9 +34,8 @@ deployment settings below are environment-only.
 | `PUBLIC_BASE_URL`     | No                  | —                          | Public origin used for absolute links the server builds without a request: the Trakt sign-in redirect, poster links in notification webhooks, and the Security Self-Check's edge probes. |
 | `WORKER_MODE`         | Set by start script | `disabled` for web | `start.sh` runs web only; `start-worker.sh` sets `enabled` and `DEDICATED_WORKER=true` for the dedicated lean TypeScript task host. Run exactly one worker. Combined execution is unsupported. |
 | `INSTANCE_ID`         | No                  | hostname + random suffix   | Node name for the cluster/admin UI. The random suffix means the default is **not** stable across restarts (it avoids a Valkey key collision when the same hostname restarts in a new container); set it explicitly if you need a name that persists. |
-| `UPDATE_CHECK_ENABLED` | No               | `true`                     | Once a day, read the Lumastra release list from `api.github.com` and tell admins about newer versions (red until installed for a security release). Usually set in Admin → Settings → General → Diagnostics instead; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#update-check). |
-| `LICENSE_CHECK_IN_ENABLED` | No           | `true`                     | About once a week, send the install ID, Lumastra version and licence status code to `lumastra.org` so the project can count installs (pseudonymised counts, no IP address). Off skips only this check-in; renewal and the push relay token are unaffected. Usually set in Admin → Settings → General → Licensing or during setup; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#lumastraorgapilicenserefresh-licence-renewal). |
-| `LICENSE_SERVER_CONTACT_ENABLED` | No | `true` | Off: the install never contacts `lumastra.org` and runs on the free tier at once. Usually set in Admin → Settings → General → Licensing or during setup; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#switch-off-all-contact). |
+| `UPDATE_CHECK_ENABLED` | No               | `true`                     | Once a day, look up the newest Lumastra release (at `lumastra.org`, or at `api.github.com` when `LICENSE_SERVER_CONTACT_ENABLED` is off <!-- VERIFY with agpl-update-check -->) and tell admins about newer versions (red until installed for a security release). Usually set in Admin → Settings → General → Diagnostics instead; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/#update-check). |
+| `LICENSE_SERVER_CONTACT_ENABLED` | No | `true` | Whether the install may contact `lumastra.org`: the push relay token request, and the daily update check (<!-- VERIFY with agpl-update-check -->). Off: no call to `lumastra.org`; push through the standard relay does not work and the update check goes to GitHub. The name is historical; there is no licence. Usually set in Admin → Settings → General → Push relay or during setup; an environment value locks that switch. See [What Lumastra sends where](/reference/data-flows/). |
 | `LOG_LEVEL`           | No                  | `info`                     | `debug` / `info` / `warn` / `error`                  |
 | `TZ`                  | No                  | UTC (container default)    | The container's time zone (e.g. `Europe/Berlin`, set in `docker-compose.yml`). Daily and weekly [task triggers](/guides/task-monitoring/#triggers-when-a-task-runs) fire in this zone. There's no separate in-app setting for it. |
 | `LUMASTRA_SKIP_PREFLIGHT` | No              | `false`                    | Boot past preflight **errors**. The check still runs and logs its findings; this only stops it blocking startup. |
@@ -214,8 +213,7 @@ runtime, not bundled by Lumastra (review the
 ## Branding
 
 All optional; defaults render the bundled Lumastra identity. Custom name, logos,
-description and background take effect only with the custom-branding licence module
-(see [Editions & Licensing](/guides/licensing/)); the two colours always apply. Logo
+description and background are free to use on your own install. Logo
 values are `http(s)` URLs or paths starting with `/`, such as `/custom/logo.png`.
 
 | Variable               | Default          | Description                                                            |
@@ -263,7 +261,7 @@ Override the bundled files by mounting your own over them:
 
 A few in-app brand usages (the About dialog, for one) are compiled into content-hashed
 assets and keep the Lumastra identity. See
-[Editions & Licensing](/guides/licensing/) for what a full rebrand of a fork involves.
+[`LICENSING.md`](https://github.com/Sapd/lumastra/blob/main/LICENSING.md) for what a full rebrand of a fork involves.
 
 :::tip[Behind a reverse proxy?]
 Keep `manifest.json` and the icon files reachable **without** authentication, or the
