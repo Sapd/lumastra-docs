@@ -180,3 +180,37 @@ on different ports, front them with your reverse proxy, and replace them one at 
    web service in turn. Its healthcheck must use `/api/health/ready`. Update the worker
    immediately afterwards. There is no ready-made script for this; a short shell loop
    over the two services does it.
+
+## Upgrade an install from before the dedicated worker
+
+Older installs ran one container for web and jobs, with one Valkey. Current versions need
+a separate worker and a second Valkey, and refuse to start without them
+(`TASK_CACHE_URL is required`). This is for Docker Compose installs.
+
+Your existing Valkey becomes the task Valkey and keeps its queue. Do not just add
+`--appendonly yes` and restart: a Valkey that only has snapshots then starts empty.
+
+1. Back up the database and `LUMASTRA_MASTER_KEY`.
+2. Switch the running Valkey to AOF first, and wait until the rewrite is done:
+
+   ```bash
+   set -a; . ./.env; set +a
+   VK="docker compose exec -e REDISCLI_AUTH=$CACHE_PASSWORD lumastra-valkey valkey-cli"
+   $VK CONFIG SET appendonly yes
+   $VK CONFIG SET maxmemory-policy noeviction
+   $VK INFO persistence | grep -E 'aof_rewrite_in_progress|aof_last_bgrewrite_status'
+   ```
+
+   Repeat the last command until you see `aof_rewrite_in_progress:0` and
+   `aof_last_bgrewrite_status:ok`.
+3. Compare your file with the [current example](https://github.com/Sapd/lumastra/blob/v0.1.4/docker-compose.example.yml).
+   Add the cache Valkey and the worker service. Give the existing Valkey the flags
+   `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec`. Remove
+   `WORKER_MODE` and `DEDICATED_WORKER` from the web service. Set `CACHE_URL` to the new
+   Valkey and `TASK_CACHE_URL` to the old one. Keep the old database number, usually `/0`.
+4. Apply it with `docker compose pull && docker compose up -d`.
+5. In **Admin → Tasks**, the jobs queued before the upgrade should start running.
+
+Startup refuses to run when the task Valkey is empty but PostgreSQL still shows work in
+flight, or when its eviction policy is not `noeviction`. Never point `CACHE_URL` and
+`TASK_CACHE_URL` at the same Valkey.

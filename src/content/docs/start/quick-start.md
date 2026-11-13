@@ -6,7 +6,7 @@ description: Install Lumastra with Docker Compose in about ten minutes, then ope
 Lumastra is a self-hosted media server for movies, series, music and more. You run it on
 your own machine and use it in a browser, in the Apple apps, or with Jellyfin and
 Subsonic apps. This page installs it with Docker Compose. To use Kubernetes instead, see
-[Deploy on Kubernetes](/guides/deploy-kubernetes/). Both are fully supported.
+[Deploy on Kubernetes](/guides/deploy-kubernetes/).
 
 ## What you need
 
@@ -38,6 +38,9 @@ sed -i.bak \
   .env && rm -f .env.bak && chmod 600 .env
 ```
 
+Run this once. After the first start, a second run writes a new `DATABASE_PASSWORD` that
+the existing database rejects.
+
 Back up the `LUMASTRA_MASTER_KEY` line from `.env` somewhere safe. Without it, stored
 API keys cannot be decrypted. See [Backup & recovery](/guides/backup-recovery/).
 
@@ -47,7 +50,7 @@ Replace the path, then run the command. It adds the folder to the web and worker
 containers, read-only.
 
 ```bash
-MEDIA=/path/to/your/media
+MEDIA="/path/to/your/media"
 sed -i.bak "s|# - /path/to/media:/data/media:ro|- $MEDIA:/data/media:ro|" docker-compose.yml && rm docker-compose.yml.bak
 grep -n '^ *- .*:/data/media' docker-compose.yml
 ```
@@ -73,13 +76,13 @@ You should see `{"status":"pass"}`.
 
 ## 5. Create your admin
 
-Open `http://localhost:3000/setup` in a browser on the same machine. The first screen,
-**Check your install**, lists what the server found. Continue, choose **Built-in login**
+Open `http://localhost:3000/setup` in a browser on the same machine. No browser on the
+server? See "You open Lumastra from another computer" below. Choose **Built-in login**
 and pick a username and password. You should now see **Your account is ready**.
 
-On that next page, paste a free [TMDB API key](/guides/integrations/) if you have one.
-Without it, titles and artwork come from file names only. Everything else can wait: use
-**Skip for now**.
+The next page asks for a TMDB API key. It is free: see
+[how to get one](/guides/integrations/). Without it, titles and artwork come from file
+names only. Everything else can wait: use **Skip for now**.
 
 ## 6. Add your libraries
 
@@ -109,17 +112,24 @@ without encryption.
 **`docker compose up` says `required variable DATABASE_PASSWORD is missing`.** The secrets
 file is not named `.env`, or you ran the command in another folder.
 
-**You use Windows without WSL.** `openssl` is missing. Open `.env` in an editor and fill in
-three lines: `DATABASE_PASSWORD` and `CACHE_PASSWORD` with 48 hex characters each, and
+**You use Windows without WSL.** The `sed` and `openssl` commands do not run, and `curl`
+must be `curl.exe`. Make the same edits in an editor. In `.env`, fill in
+`DATABASE_PASSWORD` and `CACHE_PASSWORD` with 48 hex characters each, and
 `LUMASTRA_MASTER_KEY` with 64 (remove the `# `). Use only digits and the letters a to f.
-In the media step, use a path like `C:/Users/you/Videos`.
+In `docker-compose.yml`, change `lumastra:stable` to `lumastra:0.1.4` and remove the `# `
+before the media path, with a path like `C:/Users/you/Videos`.
 
-**You have 4 GB of RAM or less.** The example file already turns on low-RAM mode. On a
-larger machine, delete the `LUMASTRA_LOW_RAM_MODE` lines. See
+**You have more than 4 GB of RAM.** The example file turns on low-RAM mode. Delete its two
+`LUMASTRA_LOW_RAM_MODE` lines and restart. See
 [Performance tuning](/guides/performance-tuning/).
 
-**Your CPU is old, or Lumastra runs in a virtual machine.** x86-64 needs SSE4.2 and POPCNT.
-Set the VM CPU to `host-passthrough`.
+```bash
+sed -i.bak '/LUMASTRA_LOW_RAM_MODE/d' docker-compose.yml && rm docker-compose.yml.bak
+docker compose up -d
+```
+
+**The containers exit with `Illegal instruction`.** The CPU is too old (before 2011) or a
+virtual machine hides its features. In Proxmox or libvirt, set the CPU type to `host`.
 
 **You are on ARM64.** Music BPM and mood analysis, the sonic sidecar and Intel hardware
 transcoding are off. See [Known limitations](/reference/known-limitations/#what-is-unavailable-on-arm64).

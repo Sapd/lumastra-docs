@@ -7,25 +7,13 @@ This page continues the [Quick Start](/start/quick-start/). It covers what you d
 Lumastra runs on a single host: a home server, a NAS or one VM. To run several web
 replicas, use [Kubernetes](/guides/deploy-kubernetes/).
 
-## 1. Set your public address
+## 1. Set your public address and add a reverse proxy
 
-Use the address people type in the browser. Replace the example, then restart.
+Follow the [Reverse proxy guide](/guides/reverse-proxy/). It sets `ORIGIN` and sets up
+Caddy, nginx or Traefik. Do both before you tell others the address: sign-in fails with a
+`403` while `ORIGIN` and the browser address differ.
 
-```bash
-sed -i.bak 's|^# ORIGIN=.*|ORIGIN=https://media.example.com|' .env && rm -f .env.bak
-docker compose up -d
-```
-
-`grep '^ORIGIN' .env` should print your address. Sign-in fails with a `403` when `ORIGIN`
-and the browser address differ.
-
-## 2. Put a reverse proxy in front
-
-Follow the [Reverse proxy guide](/guides/reverse-proxy/) for Caddy, nginx or Traefik. If
-the proxy runs in the same compose file, also delete the `ports:` block of the
-`lumastra` service so nothing bypasses it.
-
-## 3. Check that everything is healthy
+## 2. Check that everything is healthy
 
 ```bash
 docker compose ps
@@ -36,24 +24,25 @@ All services should show `healthy`. Right after a start, the `lumastra` log cont
 `Schema migration completed successfully`. **Admin → System → Health** shows the state
 of each part too.
 
-## 4. Back up
+## 3. Back up
 
 Back up the PostgreSQL database, the `config` volume and `LUMASTRA_MASTER_KEY`. The
 commands are in [Backup & recovery](/guides/backup-recovery/).
 
-## 5. Update
+## 4. Update
 
 Check the [release notes](https://github.com/Sapd/lumastra/releases) first. Then set the
 new version and restart:
 
 ```bash
 NEW=0.1.5   # example: use the release you want
-sed -i.bak "s|lumastra:[0-9.]*|lumastra:$NEW|" docker-compose.yml && rm -f docker-compose.yml.bak
+sed -i.bak "s|lumastra/lumastra:[0-9][0-9.]*|lumastra/lumastra:$NEW|" docker-compose.yml && rm -f docker-compose.yml.bak
+grep image: docker-compose.yml
 docker compose pull
 docker compose up -d
 ```
 
-The app runs its database migrations on start. Admins see a newer release in the bell
+`grep` should show the new version on three lines. The app runs its database migrations on start. Admins see a newer release in the bell
 icon. For updates without dropped streams, see
 [Zero-downtime updates](/guides/zero-downtime-updates/).
 
@@ -75,7 +64,7 @@ there are several containers is explained in the [architecture overview](/archit
 | --- | --- |
 | `lumastra_postgres_data` | The database |
 | `lumastra_valkey_data` | The job queue |
-| `config` | Settings, `master.key`, artwork. Shared by web and worker. |
+| `config` | Settings, artwork. Shared by web and worker. |
 | `cache` | Image cache |
 | `ffmpeg-cache` | FFmpeg binaries, downloaded on the first start |
 | `plugins` | Installed plugins |
@@ -90,21 +79,20 @@ explains `ORIGIN`, `TRUSTED_PROXY_IPS`, compression, access logs and upload limi
 
 ## Optional services
 
-**Live TV proxy.** Add these lines to `.env`, then start the profile. Enable Live TV in
-**Admin → Settings**. More in the [Live TV guide](/guides/live-tv/).
+### Add Live TV
 
-```dotenv
-STREAM_PROXY_URL=http://lumastra-proxy:3000
-STREAM_PROXY_SECRET=<openssl rand -hex 24>
-```
+Add the proxy, then enable Live TV in **Admin → Settings**. More in the
+[Live TV guide](/guides/live-tv/).
 
 ```bash
+echo "STREAM_PROXY_URL=http://lumastra-proxy:3000" >> .env
+echo "STREAM_PROXY_SECRET=$(openssl rand -hex 24)" >> .env
 docker compose --profile livetv-proxy up -d
 ```
 
-## Sonic embedder sidecar
+### Add sound-based music features
 
-The sidecar powers sound-based music features. It is amd64 only. The image
+The sonic sidecar powers them. It is amd64 only. The image
 `ghcr.io/lumastra/lumastra-sonic-embedder` is defined in the example file behind the
 `sonic` profile.
 
@@ -121,7 +109,7 @@ The sidecar powers sound-based music features. It is amd64 only. The image
      GRANT SELECT ON media_audio_embeddings TO sonic_reader;"
    ```
 
-3. Uncomment `SONIC_EMBEDDER_URL` on `lumastra` and `lumastra-worker`.
+3. In `docker-compose.yml`, uncomment `SONIC_EMBEDDER_URL` on `lumastra` and `lumastra-worker`.
 4. Start it:
 
    ```bash
@@ -135,40 +123,6 @@ with `Sonic sidecar memory too small`: raise the limit and retry the failed item
 features are switched on in [Music discovery](/guides/music-discovery/).
 
 ## If something differs
-
-**Your install is older than the dedicated worker.** Older installs ran one container for
-web and jobs, with one Valkey. Current versions need a separate worker and a second
-Valkey, and refuse to start without them (`TASK_CACHE_URL is required`).
-
-### Upgrading to the dedicated worker and two Valkeys
-
-Your existing Valkey becomes the task Valkey and keeps its queue. Do not just add
-`--appendonly yes` and restart: a Valkey that only has snapshots then starts empty.
-
-1. Back up the database and `LUMASTRA_MASTER_KEY`.
-2. Switch the running Valkey to AOF first, and wait until the rewrite is done:
-
-   ```bash
-   set -a; . ./.env; set +a
-   VK="docker compose exec -e REDISCLI_AUTH=$CACHE_PASSWORD lumastra-valkey valkey-cli"
-   $VK CONFIG SET appendonly yes
-   $VK CONFIG SET maxmemory-policy noeviction
-   $VK INFO persistence | grep -E 'aof_rewrite_in_progress|aof_last_bgrewrite_status'
-   ```
-
-   Repeat the last command until you see `aof_rewrite_in_progress:0` and
-   `aof_last_bgrewrite_status:ok`.
-3. Compare your file with the [current example](https://github.com/Sapd/lumastra/blob/v0.1.4/docker-compose.example.yml).
-   Add the cache Valkey and the worker service. Give the existing Valkey the flags
-   `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec`. Remove
-   `WORKER_MODE` and `DEDICATED_WORKER` from the web service. Set `CACHE_URL` to the new
-   Valkey and `TASK_CACHE_URL` to the old one. Keep the old database number, usually `/0`.
-4. Apply it with `docker compose pull && docker compose up -d`.
-5. In **Admin → Tasks**, the jobs queued before the upgrade should start running.
-
-Startup refuses to run when the task Valkey is empty but PostgreSQL still shows work in
-flight, or when its eviction policy is not `noeviction`. Never point `CACHE_URL` and
-`TASK_CACHE_URL` at the same Valkey.
 
 **Valkey logs `Memory overcommit must be enabled`.** You can ignore it. To silence it, run
 `sudo sysctl vm.overcommit_memory=1` on the Docker host.
@@ -198,3 +152,8 @@ measure peak use during a transcode and a library scan. Plan for about 1 GB for 
 database and 2 to 4 GB for the worker.
 
 **You want more than one web replica.** Use [Kubernetes](/guides/deploy-kubernetes/).
+
+### Upgrading to the dedicated worker and two Valkeys
+
+Installs older than the dedicated worker need a separate worker and a second Valkey.
+The steps are in [Zero-downtime updates](/guides/zero-downtime-updates/#upgrade-an-install-from-before-the-dedicated-worker).

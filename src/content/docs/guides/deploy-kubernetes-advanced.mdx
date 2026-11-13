@@ -36,15 +36,17 @@ session reaches one pod. Your Ingress needs no affinity. It must not buffer resp
 it must allow timeouts of at least one hour, bodies of at least 50 MB and WebSocket
 upgrades for `/j/socket`.
 
-The router passes the client address to the app with a hop value derived from
-`LUMASTRA_MASTER_KEY`, so keep that key in your Secret. Any pod that can reach the router
-can still choose the client address. Set `networkPolicy.enabled: true` with `ingressFrom`
-set to your ingress controller pods, or narrow `router.realIp.fromCIDRs`. The chart warns
-until you do.
+The router signs the client address with a key made from `LUMASTRA_MASTER_KEY`, so keep
+that key in your Secret. Other pods in the cluster could still talk to the router and
+fake an address. Limit who reaches it: set `networkPolicy.enabled: true` with
+`ingressFrom` set to your ingress controller pods, or narrow `router.realIp.fromCIDRs`.
+The chart warns until you do.
 
 ## How do I run several web pods?
 
 You need `ReadWriteMany` storage, because pods on different nodes mount the same volumes.
+Coming from the one-node install? Its volumes cannot change, so create new claims and copy
+the data as in step 3 of the Compose move below.
 
 ```yaml
 mode: split
@@ -154,8 +156,9 @@ auth:
 
 Register `https://<host>/auth/oidc/callback` at the provider. See
 [Authentication](/guides/authentication/). Forward auth needs `auth.forwardAuth.enabled`,
-`trustedProxyIps`, `networkPolicy.enabled: true` and the `router.forwardAuth` block. Leave
-the node's gateway address out of the trusted range.
+`trustedProxyIps`, `networkPolicy.enabled: true` and the `router.forwardAuth` block.
+`ci/full-values.yaml` shows all four. Leave the node's gateway address out of the trusted
+range.
 
 ## How do I expose Lumastra?
 
@@ -171,8 +174,8 @@ httpRoute:
   hostnames: [media.example.com]
 ```
 
-Compress at the Ingress, but never `text/event-stream` or media. With Traefik and the
-Gateway API, match the CRDs to your Traefik version and grant Traefik `*/status` RBAC.
+Compress at the Ingress, but never `text/event-stream` or media. For Traefik and the
+Gateway API, start from `ci/gateway-values.yaml`.
 
 ## How do I use a GPU?
 
@@ -328,17 +331,21 @@ Plan a maintenance window and back up first.
    cannot restore:
 
    ```bash
-   pg_dump -U lumastra -d lumastra --no-owner --no-acl -F c -f lumastra.dump
+   # on the old host, in the Compose folder
+   docker compose exec -T lumastra-postgres pg_dump -U lumastra -d lumastra --no-owner --no-acl -F c > lumastra.dump
+   # on your computer, with the port-forward open in another terminal
+   kubectl -n lumastra port-forward svc/lumastra-postgres-rw 15432:5432
    pg_restore -l lumastra.dump | grep -v ' EXTENSION ' > restore.list
    pg_restore -U lumastra -h 127.0.0.1 -p 15432 -d lumastra --no-owner --no-acl -L restore.list lumastra.dump
    ```
 
-   Port 15432 is a `kubectl port-forward` to the `<cluster>-rw` Service.
+   The Service `lumastra-postgres-rw` is the chart's database. Its password is in the Secret
+   `lumastra-postgres-app`.
 5. Optional, to keep queued jobs: set `valkey.tasks.rdbImport.enabled: true`, copy
    `dump.rdb` into the tasks volume, then scale the tasks Valkey to 1.
 6. Scale web and worker up. In **Admin → Settings**, remove old integration URLs. If your
    SSO lived only in the admin UI, set `auth.oidc.configuredInAdminUi: true`.
-7. Compare the image of both installs, then switch DNS. Keep the old install, stopped.
+7. Check that both installs run the same version, then switch DNS. Keep the old install, stopped.
 
 ## How do I check and troubleshoot it?
 

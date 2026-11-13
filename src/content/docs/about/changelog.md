@@ -143,7 +143,7 @@ passing an `X-Forwarded-User` header through. See
   the new grouping to its existing channels.
 - The sonic sidecar analyses long tracks in chunks, so it needs far less memory (a
   30-minute track about 0.9 GB instead of 8 GB). See
-  [Sonic sidecar memory](/guides/deploy-docker/#sonic-embedder-sidecar).
+  [Sonic sidecar memory](/guides/deploy-docker/#add-sound-based-music-features).
 - Albums no longer show another album's cover, GIF, TIFF and AVIF covers are converted
   instead of failing, and artist images are retried when a provider is down.
 - Provider images stay visible while the image host refuses requests.

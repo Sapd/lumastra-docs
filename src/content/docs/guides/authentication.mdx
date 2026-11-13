@@ -19,8 +19,8 @@ Apple TV apps work with all three: the user approves a code in a signed-in brows
 The setup wizard creates the first admin with a username and password. Users sign in at
 `/login`. Sessions last 30 days (`NATIVE_AUTH_SESSION_TTL_DAYS`). Passwords are hashed with
 scrypt, and sign-in is rate-limited with account lockout. There is no built-in MFA. Admins
-add accounts and reset passwords at **Admin → Users**. There is no email reset. If you lock yourself out, set a new password from the host. It prints one
-and signs that user out everywhere:
+add accounts and reset passwords at **Admin → Users**. There is no email reset. Locked
+out? This command prints a new password and signs the user out everywhere:
 
 ```bash
 docker compose exec lumastra npx tsx --tsconfig tsconfig.scripts.json scripts/reset-password.ts <username>
@@ -33,35 +33,33 @@ These steps use Authentik as an OIDC provider. Lumastra must be reachable over H
 
 1. In Authentik, open **Directory → Groups** and create a group such as `lumastra-admins`.
    Add yourself to it.
-2. Create an application with an **OAuth2/OpenID provider**. Set the client type to
-   confidential. Set the redirect URI to `https://media.example.com/auth/oidc/callback`,
-   matched exactly, with your own address.
-3. Select the scopes `openid`, `profile` and `email`. Make sure the ID token carries the
-   user's groups in a `groups` claim. If the built-in mappings do not, add a scope mapping
-   that does.
+2. Open **Applications → Applications → Create with Provider** and choose **OAuth2/OpenID
+   Provider**. Set the client type to confidential. Set the redirect URI to
+   `https://media.example.com/auth/oidc/callback` with your own address, matching mode
+   **Strict**.
+3. Select the scopes `openid`, `profile` and `email`. The ID token must carry the user's
+   groups in a `groups` claim. Authentik's `profile` scope usually includes it. If admin
+   rights do not arrive later, check that claim.
 4. Copy the client ID and the client secret. The issuer URL has the form
    `https://auth.example.com/application/o/<application-slug>/`.
-5. Add the settings to `.env`. Use your own values:
+5. Add these lines to `.env` with your own values, then run `docker compose up -d`:
 
-   ```bash
-   cat >> .env <<EOF
+   ```dotenv
    AUTH_OIDC_ENABLED=true
    AUTH_OIDC_ISSUER=https://auth.example.com/application/o/lumastra/
-   AUTH_OIDC_CLIENT_ID=<client id>
-   AUTH_OIDC_CLIENT_SECRET=<client secret>
+   AUTH_OIDC_CLIENT_ID=your-client-id
+   AUTH_OIDC_CLIENT_SECRET=your-client-secret
    AUTH_OIDC_PROVIDER_NAME=Authentik
    ADMIN_GROUPS=lumastra-admins
-   EOF
-   docker compose up -d
    ```
 
 6. Open `https://media.example.com/login`. You should see **Sign in with Authentik**.
-   Sign in with the account from step 1. On a fresh install, use `/setup` instead: the
-   first account becomes admin only if it is in an `ADMIN_GROUPS` group.
+   Sign in with the account from step 1. The admin you made in the Quick Start stays a
+   separate account. To sign in to it through OIDC, see `AUTH_OIDC_LINK_BY_USERNAME` below.
 
 Later users are created at their first sign-in. A user in an `ADMIN_GROUPS` group becomes
-admin. Group sync only promotes: removing a group never silently removes admin. An admin
-can pin a user's status at **Admin → Users**. On Kubernetes, see the `auth.oidc` values in
+admin. With OIDC, removing the group never silently removes admin: an admin lowers the
+user at **Admin → Users**. An admin can also set a user's role by hand there. On Kubernetes, see the `auth.oidc` values in
 [Advanced Kubernetes](/guides/deploy-kubernetes-advanced/#how-do-i-set-up-sign-in).
 
 ## If you use another OIDC provider
@@ -115,13 +113,15 @@ FORWARD_AUTH_ENABLED=true
 USERHEADER=X-authentik-username
 GROUPHEADER=X-authentik-groups
 ADMIN_GROUPS=admin
-TRUSTED_PROXY_IPS=172.30.0.2   # the proxy's own address, never a wide range
+TRUSTED_PROXY_IPS=172.30.0.2   # a proxy in this compose file: its fixed address, never a wide range
 ```
 
 `TRUSTED_PROXY_IPS` and header removal are explained in the
 [Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips). Without both settings,
-the headers are ignored and nobody can sign in this way. Users are created at their first
-request. A forwarded name should match the Jellyfin user name if you sync with Jellyfin.
+the headers are ignored and nobody can sign in this way. An nginx installed on the Docker
+host reaches Lumastra from the network gateway, which every program on the host shares.
+Trusting it lets any of them sign in as anyone, so use OIDC unless the proxy runs in a
+container with a fixed address. Users are created at their first request. A forwarded name should match the Jellyfin user name if you sync with Jellyfin.
 
 For Authentik with nginx, every location must either run `auth_request` or blank the
 identity headers. The apps check their own credentials on these paths, so they must skip
@@ -196,8 +196,9 @@ For Traefik, use a `forwardAuth` middleware at
 `http://<outpost>:9000/outpost.goauthentik.io/auth/traefik` with the two headers in
 `authResponseHeaders`. Apply the same bypass rules.
 
-**A user removed from every group keeps admin.** nginx drops empty headers, so Lumastra
-never learns the groups are empty. The `map` lines above fix that. If you cannot change
+**With nginx, a user removed from every group keeps admin.** Forward auth follows the
+groups on every request, but nginx drops empty headers, so Lumastra never learns the
+groups are empty. The `map` lines above fix that. If you cannot change
 the proxy, set `FORWARD_AUTH_GROUPS_ALWAYS_SENT=true`, but only when every proxy
 location that sends the user name also sends the groups.
 
@@ -213,9 +214,6 @@ and the log (`identity headers ignored`) name the address Lumastra saw.
 **The install has no admin left.** Restore the admin group at your provider. Or set
 `SETUP_UNLOCK=1` in `.env`, restart, and create an admin at `/setup`. Remove the line
 afterwards. It works only while no admin exists.
-
-**You turned forward auth on and upgraded from a release before October 2026.** Add
-`FORWARD_AUTH_ENABLED=true` before you upgrade, or nobody can sign in.
 
 **An employee or family member leaves.** Disable the account at **Admin → Users**. That
 ends their sessions, device tokens, personal tokens and Jellyfin and Subsonic sessions.

@@ -18,7 +18,7 @@ Docker Compose is the other fully supported way to run Lumastra: see the
 - A folder with your media on the node.
 - A DNS name that points at the node. Without one, see the end of this page.
 
-No cluster yet? A single machine is enough. See "If you have no cluster" below.
+No cluster yet? A single machine is enough. See "You have no cluster" below.
 
 ## 1. Choose your settings
 
@@ -123,7 +123,7 @@ ingress:
 EOF
 ```
 
-This keeps every pod on one node, so the volumes need only `ReadWriteOnce` and no router
+`grep host: my-values.yaml` should show your host name. This keeps every pod on one node, so the volumes need only `ReadWriteOnce` and no router
 is needed. Volume settings cannot change after the first install, so get them right now.
 The media folder must be readable by user ID 1000.
 
@@ -135,7 +135,8 @@ kubectl -n lumastra get pods -w
 ```
 
 Stop watching with Ctrl+C. After one to three minutes, the web pod `lumastra-web-0`, the
-worker, both Valkeys and the `lumastra-postgres` pod should all be `Running` and ready.
+worker, both Valkeys and the database pod `lumastra-postgres-1` should all be `Running`
+and ready.
 The first start downloads FFmpeg and migrates the database, and the pods may restart a
 few times while the database starts. That is normal.
 
@@ -144,13 +145,18 @@ few times while the database starts. That is normal.
 Open `http://media.example.com/setup`, with your own host name. You should see **Check
 your install**. Create the admin with **Built-in login**, then add your library folders.
 The folder shown is `/data/media`. The steps are the same as in the
-[Quick Start](/start/quick-start/#5-create-your-admin).
+[Quick Start](/start/quick-start/#5-create-your-admin). The wizard warns that
+`TRUSTED_PROXY_IPS` is not set. That is expected here: rate limits then treat all clients
+as one. The router in [Advanced Kubernetes](/guides/deploy-kubernetes-advanced/#why-is-there-a-router)
+passes the real client address.
 
 ## 8. Switch to HTTPS
 
 The Apple apps need HTTPS. The Ingress reads the certificate from a Secret named
-`lumastra-tls`. With cert-manager, add its annotation under `ingress.annotations` and it
-creates the Secret. With your own certificate files, create it yourself:
+`lumastra-tls`. With cert-manager, add
+`--set 'ingress.annotations.cert-manager\.io/cluster-issuer=<issuer>'` to the upgrade
+command below and it creates the Secret. With your own certificate files, create it
+yourself:
 
 ```bash
 kubectl -n lumastra create secret tls lumastra-tls --cert=fullchain.pem --key=privkey.pem
@@ -216,10 +222,6 @@ CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
 **You want more than one web pod, or your nodes share storage.** See
 [Advanced Kubernetes](/guides/deploy-kubernetes-advanced/).
 
-**The setup wizard warns that `TRUSTED_PROXY_IPS` is not set.** Lumastra then sees the
-Ingress pod as every client. See
-[Known limitations](/reference/known-limitations/#set-trusted_proxy_ips-if-you-run-behind-a-reverse-proxy).
-
 **You want to read the logs.**
 
 ```bash
@@ -227,11 +229,13 @@ kubectl -n lumastra logs -f statefulset/lumastra-web
 kubectl -n lumastra logs -f deploy/lumastra-worker
 ```
 
-**You want to update.** Check out the new tag, then upgrade with the new image version:
+**You want to update.** Check out the new tag and put the new version in your values file,
+so later upgrades keep it:
 
 ```bash
 git fetch --tags && git checkout v0.1.5   # example: the release you want
-helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml --set image.tag=0.1.5
+sed -i.bak 's|^  tag: .*|  tag: 0.1.5|' my-values.yaml && rm my-values.yaml.bak
+helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
 ```
 
 Back up the database and your master key first. See
