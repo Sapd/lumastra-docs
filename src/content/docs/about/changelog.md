@@ -15,10 +15,76 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
-### Unreleased
+### 0.1.4 (2026-11-13)
 
-Live TV proxy: update needed (protocol 0 → 1, TypeScript proxy, Rust proxy, shared modules,
-build scripts, image build).
+Live TV proxy: update needed (its Rust dependencies were updated).
+
+- **Security:** the Docker images use Node.js 24.22.3, Node's November security release.
+  npm and Rust dependencies are updated too.
+- Browse: the search box in the A-Z and Recently-added views also finds titles in your
+  language and original titles, as global search already did.
+- Search: an exact or prefix match on a title in your language ranks first. Exact matches
+  ignore case.
+- Jellyfin apps: Moonfin's Quick Connect QR code opens the approve dialog with the code
+  filled in. `/j` and its server-info endpoints all report the same address
+  (`PUBLIC_BASE_URL`, else the request address plus the base path).
+- When the Jellyfin-compatible API is on, the default home screen shows a **Set up a
+  Jellyfin app** button that opens Settings → Connections. Admins can remove it in the home
+  screen editor.
+- The setup wizard offers every library type, including home videos, training, educational
+  and personal.
+
+### 0.1.3 (2026-11-05)
+
+Live TV proxy: no update needed.
+
+- Helm chart: with more than one router pod (two by default), video often didn't start and
+  media requests failed with `403 ip_mismatch`. The router now proves itself to the web
+  pods with a value derived from `LUMASTRA_MASTER_KEY`. Restart the router pods after
+  rotating the key. `helm install` warns when other pods could set their client address
+  through the router.
+- Setup wizard: **Skip for now** on the basics step goes on to the library step.
+- Quieter logs after a Valkey restart, and `npm run doctor` no longer names an embedding
+  provider when no key is set.
+
+### 0.1.2 (2026-11-04)
+
+Live TV proxy: no update needed.
+
+- A full `docker compose restart` no longer keeps the worker stopping for about 60 s. The
+  worker and web stop in a few seconds, each shutdown step has a time limit, and a Valkey
+  restart no longer floods the log.
+- The example compose file gives the web service a stop grace period.
+
+### 0.1.1 (2026-11-04)
+
+Live TV proxy: no update needed.
+
+- **Security:** device sign-in codes and the passwords generated for Jellyfin apps use
+  unbiased random characters; search boxes escape the backslash in SQL patterns; the Watch
+  Together fallback client ID uses `crypto.randomUUID()`.
+- Fixes for music transcode cancellation, double-decoded HTML in guide and metadata
+  titles, and Markdown tables in diagnostics reports.
+
+### 0.1.0 (2026-11-03)
+
+Live TV proxy: update needed (protocol 0 → 1) if you ran the 2026-10-15 release candidate;
+new installs start with the current proxy.
+
+The first public release, with movies and series, music, audiobooks through
+Audiobookshelf, Live TV, Watch Together, single sign-on on every device, and a
+documented API. See [all features](https://lumastra.org/#all-features), the
+[quick start](/start/quick-start/) and the
+[known limitations](/reference/known-limitations/).
+
+Forward auth is now opt-in: set `FORWARD_AUTH_ENABLED=true` to sign in through
+Authentik, Authelia or another forward-auth proxy. **If you ran a pre-release build with
+forward auth, add that line before you upgrade**, or nobody can sign in. With forward
+auth off, a proxy trusted only for client IP addresses can no longer sign anyone in by
+passing an `X-Forwarded-User` header through. See
+[Authentication](/guides/authentication/#forward-authentication).
+
+#### Changes since the 2026-10-15 release candidate
 
 - Home’s **What's On Now** row searches channel names and the current or single next
   programme. The search field shows its full placeholder. Large lineups reveal cards
@@ -90,21 +156,6 @@ build scripts, image build).
 - Live TV simple mode: a large, calm Live TV screen for older viewers with their own
   numbered channels, on the web and on Apple TV. A helper or the admin sets it up and can
   lock it with a PIN. See [Live TV simple mode](/guides/live-tv-simple-mode/).
-
-### 0.1.0 (2026-10-15)
-
-The first public release, with movies and series, music, audiobooks through
-Audiobookshelf, Live TV, Watch Together, single sign-on on every device, and a
-documented API. See [all features](https://lumastra.org/#all-features), the
-[quick start](/start/quick-start/) and the
-[known limitations](/reference/known-limitations/).
-
-Forward auth is now opt-in: set `FORWARD_AUTH_ENABLED=true` to sign in through
-Authentik, Authelia or another forward-auth proxy. **If you ran a pre-release build with
-forward auth, add that line before you upgrade**, or nobody can sign in. With forward
-auth off, a proxy trusted only for client IP addresses can no longer sign anyone in by
-passing an `X-Forwarded-User` header through. See
-[Authentication](/guides/authentication/#forward-authentication).
 
 ## iPhone, iPad and Apple TV apps
 
