@@ -1,13 +1,11 @@
 ---
 title: Known limitations
-description: Deliberate trade-offs, platform limits and unfinished work in the current release. Read before you deploy.
+description: Deployment requirements, trade-offs and platform limits in the current release.
 sidebar:
     order: 3
 ---
 
-Read this before you deploy. It lists the trade-offs we chose, the limits of some
-platforms, and the things that aren't finished yet, so none of them surprises you
-later. If one of them rules Lumastra out for your setup, better to know now.
+This page lists deployment requirements and platform limits, so you can plan your setup.
 
 None of this is a bug report. Bugs go to
 [GitHub issues](https://github.com/sapd/lumastra/issues).
@@ -32,16 +30,12 @@ as plain Markdown.
 
 ## Status
 
-Lumastra is in maintenance mode. I fix bugs and security problems; there is no roadmap
-and no promise of new features. It runs real libraries every day, but expect rough edges
-on hardware and setups I haven't tested. Back up `/config` and the database before
-upgrading, and please [report what breaks](https://github.com/sapd/lumastra/issues).
-Feature ideas are welcome in
-[Discussions](https://github.com/Sapd/lumastra/discussions/categories/features), but
-replies may take a while.
+Bug and security reports go to [GitHub issues](https://github.com/sapd/lumastra/issues),
+feature ideas to
+[Discussions](https://github.com/Sapd/lumastra/discussions/categories/features). Back up
+`/config` and the database before upgrading.
 
-The iPhone, iPad and Apple TV apps have their own version numbers, which started at 1.0.1.
-That number says nothing about maturity.
+The iPhone, iPad and Apple TV apps have their own version numbers.
 
 ## Deployment shape
 
@@ -63,8 +57,7 @@ every commit to `main` and is **amd64 only**; on an ARM host it fails with
 `exec format error`. The reference compose file uses `:stable`.
 
 **Lumastra needs its own domain or subdomain** (for example `media.example.com`).
-Serving it under a subpath such as `example.com/lumastra/` isn't supported yet; the
-code has options for it, but they haven't been tested. See the
+Serving it under a subpath such as `example.com/lumastra/` isn't supported. See the
 [reverse proxy guide](/guides/reverse-proxy/).
 
 **x86-64 hosts need x86-64-v2** (SSE4.2, POPCNT) for the `sharp` image library. In a
@@ -137,8 +130,7 @@ deliberate, so that a signed-out device can't keep working just because the cach
 couldn't be checked.
 
 **Kubernetes and Docker Compose are both supported.** Lumastra ships a Helm chart, and
-lumastra.org's own instance runs on it. The manifests in [`deploy/k8s/`](https://github.com/sapd/lumastra/tree/main/deploy/k8s) are
-minimal examples. See [Deploy on Kubernetes](/guides/deploy-kubernetes/).
+lumastra.org's own instance runs on it. See [Deploy on Kubernetes](/guides/deploy-kubernetes/).
 
 ## Set `TRUSTED_PROXY_IPS` if you run behind a reverse proxy
 
@@ -172,24 +164,6 @@ the network gateway, which every local program shares, so leave the variable emp
 there. The [Reverse proxy guide](/guides/reverse-proxy/#trusted_proxy_ips) shows both
 parts for each proxy.
 
-## Performance on large libraries
-
-Browsing isn't optimised yet, and on a large library that's the first thing you'll
-notice. Three paths do more database work than they should:
-
-- **Poster and artwork requests.** Each image request runs its own access check.
-  Metadata and artwork lookups are cached in memory for 5 minutes, so a repeated
-  request is fast, but a grid of 40 cards with a cold cache still makes 40+ lookups
-  against a web connection pool limited to 8.
-- **Genre rows on the browse page.** Up to twelve JSONB scans per page load.
-- **A–Z browsing.** An unbounded `COUNT(*)` over the filtered items plus a deep
-  `OFFSET` query with a subquery per row.
-
-We haven't published latency numbers yet, because we'd rather say so than quote a figure
-we haven't measured on a realistic library. If browsing feels slow, this is why, and
-it's being worked on. You don't need to open an issue for it unless you see something
-worse than "slow", such as timeouts.
-
 ## Diagnostics and error reporting
 
 **The apps report errors to your server, on by default.** The iOS, tvOS and web apps
@@ -219,7 +193,7 @@ release tag on that branch. Either is fine in a bug report.
 ## Hardware transcoding
 
 Hardware transcoding is supported on **Intel** (Quick Sync / VA-API), **NVIDIA**
-(NVENC) and **AMD** (VA-API). Intel runs the developers' own server. Before 0.1 we also
+(NVENC) and **AMD** (VA-API). Intel is the most tested path. Before 0.1 we also
 tested an NVIDIA GeForce RTX 3090 (Docker Desktop on Windows, driver 617.14) and an AMD
 Radeon 760M (Ryzen 5 8600G, Linux) with H.264, HEVC, HDR10, Dolby Vision, AV1 and
 burned-in PGS subtitles. The [GPU transcoding guide](/guides/gpu-transcoding/#tested-hardware)
@@ -256,7 +230,7 @@ video when the device could decode it.
 
 ## Live TV
 
-**No recording (DVR) yet.** Live TV is for watching channels with a programme guide;
+**No recording (DVR).** Live TV is for watching channels with a programme guide;
 recording isn't available.
 
 ## Apps
@@ -266,11 +240,11 @@ server on HTTPS with a certificate the device trusts. Plain HTTP and self-signed
 certificates don't work.
 
 **Watch Together on iPhone and iPad.** Sessions work between the web app and the Apple
-TV app; the iPhone and iPad app can't join a session yet.
+TV app; the iPhone and iPad app can't join a session.
 
 **Other listeners' positions are web-only.** Audiobooks play in the web app and in the
 iPhone, iPad and Apple TV apps, but seeing where other listeners are in the same book only
-works on the web for now.
+works on the web.
 
 ## Integrations
 
@@ -288,10 +262,6 @@ library dialogs offer audiobooks only from an AudiobookShelf server. See
 **Media on S3 or other object storage: new files aren't picked up right away.** The live
 file watcher relies on file-system events, which a mounted bucket doesn't send. Use a
 scheduled scan instead.
-
----
-
-_If something here is out of date, that's a bug in this page. Please [open an issue](https://github.com/sapd/lumastra/issues)._
 
 ## Next
 
