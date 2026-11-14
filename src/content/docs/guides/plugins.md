@@ -57,6 +57,10 @@ continuity, and anti-rollback checks as manual signed installs.
 https://lumastra.org/plugins/index.json
 ```
 
+Your server downloads this list every 12 hours (nothing is sent; the **Contact lumastra.org**
+setting does not cover it). Remove the repository to stop it. See
+[What Lumastra sends where](/reference/data-flows/#plugin-repositories).
+
 Its reference plugins use the built-in key `lumastra-official-2026` and need no additional
 key configuration. They demonstrate plugin contracts and are intended for adaptation.
 Compare your build's key with

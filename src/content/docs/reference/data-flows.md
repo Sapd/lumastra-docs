@@ -17,7 +17,7 @@ configuration; default contacts are listed below.
 
 | Destination | When | What is sent | How to stop it |
 | --- | --- | --- | --- |
-| `lumastra.org` | Push token request: every ~6 hours while push is on and the default relay is used; it waits until you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created). Update check: once a day, at a random time | Push token request: the install ID and the Lumastra version ([details](#lumastraorgapipushrelay-token-the-push-relay-token)). Update check: the version only ([details](#update-check)) | **Contact lumastra.org** (Admin → Settings → General → Push relay, also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`. With it off, the update check goes to GitHub directly (next row) |
+| `lumastra.org` | Push token request: every ~6 hours while push is on and the default relay is used. Update check: once a day, at a random time, or when an admin runs it by hand. Neither starts until you answered the setup wizard's contact question (an install set up without the wizard: a day after its first admin was created) | Push token request: the install ID and the Lumastra version ([details](#lumastraorgapipushrelay-token-the-push-relay-token)). Update check: the version only ([details](#update-check)) | **Contact lumastra.org** (Admin → Settings → General → Push relay, also offered in setup), or `LICENSE_SERVER_CONTACT_ENABLED=false`. With it off, the update check goes to GitHub directly (next row) |
 | `github.com`, then `release-assets.githubusercontent.com` | First start of each container that transcodes, until the ffmpeg volume holds a copy | Nothing; a download of the pinned jellyfin-ffmpeg release ([ffmpeg download](#ffmpeg-download)) | `FFMPEG_AUTO_DOWNLOAD=false` and your own binaries |
 | `api.github.com` | When **Contact lumastra.org** is off, or when `lumastra.org` does not answer the update check: about once a day, at a random time | Nothing but the request (a plain `Lumastra-update-check` User-Agent, no token, no version); a read of the public release list ([update check](#update-check)) | `UPDATE_CHECK_ENABLED=false` (also under Admin → Settings → General → Diagnostics) |
 | `www.theaudiodb.com`, `api.deezer.com`, and their image hosts | Once a music library has artists or albums | Artist and album names ([TheAudioDB and Deezer](#metadata-artwork-and-ratings-providers)) | `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` |
@@ -25,13 +25,15 @@ configuration; default contacts are listed below.
 | `huggingface.co` and its CDN | First start of the optional sonic sidecar | Nothing; a download of the model weights ([sonic sidecar](#sonic-sidecar-model-weights)) | `SONIC_MODEL_FP` pointing at a local copy |
 
 A user's browser additionally contacts YouTube when a trailer plays (see
-[YouTube trailers](#youtube-trailers)). Push only starts once a user enables
+[YouTube trailers](#youtube-trailers)), and an admin's browser loads Swagger UI from
+`unpkg.com` when opening `/api-docs`. Push only starts once a user enables
 notifications in the iOS app.
 
 ## Services run by the Lumastra maintainer
 
-The project maintainer (Denis Arnst, Austria/EU, `git@sapd.eu`) operates `lumastra.org`
-and the push relay. These are the only places an install sends anything to the project.
+The project maintainer (Denis Arnst, Austria/EU, `lumastra@sapd.eu`) operates `lumastra.org`
+and the push relay. These are the only places an install sends anything to the project (plugin repositories
+below are plain downloads).
 There are no licence keys and no usage reporting. The licence endpoints that 0.1.x installs
 called were switched off with 0.2.0.
 
@@ -52,15 +54,16 @@ Your server sends notifications to that relay for delivery.
 
 **GDPR roles.** Push tokens are personal data. The operator is the controller;
 the maintainer is a processor acting on the server's delivery instructions.
-Art. 28 GDPR requires a written processor agreement. Until a standard agreement
-is published, the policy below is the maintainer's commitment; contact
-`git@sapd.eu` with concerns.
+Art. 28 GDPR requires a written processor agreement; the processor terms are in
+section 3 of the [privacy notice](https://lumastra.org/privacy). Contact
+`lumastra@sapd.eu` with concerns.
 
-**Relay retention.** Tokens and payloads are retained only for delivery and
-retries, with no per-token history or profiling. The relay never sees media
-notification content. Its code is outside this repository, so these are policy
-commitments rather than guarantees auditable from Lumastra source. You can
-operate your own relay or use the direct Apple route.
+**Relay retention.** The relay has no database and stores no tokens or payloads.
+Its log keeps one line per request (install ID, number of devices, app, result; for
+a rejected device a shortened token and Apple's reason), and the web server logs the
+sending IP address. Both are deleted after 14 days (15 at most). The relay's code is
+not public, so this is a commitment, not something you can audit. You can operate
+your own relay or use the direct Apple route.
 
 Apple, in turn, receives the token and the content-free payload from the relay
 under Apple's own terms, the same as with any iOS app.
@@ -72,17 +75,23 @@ The push relay accepts only requests with a token, and this call fetches it.
 | | |
 | --- | --- |
 | **Request** | `POST https://lumastra.org/api/push/relay-token` |
-| **Sent** | A random per-install ID (UUID) and the Lumastra version. Nothing else: no library data, no users, no licence. |
+| **Sent** | A random per-install ID (UUID) and the Lumastra version (the endpoint checks the version's format and discards it). Nothing else: no library data, no users, no licence. |
 | **Received** | A signed token, valid for at most 24 hours and bound to that install ID. |
-| **When** | A first call 5 to 30 seconds after the server starts, then about every six hours. It happens only while push is on, the default relay is used, no `PUSH_RELAY_TOKEN` is set, and **Contact lumastra.org** is on. All processes and replicas of an install share one token through Valkey, so restarts add no calls while the token is still fresh. A failed call is retried after about 30 minutes. |
+| **When** | A first call 5 to 30 seconds after the server starts, then about every six hours. It happens only while push is on, the default relay is used, no `PUSH_RELAY_TOKEN` is set, and **Contact lumastra.org** is on. All processes and replicas of an install share one token through Valkey, so restarts add no calls while the token is still fresh. A failed call is retried after about 30 minutes, and a relay rejection (401) triggers one extra request, at most every 15 minutes. |
 | **What the server records** | Nothing: the call is not stored and not counted. The request is rate limited per IP address and per install ID. Cloudflare's short-lived request logs for lumastra.org can contain the IP address, as for any request. |
 | **Setting** | **Contact lumastra.org** in Admin → Settings → General → Push relay (also asked in the setup wizard), or `LICENSE_SERVER_CONTACT_ENABLED=false`. It applies without a restart and drops a held token. |
-| **Avoid it** | Switch the setting off, or use your own Apple key or your own relay. Without a token, push through the standard relay does not work; nothing else changes. |
+| **Avoid it** | Switch the setting off, or use your own Apple key or your own relay. Without a token, push through the standard relay does not work (unless you were given a relay token of your own); nothing else changes. |
 
-A new install makes no call until you answered the contact question (in the setup
-wizard, in Admin → Settings, or with the variable). An install set up without the
-wizard waits a day after its first admin was created. Blocking `lumastra.org` at the
+A new install makes neither this call nor the update check until you answered the
+contact question (in the setup wizard, in Admin → Settings, or with the variable). An
+install set up without the wizard waits a day after its first admin was created. Blocking `lumastra.org` at the
 firewall has the same effect as switching off, except that the server keeps retrying.
+
+### Plugin repositories
+
+Off by default. Each repository an admin adds is downloaded every 12 hours (the
+index only; nothing is sent). The official one is on `lumastra.org` and is not
+covered by **Contact lumastra.org**. Remove the repository to stop the downloads.
 
 ### `lumastra.org/.well-known/lumastra-signing-keys.json`: plugin signing keys
 
@@ -133,7 +142,7 @@ have different defaults and payloads, listed below.
 | **Discogs** (`api.discogs.com`) | Discogs personal access token (integration settings) | Artist / album image enrichment | Artist and album names, then Discogs ids |
 | **TheAudioDB** (`www.theaudiodb.com`, plus its image host) | **On by default**, no key (public free-tier key). Source order in the *Artist enrichment* and *Album enrichment* task settings. `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` stops it (pausing the tasks does not: a music scan starts them directly) | Artist and album image enrichment, after a music scan and then daily | Artist names; album and artist names |
 | **Deezer** (`api.deezer.com`, images from `cdn-images.dzcdn.net`) | **On by default**, no key: the third source in the *Artist enrichment* chain. Set that source to *None* in the task settings, or set `DISABLE_MUSIC_ARTWORK_ENRICHMENT=true` | Artist image enrichment, for artists the other sources have no picture of | Artist names |
-| **AniDB** (`anidb.net`, `api.anidb.net`) | AniDB provider enabled in provider settings | Anime matching | Downloads AniDB's public title list; then per-title detail requests by AniDB id, tagged with a client name registered for Lumastra |
+| **AniDB** (`anidb.net`, `api.anidb.net`) | AniDB provider enabled in provider settings | Anime matching | Downloads AniDB's public title list; then per-title detail requests by AniDB id, tagged with a client name registered for Lumastra. The API calls use plain HTTP (unencrypted) |
 | **MyAnimeList** (`api.myanimelist.net`) | `MAL_CLIENT_ID` / `MAL_CLIENT_SECRET`, plus each user linking their own MAL account | Anime id enrichment; the bundled MAL watch-sync plugin | Anime ids for lookups; for a **linked** user, their episode progress and list status are pushed to and pulled from their MAL list. Only that user's own data, only after they link |
 | **Trakt** (`api.trakt.tv`) | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`, plus each user linking their own Trakt account | The bundled Trakt watch-sync plugin, in the direction the user chose | For a **linked** user: the movies and episodes they finished are added to their Trakt history as Trakt ids (marked watched "at release", no timestamps), and their Trakt history is read back. Only that user's own data, only after they link |
 
@@ -237,7 +246,7 @@ browser policy if you need to prevent it; the server makes no YouTube request.
 
 If you add an HDHomeRun tuner as a Live TV source, your server fetches the guide
 (XMLTV) from `my.hdhomerun.com`, authenticated with the tuner's own device
-identifier. Discovery and streaming talk to the tuner on your LAN only.
+identifier, in the request URL; this call uses plain HTTP (unencrypted). Discovery and streaming talk to the tuner on your LAN only.
 
 ### Plugins installed from a URL
 
