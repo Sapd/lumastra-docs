@@ -26,8 +26,9 @@ of each part too.
 
 ## 3. Back up
 
-Back up the PostgreSQL database, the `config` volume and `LUMASTRA_MASTER_KEY`. The
-commands are in [Backup & recovery](/guides/backup-recovery/).
+Back up the PostgreSQL database, the `config` volume, your `.env` file (with
+`LUMASTRA_MASTER_KEY`) and the task Valkey volume. The list and commands are in
+[Backup & recovery](/guides/backup-recovery/#what-to-back-up).
 
 ## 4. Update
 
@@ -35,7 +36,7 @@ Check the [release notes](https://github.com/Sapd/lumastra/releases) first. Then
 new version and restart:
 
 ```bash
-NEW=0.1.5   # example: use the release you want
+NEW=<NEW_VERSION>   # for example 0.2.1: the release you want
 sed -i.bak "s|lumastra/lumastra:[0-9][0-9.]*|lumastra/lumastra:$NEW|" docker-compose.yml && rm -f docker-compose.yml.bak
 grep image: docker-compose.yml
 docker compose pull

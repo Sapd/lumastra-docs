@@ -1,6 +1,8 @@
 ---
-title: Deploy on Kubernetes
-description: Install Lumastra on Kubernetes with the Helm chart. One node, a managed PostgreSQL, an Ingress and your media folder, in about ten steps.
+title: Deploy Lumastra on Kubernetes with Helm
+description: Install Lumastra with its Helm chart, CloudNativePG, an Ingress and media storage. Includes a single-node setup and links to replica and GPU options.
+sidebar:
+  label: Deploy on Kubernetes
 ---
 
 The Helm chart runs Lumastra as web pods, one worker, two Valkeys and a PostgreSQL
@@ -234,10 +236,9 @@ kubectl -n lumastra logs -f deploy/lumastra-worker
 so later upgrades keep it:
 
 ```bash
-git fetch --tags && git checkout v0.1.5   # example: the release you want
-sed -i.bak 's|^  tag: .*|  tag: 0.1.5|' my-values.yaml && rm my-values.yaml.bak
+git fetch --tags && git checkout v<NEW_VERSION>   # for example v0.2.1: the release you want
+sed -i.bak 's|^  tag: .*|  tag: <NEW_VERSION>|' my-values.yaml && rm my-values.yaml.bak
 helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
 ```
 
-Back up the database and your master key first. See
-[Backup & recovery](/guides/backup-recovery/).
+Back up first: see [What to back up](/guides/backup-recovery/#what-to-back-up).
