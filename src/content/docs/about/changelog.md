@@ -15,6 +15,31 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
+### 0.2.0
+
+Live TV proxy: no update needed.
+
+- **License:** everything in the repository is AGPL-3.0-only, including the Jellyfin-compatible
+  `/j` API and the AI assistant. There are no paid parts and no license key. The 0.1.x
+  source-available files are also licensed under AGPL-3.0-only.
+- `/j` no longer has the two-stream limit; the per-user stream limit you set still applies.
+- The license check, the weekly check-in, `LICENSE_KEY` and the license panel are gone. A
+  leftover key is ignored.
+- Push through the standard relay gets its token from lumastra.org (install ID and version
+  only). The update check asks lumastra.org first and sends only the version; it falls back to
+  GitHub. **Contact lumastra.org** (Admin → Settings → General) switches both off. A new
+  install makes neither call until the setup question is answered, or a day after setup. See
+  [data flows](/reference/data-flows/).
+- **Security:** `scripts/reset-password.ts` now also revokes personal access tokens, service
+  tokens and `/j` sessions. If you reset a password on 0.1.x because of possible misuse, run it
+  again after updating.
+- Jellyfin apps: a series' episode list returns every episode when the app sends no limit
+  (Infuse showed only the first seasons of long series).
+- The Helm chart is no longer marked beta. The plain manifests in `deploy/k8s` are removed; use
+  the chart.
+- 0.1.x installs: the old license endpoints are switched off with this release. Push through
+  the standard relay stops working on 0.1.x within a day; update to 0.2.0.
+
 ### 0.1.4 (2026-11-13)
 
 Live TV proxy: update needed (its Rust dependencies were updated).
