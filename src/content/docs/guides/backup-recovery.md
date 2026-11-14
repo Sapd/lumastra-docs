@@ -17,9 +17,22 @@ volume access to your Postgres instance and the `config` volume.
 | **Secrets / env**             | `.env` (master key, `JWT_SECRET`, passwords, API keys) | **Critical**                    |
 | **`/config` volume**          | admin `settings.json`, custom artwork, the master key (if auto-generated) | **Recommended** |
 | Image cache (`/app/.cache`)   | TMDB/Jellyfin art, avatars                        | Skip: regenerable                    |
-| Valkey data                   | cache + task queues                               | Skip: rebuilt from Postgres          |
+| **Task Valkey volume** (`lumastra_valkey_data`) | queued and running background jobs, locks, run state | **Recommended**: losing it costs in-flight work, not your data (see below) |
+| Cache Valkey                  | disposable application cache                      | Skip: rebuilt on demand              |
 | Trickplay tiles / thumbnails  | inside `/config` (regenerable by re-running tasks) | Skip: regenerable                   |
 | ffmpeg binary (`/config/bin`) | re-fetched on every boot                          | Skip: regenerable                    |
+
+The same list applies to every deployment: Docker Compose, Kubernetes and the AI
+install guide. In short: **database, `/config` volume, `.env` (secrets) and the task
+Valkey volume.** Everything marked Skip rebuilds itself.
+
+**What losing the task Valkey volume means.** Your library, users, watch state and
+settings live in PostgreSQL, so none of them are affected. The volume holds the queue:
+jobs that were waiting or running, and the locks that keep two workers from doing the
+same job. Without it, Lumastra starts with an empty queue, re-enqueues work
+from PostgreSQL, and jobs that were mid-run run again. You lose the exact queue
+position and run state of in-flight work. Keep the volume in your backups so a restore
+can pick up where it left off.
 
 ## Critical: the database
 
@@ -141,9 +154,10 @@ These live outside `/config` and rebuild themselves; no backup needed:
 
 - **Image cache** (`/app/.cache`): provider posters/backdrops and avatars, re-fetched
   from TMDB/Jellyfin on demand.
-- **Valkey**: cache plus the task queues. On restart the task system re-enqueues work
-  from Postgres (the source of truth). Jobs that were mid-run when Valkey was lost
-  simply re-run.
+- **Cache Valkey** (`lumastra-valkey-cache`): disposable by design.
+- **Task Valkey** is not on this list: keeping its volume is recommended (see above),
+  but if it is lost the task system re-enqueues work from Postgres (the source of
+  truth) and jobs that were mid-run simply re-run.
 
 (The generated files *inside* `/config` (thumbnails, trickplay, transcode cache) also
 regenerate; see the table above for what that costs.)
@@ -165,8 +179,9 @@ regenerate; see the table above for what that costs.)
    anywhere, leaves those secrets unrecoverable.
 4. Restore the `/config` volume (at minimum `settings.json` and `master.key`).
 5. Start the stack. Migrations run automatically on boot, the ffmpeg binary
-   re-downloads if missing, and the task system heals from Postgres. No Valkey restore
-   needed.
+   re-downloads if missing, and the task system heals from Postgres. If you have a task Valkey
+   backup, restore its volume before starting; without one, the queue starts empty and
+   rebuilds from Postgres.
 
 ## Key rotation
 
