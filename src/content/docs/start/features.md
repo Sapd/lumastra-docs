@@ -1,6 +1,8 @@
 ---
-title: Features
-description: Everything Lumastra does, area by area, with links to the guide for each.
+title: Feature reference
+description: Reference list of what Lumastra does, area by area, with links to the guide for each.
+sidebar:
+  label: Features
 ---
 
 Lumastra is a self-hosted server for movies, series and music, with audiobooks through

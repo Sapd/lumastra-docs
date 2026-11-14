@@ -1,7 +1,8 @@
 ---
-title: Setting up Live TV
-description: Set up tuner broadcasts or provider-approved Live TV feeds, organize channels and program guides, and configure playback and source limits.
+title: 'Set up IPTV and EPG: M3U, Xtream and HDHomeRun'
+description: Add M3U, Xtream Codes or HDHomeRun sources to Lumastra, match channels to an EPG, and configure playback, backup feeds and stream limits.
 sidebar:
+  label: Setting up Live TV
   order: 3.5
 ---
 
