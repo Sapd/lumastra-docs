@@ -7,7 +7,7 @@ import DeployDiagram from '../../../components/diagrams/DeployDiagram.astro';
 
 Read [Deploy on Kubernetes](/guides/deploy-kubernetes/) first. This page covers the
 options it leaves out. Every value is documented in the chart's
-[`values.yaml`](https://github.com/Sapd/lumastra/blob/v0.1.4/deploy/helm/lumastra/values.yaml),
+[`values.yaml`](https://github.com/Sapd/lumastra/blob/v0.2.0/deploy/helm/lumastra/values.yaml),
 and `deploy/helm/lumastra/ci/` has example values for each setup.
 
 ## How do the pieces fit together?
@@ -220,7 +220,7 @@ features:
   FEATURE_MUSIC_SONIC: true
 proxy:
   enabled: true
-  image: { tag: '0.1.4' } # its own tag: a proxy restart drops every live channel
+  image: { tag: '0.2.0' } # its own tag: a proxy restart drops every live channel
 persistence:
   ffmpegCache: { enabled: true }
 sonic:
@@ -278,14 +278,14 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Sapd/lumastra
-    targetRevision: v0.1.4
+    targetRevision: v0.2.0
     path: deploy/helm/lumastra
     helm:
       releaseName: lumastra
       valuesObject:
         app: { origin: 'https://media.example.com' }
         secrets: { existingSecret: lumastra }
-        image: { tag: 0.1.4 }
+        image: { tag: 0.2.0 }
         persistence:
           dataAnnotations: { argocd.argoproj.io/sync-options: 'Prune=false,Delete=false' }
   destination: { server: 'https://kubernetes.default.svc', namespace: lumastra }

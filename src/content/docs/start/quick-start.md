@@ -20,9 +20,9 @@ Subsonic apps. This page installs it with Docker Compose. To use Kubernetes inst
 
 ```bash
 mkdir lumastra && cd lumastra
-curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Sapd/lumastra/v0.1.4/docker-compose.example.yml
-curl -fsSL -o .env https://raw.githubusercontent.com/Sapd/lumastra/v0.1.4/.env.example
-sed -i.bak 's|lumastra:stable|lumastra:0.1.4|' docker-compose.yml && rm docker-compose.yml.bak
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Sapd/lumastra/v0.2.0/docker-compose.example.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/Sapd/lumastra/v0.2.0/.env.example
+sed -i.bak 's|lumastra:stable|lumastra:0.2.0|' docker-compose.yml && rm docker-compose.yml.bak
 ```
 
 You should now have `docker-compose.yml` and `.env` in the `lumastra` folder. The second
@@ -116,7 +116,7 @@ file is not named `.env`, or you ran the command in another folder.
 must be `curl.exe`. Make the same edits in an editor. In `.env`, fill in
 `DATABASE_PASSWORD` and `CACHE_PASSWORD` with 48 hex characters each, and
 `LUMASTRA_MASTER_KEY` with 64 (remove the `# `). Use only digits and the letters a to f.
-In `docker-compose.yml`, change `lumastra:stable` to `lumastra:0.1.4` and remove the `# `
+In `docker-compose.yml`, change `lumastra:stable` to `lumastra:0.2.0` and remove the `# `
 before the media path, with a path like `C:/Users/you/Videos`.
 
 **You have more than 4 GB of RAM.** The example file turns on low-RAM mode. Delete its two

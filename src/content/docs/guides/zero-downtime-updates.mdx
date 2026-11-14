@@ -203,7 +203,7 @@ Your existing Valkey becomes the task Valkey and keeps its queue. Do not just ad
 
    Repeat the last command until you see `aof_rewrite_in_progress:0` and
    `aof_last_bgrewrite_status:ok`.
-3. Compare your file with the [current example](https://github.com/Sapd/lumastra/blob/v0.1.4/docker-compose.example.yml).
+3. Compare your file with the [current example](https://github.com/Sapd/lumastra/blob/v0.2.0/docker-compose.example.yml).
    Add the cache Valkey and the worker service. Give the existing Valkey the flags
    `--maxmemory-policy noeviction --appendonly yes --appendfsync everysec`. Remove
    `WORKER_MODE` and `DEDICATED_WORKER` from the web service. Set `CACHE_URL` to the new
