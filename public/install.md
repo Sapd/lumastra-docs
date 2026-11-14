@@ -36,7 +36,7 @@ This file has the same steps as the `lumastra-install` skill in the Lumastra rep
 ## 1. Docker Compose or Kubernetes
 
 Ask first. Docker Compose is the default and the steps below cover it. For Kubernetes,
-stop here and follow https://lumastra.org/guides/deploy-kubernetes/ (Helm chart, beta).
+stop here and follow https://lumastra.org/guides/deploy-kubernetes/ (Helm chart).
 Its "What you need" section lists what to ask the person.
 
 ## 2. Check the machine
