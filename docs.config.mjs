@@ -114,7 +114,7 @@ export const sidebar = [
 export const starlightDocs = {
 	title: 'Lumastra',
 	description:
-		'Self-hostable media aggregation with AI-powered recommendations. Built on SvelteKit.',
+		'Self-hosted media server for Docker Compose or Kubernetes: movies, series, music, audiobooks and Live TV.',
 	components: { Footer: './src/components/DocsFooter.astro' },
 	logo: {
 		light: './src/assets/lumastra-logo-light.svg',
