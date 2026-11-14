@@ -1,6 +1,6 @@
 ---
 title: Known limitations
-description: Deployment requirements, trade-offs and platform limits in the current release.
+description: Deployment requirements and current feature support for Lumastra, including ARM64, transcoding, Live TV and third-party apps.
 sidebar:
     order: 3
 ---
@@ -52,7 +52,7 @@ browser is signed out, and saved secrets can't be decrypted any more. It's the m
 important thing to back up; see [Backup & recovery](/guides/backup-recovery/).
 
 **Image tags are not equivalent.** Release tags (`:stable`, `:latest`, `:beta` and version
-tags such as `:0.1.0`) are built for `linux/amd64` **and** `linux/arm64`. `:edge` follows
+tags such as `:0.2.0`) are built for `linux/amd64` **and** `linux/arm64`. `:edge` follows
 every commit to `main` and is **amd64 only**; on an ARM host it fails with
 `exec format error`. The reference compose file uses `:stable`.
 
@@ -116,7 +116,7 @@ cache uses a separate evictable Valkey (`CACHE_URL`) with a memory cap and
 `allkeys-lru`. Never put task keys on an evictable store: losing a live lock can
 allow duplicate execution. The shipped Compose task store uses AOF synced every
 second; a crash can lose roughly the last second of writes. Keep its data volume
-and include it in backups. The admin Health page warns when the instance holding
+and include it in backups (see [What to back up](/guides/backup-recovery/#what-to-back-up)). The admin Health page warns when the instance holding
 task data uses an evicting policy.
 
 **While Valkey is unreachable, signed-in apps cost database reads.** On each request from
@@ -187,7 +187,7 @@ process may carry on in an inconsistent state. If you see an `uncaughtException`
 logs, restart the container.
 
 **Version strings differ by image.** A release image reports a clean version such as
-`v0.1.0`. Images built from `main` report a commit SHA instead, because there's no
+`v0.2.0`. Images built from `main` report a commit SHA instead, because there's no
 release tag on that branch. Either is fine in a bug report.
 
 ## Hardware transcoding
