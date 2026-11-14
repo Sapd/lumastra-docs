@@ -97,7 +97,7 @@ new installs start with the current proxy.
 
 The first public release, with movies and series, music, audiobooks through
 Audiobookshelf, Live TV, Watch Together, single sign-on on every device, and a
-documented API. See [all features](https://lumastra.org/#all-features), the
+documented API. See [all features](https://lumastra.org/features/), the
 [quick start](/start/quick-start/) and the
 [known limitations](/reference/known-limitations/).
 
