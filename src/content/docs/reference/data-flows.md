@@ -32,11 +32,8 @@ notifications in the iOS app.
 
 The project maintainer (Denis Arnst, Austria/EU, `git@sapd.eu`) operates `lumastra.org`
 and the push relay. These are the only places an install sends anything to the project.
-There are no licence keys and no usage reporting. (Old 0.1.x installs still call
-the retired licence endpoints, `/api/license/issue` and `/refresh`, until they are switched
-off after 0.2.0: they send the install ID, version and a status code, and the worker records
-the version, country and a keyed hash of the install ID for three months. Updating to 0.2.0
-ends those calls.)
+There are no licence keys and no usage reporting. The licence endpoints that 0.1.x installs
+called were switched off with 0.2.0.
 
 ### `push.lumastra.org`: the iOS push relay
 
