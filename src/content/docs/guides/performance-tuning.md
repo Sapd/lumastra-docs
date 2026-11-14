@@ -59,13 +59,11 @@ services:
     shm_size: 1gb # Docker's default /dev/shm is only 64 MB
 ```
 
-:::danger[Required for large libraries]
-Docker gives a container **64 MB** of `/dev/shm` by default. Postgres **parallel-query
-workers** (which kick in on large libraries, e.g. the intro analyzer scanning tens of
-thousands of stage rows) allocate shared-memory segments there and fail with
-`could not resize shared memory segment … No space left on device` when it fills. Set
-`shm_size: 1gb` on the Postgres service. (The shipped `docker-compose.example.yml` already
-does.)
+:::tip[Shared memory for Postgres]
+The shipped `docker-compose.example.yml` already sets `shm_size: 1gb` on the Postgres
+service. Keep it if you write your own compose file. Docker gives a container 64 MB of
+`/dev/shm` by default, and Postgres parallel-query workers allocate shared-memory segments
+there.
 :::
 
 ## Postgres query planner (`shared_buffers`, JIT thresholds)
@@ -93,11 +91,9 @@ Lumastra runs constantly. On a host with RAM to spare, raise `POSTGRES_SHARED_BU
 `SELECT pg_size_pretty(pg_database_size(current_database()));`). It requires a Postgres
 restart to take effect, since it's allocated at server startup and not reloadable.
 
-:::caution[JIT can slow browsing]
-Large-library browse queries can have inflated planner cost estimates that trigger
-JIT compilation even when it costs more than executing the query. Production
-measurements showed 4–19× overhead. The thresholds above avoid this for browsing
-while retaining JIT for expensive analytics. They require no additional memory.
+:::note[Recommended JIT settings]
+The thresholds above keep JIT compilation for expensive analytics queries and skip it for
+short browse queries. They require no additional memory.
 :::
 
 ## libuv thread pool

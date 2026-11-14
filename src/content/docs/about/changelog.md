@@ -6,8 +6,7 @@ sidebar:
 ---
 
 Lumastra has two release lines. The server is versioned on its own; the iPhone, iPad and
-Apple TV apps have their own version numbers. Whatever the number, both are early
-releases.
+Apple TV apps have their own version numbers.
 
 ## Server
 

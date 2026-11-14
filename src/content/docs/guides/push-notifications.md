@@ -15,11 +15,11 @@ the path entirely.
 
 Apple only accepts pushes for an app signed with that app's own Apple key. The
 stock iOS app's key can't ship inside a self-hosted server, so it lives on a
-small **relay** the maintainer runs at `push.lumastra.org`. Your server hands
+Lumastra push **relay** at `push.lumastra.org`. Your server hands
 each notification to the relay, and the relay forwards it to Apple.
 
 To use the relay, your server needs a credential. It gets one automatically:
-about every six hours, your server asks `lumastra.org` for a **relay token**
+regularly, your server asks `lumastra.org` for a **relay token**
 (it sends the install ID and the Lumastra version, nothing else). That's a signed
 credential, valid for 24 hours and bound to your install's ID, that your server
 presents to the relay. Every install gets one. Nothing needs to be copied, pasted or

@@ -369,7 +369,7 @@ router log should show `key=token` or `key=session`, not `key=ip`.
 **A web pod is `OOMKilled`.** Lower `LUMASTRA_MAX_CONCURRENT_TRANSCODES`, raise the memory
 limit or use a GPU.
 
-## What does not work yet?
+## Behaviour during a rolling update
 
 - Downloads and direct-play streams that run longer than `web.drainSeconds` (30) are cut
   during a roll. The client resumes with a range request.
