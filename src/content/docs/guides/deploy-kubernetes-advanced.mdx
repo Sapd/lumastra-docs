@@ -8,7 +8,7 @@ import DeployDiagram from '../../../components/diagrams/DeployDiagram.astro';
 Read [Deploy on Kubernetes](/guides/deploy-kubernetes/) first. This page covers the
 options it leaves out. Every value is documented in the chart's
 [`values.yaml`](https://github.com/Sapd/lumastra/blob/v0.2.0/deploy/helm/lumastra/values.yaml),
-and `deploy/helm/lumastra/ci/` has example values for each setup.
+and the [`ci/` folder](https://github.com/Sapd/lumastra/tree/v0.2.0/deploy/helm/lumastra/ci) has example values for each setup.
 
 ## How do the pieces fit together?
 
@@ -157,7 +157,7 @@ auth:
 Register `https://<host>/auth/oidc/callback` at the provider. See
 [Authentication](/guides/authentication/). Forward auth needs `auth.forwardAuth.enabled`,
 `trustedProxyIps`, `networkPolicy.enabled: true` and the `router.forwardAuth` block.
-`ci/full-values.yaml` shows all four. Leave the node's gateway address out of the trusted
+[`ci/full-values.yaml`](https://github.com/Sapd/lumastra/blob/v0.2.0/deploy/helm/lumastra/ci/full-values.yaml) shows all four. Leave the node's gateway address out of the trusted
 range.
 
 ## How do I expose Lumastra?
@@ -175,7 +175,7 @@ httpRoute:
 ```
 
 Compress at the Ingress, but never `text/event-stream` or media. For Traefik and the
-Gateway API, start from `ci/gateway-values.yaml`.
+Gateway API, start from [`ci/gateway-values.yaml`](https://github.com/Sapd/lumastra/blob/v0.2.0/deploy/helm/lumastra/ci/gateway-values.yaml).
 
 ## How do I use a GPU?
 
@@ -262,13 +262,14 @@ image:
   digest: 'sha256:<the Digest line from the command above>'
 ```
 
-Back up first, check out the chart version you want and run `helm upgrade`. Web pods roll
+Back up first, then run `helm upgrade` from `oci://ghcr.io/lumastra/charts/lumastra` with `--version` set to the chart version you want. Web pods roll
 one at a time. The worker restarts, so jobs pause and resume. The Live TV proxy stays
 untouched. A web pod that never becomes ready stalls the roll: fix the values, then delete
 that pod. See [Zero-downtime updates](/guides/zero-downtime-updates/).
 
-An Argo CD Application can install the chart from the repository. Pin `targetRevision` to
-a tag and create the Secrets before the first sync:
+An Argo CD Application can install the chart from the registry. Pin `targetRevision` to
+the chart version and create the Secrets before the first sync. Argo CD takes the registry
+path without `oci://`:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -277,9 +278,9 @@ metadata: { name: lumastra, namespace: argocd }
 spec:
   project: default
   source:
-    repoURL: https://github.com/Sapd/lumastra
-    targetRevision: v0.2.0
-    path: deploy/helm/lumastra
+    repoURL: ghcr.io/lumastra/charts
+    chart: lumastra
+    targetRevision: 0.2.0
     helm:
       releaseName: lumastra
       valuesObject:
@@ -299,7 +300,7 @@ spec:
 Plan a maintenance window and back up first.
 
 1. Install with `web.replicas: 0`, `worker.replicas: 0` and `valkey.tasks.replicas: 0`
-   (see `ci/migration-values.yaml`). A running app would migrate an empty database.
+   (see [`ci/migration-values.yaml`](https://github.com/Sapd/lumastra/blob/v0.2.0/deploy/helm/lumastra/ci/migration-values.yaml)). A running app would migrate an empty database.
 2. Put the old master key in the Secret. If you never set one, it is in `/config/master.key`.
 3. Copy the old `config` volume into the new claim, owned by user 1000, with a helper pod
    that mounts the claim (`kubectl apply -f config-copy.yaml`):

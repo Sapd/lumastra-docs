@@ -37,12 +37,18 @@ With more than one node, set `NODE` to the node that has the media folder.
 
 ## 2. Get the chart
 
+The chart is public at `oci://ghcr.io/lumastra/charts/lumastra`. Helm downloads it during
+the install, so there is nothing to clone. It is also listed on [Artifact Hub](https://artifacthub.io/packages/helm/lumastra/lumastra).
+
+To install from a checkout instead, clone the release tag:
+
 ```bash
 git clone --branch v0.2.0 https://github.com/Sapd/lumastra
 cd lumastra
 ```
 
-You should now see `deploy/helm/lumastra`.
+Then use `./deploy/helm/lumastra` in place of `oci://ghcr.io/lumastra/charts/lumastra` in the
+`helm` commands below, and drop the `--version` flag.
 
 ## 3. Install the database operator
 
@@ -132,7 +138,7 @@ The media folder must be readable by user ID 1000.
 ## 6. Install
 
 ```bash
-helm install lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
+helm install lumastra oci://ghcr.io/lumastra/charts/lumastra --version 0.2.0 -n lumastra -f my-values.yaml
 kubectl -n lumastra get pods -w
 ```
 
@@ -173,7 +179,7 @@ cat >> my-values.yaml <<EOF
     - hosts: [$LUMASTRA_HOST]
       secretName: lumastra-tls
 EOF
-helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
+helm upgrade lumastra oci://ghcr.io/lumastra/charts/lumastra --version 0.2.0 -n lumastra -f my-values.yaml
 ```
 
 Open `https://media.example.com`. The browser should show a valid certificate. Without
@@ -232,13 +238,13 @@ kubectl -n lumastra logs -f statefulset/lumastra-web
 kubectl -n lumastra logs -f deploy/lumastra-worker
 ```
 
-**You want to update.** Check out the new tag and put the new version in your values file,
-so later upgrades keep it:
+**You want to update.** Pick the version from the release notes, for example `0.2.1`. Each
+release publishes the chart under the same version number. Put the new version in your
+values file, so later upgrades keep it, and upgrade to that chart version:
 
 ```bash
-git fetch --tags && git checkout v<NEW_VERSION>   # for example v0.2.1: the release you want
 sed -i.bak 's|^  tag: .*|  tag: <NEW_VERSION>|' my-values.yaml && rm my-values.yaml.bak
-helm upgrade lumastra ./deploy/helm/lumastra -n lumastra -f my-values.yaml
+helm upgrade lumastra oci://ghcr.io/lumastra/charts/lumastra --version <NEW_VERSION> -n lumastra -f my-values.yaml
 ```
 
 Back up first: see [What to back up](/guides/backup-recovery/#what-to-back-up).
