@@ -1,6 +1,6 @@
 ---
 title: Optional integrations
-description: Add optional integrations in the setup wizard or Admin Settings, with environment variables as an alternative.
+description: Configure optional Lumastra integrations, including Jellyfin watch-state sync, Audiobookshelf and metadata providers, through the setup wizard or settings.
 sidebar:
   order: 3
 ---
@@ -147,6 +147,34 @@ all its episodes with files are linked.
 time is compared with Lumastra's playback event time. With push-only sync, Lumastra
 always pushes its position. If you mark a title unwatched in Lumastra, a newer
 "played" from Jellyfin wins.
+
+### Trying Lumastra next to Jellyfin
+
+You can run both servers on the same media folders. Mount the folders read-only in
+Lumastra, as the [quick start](/start/quick-start/) does. By default Lumastra keeps
+its artwork in its own `/config` volume, and the only thing it writes to Jellyfin is
+watch state.
+
+1. **Connect.** Enter the Jellyfin URL and an API key under **Admin → Settings**, or in
+   the setup wizard. Sync starts once the connection check passes.
+2. **Match users.** Make sure each person has a Lumastra account with the same
+   username as in Jellyfin, or link it under **Admin → Users → Identities**. People
+   without a match are listed in an admin notice and are not synced.
+3. **First sync.** Lumastra reads each matched user's full watched history and resume
+   positions from Jellyfin, then pairs titles by provider ID or by file path. After
+   that, changes travel in both directions every 5 minutes. To copy history that
+   already exists in Lumastra to Jellyfin, use **Send history to Jellyfin** under
+   **Settings → Connections → One-time transfer**.
+4. **Choose a direction.** Each person can pick **Both ways**, **Only from Jellyfin to
+   here** or **Only from here to Jellyfin** under **Settings → Connections**. The
+   one-way options keep one server read-only for watch state.
+5. **Conflicts.** The newer resume position wins. A title marked played in Jellyfin
+   after you marked it unwatched in Lumastra becomes played again.
+6. **Disconnect.** Set `FEATURE_JELLYFIN_SYNC=false`, or clear the Jellyfin URL and API
+   key under **Admin → Settings**. The change applies without a restart. Watch state
+   already exchanged stays in both servers.
+
+Watch progress cannot be imported from Plex.
 
 **What to check when sync stops:**
 
