@@ -14,9 +14,9 @@ sessions, a series calendar, trailers, and links into Jellyfin and Audiobookshel
 watch something you clicked through to Jellyfin. There was no AI and no streaming of its
 own.
 
-I never planned to replace Jellyfin. Writing a whole media server just to do what
-Jellyfin already does didn't seem worth it. AI changed that for me. I wanted something
-that doesn't only play my library but understands what is in it.
+At first I had no plan to replace Jellyfin. Writing a whole media server just to do what
+Jellyfin already does didn't seem worth it. AI changed that. I wanted something that
+doesn't only play my library but understands what is in it.
 
 ## 2025: a rewrite, with AI
 
@@ -72,7 +72,8 @@ it became Lumastra.
 
 On November 3, 2026 the code went public at
 [github.com/Sapd/lumastra](https://github.com/Sapd/lumastra) as v0.1. I use it for my
-own library every day, but it hasn't seen most hardware and setups yet. Expect bugs, and please [report them](https://github.com/Sapd/lumastra/issues).
+own library every day. Bug reports with logs are welcome on
+[GitHub](https://github.com/Sapd/lumastra/issues).
 
 ## Licence
 
@@ -83,8 +84,8 @@ had a source-available part; 0.1.x is also available under the AGPL. The Apple a
 
 ## Maintenance
 
-Lumastra is in maintenance mode: I fix bugs and security problems. There is no roadmap
-and no promise of new features.
+I run Lumastra for my own household and fix bugs and security issues as they come up.
+Feature ideas go to [Discussions](https://github.com/Sapd/lumastra/discussions/categories/features).
 
 ## How I use AI
 
@@ -96,7 +97,7 @@ headsets on Linux, Windows and macOS, and I implemented OIDC login in
 
 I started using LLMs in December 2024, mostly for code review or a second opinion on a
 design. From April 2025 I used Claude, through Claude Code, more and more, and by 2026
-it's a big reason one person could build this much.
+it's a big reason I could build this much.
 
 Mostly I use it for scaffolding, refactoring, finding my way around old code, tests,
 documentation and first drafts. I also talk designs through with it and ask it to argue
@@ -105,15 +106,14 @@ wrong often enough, and sounds confident when it is, so I keep the decisions: th
 model, the critical code paths, what gets merged. I review what lands and don't ship code
 I don't understand myself.
 
-It's also not quick or cheap. A real feature goes through several rounds. For bigger ones
+A real feature goes through several rounds. For bigger ones
 I often plan with the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD), where I
 sit with a panel of AI roles (product, architecture, testing) and still make the calls
 myself. Other times I just talk a feature through and hand it to separate sessions, say
 one for the frontend and one for the backend, and let them talk to each other. For the
 biggest jobs I run a full workflow spread across many agents. Then it gets built, then
 reviewed. The edge-case reviews eat the most tokens, and I also run them through a second
-model (OpenAI's Codex), so one model isn't just grading its own work. A big feature can
-burn through the weekly limit on Claude's largest plan twice.
+model (OpenAI's Codex), so one model isn't just grading its own work.
 
 You still have to be a developer for this. Someone has to catch a bad design and push
 back with something better. Small features, and a lot of frontend work,
@@ -124,18 +124,16 @@ got a lot cheaper, so there's less excuse to skip them. I don't take the AI's wo
 anything. If it says a feature works, the architecture is sound or a review is complete,
 I check it myself.
 
-Bugs still get through, like in any project. Testing is what catches most of them. There
+Testing is what catches most bugs. There
 are more than 4,000 test files in the repo, from unit tests to browser tests, and AI
 helped write a lot of them. Automated tests only catch so much, so my friends and I also
-test a lot by hand. That's tedious, but it finds the bugs the tests miss.
+test by hand, which finds what the tests miss.
 
 Security got extra rounds. Before the public release the code went through several
 security reviews, and I checked every finding against the code myself instead of taking it
 on faith. Then I tested on a pre-production server what those reviews could only read from
 the source: race conditions, what happens when someone gets removed from the identity
-provider, what a reverse proxy actually forwards. Everything the reviews found got fixed,
-though a couple of the fixes needed a fix of their own. I only found those because I
-tested on the server.
+provider, what a reverse proxy actually forwards. Everything the reviews found got fixed, and I tested the fixes on the server too.
 
 Contributions made with AI are welcome under the same rule: you're the author, so you need
 to understand and have actually run what you submit. See
