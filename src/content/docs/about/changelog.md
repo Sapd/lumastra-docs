@@ -15,7 +15,7 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
-### 0.2.0
+### 0.2.0 (2026-11-14)
 
 Live TV proxy: no update needed.
 
