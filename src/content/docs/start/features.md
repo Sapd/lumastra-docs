@@ -26,7 +26,7 @@ area. The [quick start](/start/quick-start/) gets an instance running.
   based on codecs, HDR and subtitles. See
   [Playback decisions](/architecture/playback-decisions/).
 - **Hardware transcoding** works on **Intel** (Quick Sync / VA-API), **NVIDIA**
-  (NVENC) and **AMD** (VA-API). Intel is the most tested. Software transcoding always works as a fallback. See
+  (NVENC) and **AMD** (VA-API). Intel is the most tested. Software transcoding is available as a fallback. See
   [GPU transcoding](/guides/gpu-transcoding/).
 - **Subtitles without burn-in:** styled ASS/SSA and PGS/VobSub overlay the video,
   preserving HDR and avoiding a video re-encode. Browsers use
