@@ -25,9 +25,8 @@ area. The [quick start](/start/quick-start/) gets an instance running.
 - The server decides per client whether to play a file directly, remux it or transcode it,
   based on codecs, HDR and subtitles. See
   [Playback decisions](/architecture/playback-decisions/).
-- **Hardware transcoding** is tested most on **Intel** (Quick Sync / VA-API), less on
-  **NVIDIA** (NVENC) and least on **AMD**. All three should work, but expect bugs outside
-  Intel for now. Software transcoding always works as a fallback. See
+- **Hardware transcoding** works on **Intel** (Quick Sync / VA-API), **NVIDIA**
+  (NVENC) and **AMD** (VA-API). Intel is the most tested. Software transcoding always works as a fallback. See
   [GPU transcoding](/guides/gpu-transcoding/).
 - **Subtitles without burn-in:** styled ASS/SSA and PGS/VobSub overlay the video,
   preserving HDR and avoiding a video re-encode. Browsers use
@@ -85,8 +84,7 @@ Built and tested for reliable viewing.
   stream limits and upstream failures through the app and proxy.
 
 See the [Live TV guide](/guides/live-tv/), [simple mode](/guides/live-tv-simple-mode/)
-and the [proxy architecture](/architecture/live-tv/). Recording (DVR) isn't available
-yet.
+and the [proxy architecture](/architecture/live-tv/). Recording (DVR) isn't supported.
 
 ## Media management
 
@@ -113,7 +111,7 @@ See [Media enrichment](/guides/media-enrichment/),
 
 - **Watch Together:** synchronized sessions between the web app and the Apple TV app.
   Start on the TV and friends join from a browser. (The iPhone and iPad app can't join
-  sessions yet.)
+  sessions.)
 - Shared ratings, reviews and watch activity, with per-user privacy controls. See
   [Sharing and privacy](/guides/sharing-privacy/).
 - **Trakt and MyAnimeList sync:** each user can link their own Trakt account (history in

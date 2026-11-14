@@ -45,8 +45,7 @@ indexes for recommendations, semantic search and music similarity; `pg_trgm` and
 events; and `LISTEN`/`NOTIFY`. Several web replicas and a worker write concurrently,
 which SQLite's single-writer model handles poorly. An abstraction over several databases
 can only use what they all have in common, so it would cost these features or their
-performance, and every query would need testing on every backend. One maintainer can't
-keep that working.
+performance, and every query would need testing on every backend. Keeping that working on every backend isn't practical.
 
 Supporting several databases also wouldn't give admins much. The database ships as a
 container next to the app, so whichever database it is, nobody installs or tunes it by
