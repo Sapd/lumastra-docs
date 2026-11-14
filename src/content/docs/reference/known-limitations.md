@@ -199,7 +199,7 @@ Radeon 760M (Ryzen 5 8600G, Linux) with H.264, HEVC, HDR10, Dolby Vision, AV1 an
 burned-in PGS subtitles. The [GPU transcoding guide](/guides/gpu-transcoding/#tested-hardware)
 lists what ran where and how fast. Other GPU generations and drivers may behave
 differently. Please include the diagnostics export when you report a problem. Software
-transcoding always works as a fallback.
+transcoding is available as a fallback.
 
 **On AMD, HDR to SDR leans on the CPU.** AMD's Linux driver can't tone-map HDR, so when a
 client needs SDR from an HDR source, decoding and tone-mapping run on the CPU and only
@@ -221,9 +221,7 @@ about 90 seconds ahead waits for the encoder to reach that point instead of rest
 there. That can take 10–20 seconds, and when the encoder needs longer than about
 10 seconds to get there the jump can fail. On a fast GPU this isn't noticeable.
 
-**Direct play isn't the goal at any price.** If you tune your library so every file
-direct-plays everywhere, Lumastra won't reward that as much as you might expect.
-Remuxing into HLS (repackaging video and audio without re-encoding them) is a normal,
+**Remuxing is a normal path.** Remuxing into HLS (repackaging video and audio without re-encoding them) is a normal,
 cheap path, and it's what keeps audio-track and subtitle switching, seeking and
 multiple languages reliable on Apple devices, in browsers and on other clients. What Lumastra avoids is re-encoding the
 video when the device could decode it.
