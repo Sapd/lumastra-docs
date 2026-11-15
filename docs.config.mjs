@@ -68,7 +68,10 @@ export const sidebar = [
 	},
 	{
 		label: 'Reference',
-		items: [{ autogenerate: { directory: 'reference' } }],
+		items: [
+			{ label: 'Feature reference', slug: 'start/features' },
+			{ autogenerate: { directory: 'reference' } },
+		],
 	},
 	{
 		label: 'Developers & project',
@@ -132,6 +135,19 @@ export const starlightDocs = {
 	editLink: REPOS_PUBLIC
 		? { baseUrl: 'https://github.com/Sapd/lumastra-docs/edit/main/' }
 		: undefined,
+	// Share preview for every docs page (the landing pages set their own in HomeLayout).
+	head: [
+		{ tag: 'meta', attrs: { property: 'og:image', content: 'https://lumastra.org/og-image.png' } },
+		{
+			tag: 'meta',
+			attrs: {
+				property: 'og:image:alt',
+				content:
+					'Lumastra logo and the Live TV programme guide of the demo, with fictional channels and programmes',
+			},
+		},
+		{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://lumastra.org/og-image.png' } },
+	],
 	// Pagefind site search is on by default.
 	customCss: ['./src/styles/theme.css'],
 	sidebar,
