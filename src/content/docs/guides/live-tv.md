@@ -12,6 +12,8 @@ and feeds licensed for this use by the broadcaster or an authorized TV provider,
 including playback in third-party players. A paid subscription alone does not establish
 that permission.
 
+For an overview, and how Lumastra replaces Threadfin or xTeVe, see [Lumastra for Live TV](https://lumastra.org/live-tv/#threadfin).
+
 Sources connect through HDHomeRun, M3U playlists or Xtream Codes. Lumastra imports their
 channels, matches a program guide, groups alternate feeds of the same station, and streams
 through a dedicated [stream proxy](/architecture/live-tv/). It supplies no channels or TV

@@ -10,6 +10,8 @@ server with a household. There's no separate "kids account" to switch into. You 
 a user an age ceiling, and everything rated above it disappears for them, everywhere
 in the app.
 
+For an overview of kids accounts and age limits, see [Lumastra for families](https://lumastra.org/families/).
+
 ## How age ratings work
 
 A rated title has a **minimum age** in years. A user with an age limit can see it

@@ -106,6 +106,8 @@ and what to do when they don't match, is covered in
 [Jellyfin watch-state sync](#jellyfin-watch-state-sync) below.
 Both servers can use the same media folders while you try Lumastra.
 
+Comparing the two servers first? See [Lumastra and Jellyfin compared](https://lumastra.org/jellyfin-alternative/).
+
 | Integration         | What it adds                                  | Environment alternative / option |
 | -------------------- | ------------------------------------------------ | ---------------------------------- |
 | **Jellyfin**   | Metadata, optional bidirectional watch-state sync and "now streaming" sessions | `JELLYFINURL` + `JELLYFINAPIKEY` |
