@@ -254,6 +254,8 @@ and cache settings remain operator configuration; see
 |---|---|
 | `401` (`unauthorized` / `invalid_token`) | Obtain a valid account credential, then retry. |
 | `403 scope_required` | Request the required scope; repeated byte retries cannot fix it. |
+| `403 forbidden` with `reason: downloads_not_allowed` | The account may not download (per-user setting, Download Groups or server default). Stop; retries cannot fix it. |
+| `429 rate_limited` with `reason: download_limit_reached` on a rendition file | The user already runs the maximum number of parallel downloads. Wait for `Retry-After`, then retry the same URL. |
 | `404 not_found` | Refresh discovery, access and selection; it can also mean a disabled feature or evicted rendition. |
 | `422 validation_failed` on rendition GET/POST | Inspect `details[].field`: a missing audio track, unknown rung or rung unavailable for the source needs a new selection. |
 | `429 rate_limited` on interactive rendition POST | Wait for `Retry-After`, in seconds. The current limit is 60 requests per user per 60-second window. |

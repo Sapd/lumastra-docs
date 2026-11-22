@@ -123,7 +123,7 @@ If your administrator allows it, you can save movies and episodes as their origi
 for example to copy a series onto a USB stick for a trip. No Download buttons means
 downloads are not allowed for your account.
 
-- **Movie:** press **Download**. For a movie with several editions, pick one first.
+- **Movie:** press **Download**. A movie with several editions downloads its default edition.
 - **Episode:** press the download icon on its row.
 - **Season or series:** press **Download season** or **Download series**. The confirm
   sheet shows the episode count and total size. Specials are skipped unless you tick them.
