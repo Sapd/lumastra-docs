@@ -346,6 +346,26 @@ the URL. See [Reverse proxy: keep credentials out of access logs](/guides/revers
 
 See [Audiobooks](/guides/audiobooks/) for the rest of the setup.
 
+## Downloads
+
+Original-file downloads and the download log. Each setting is also editable under
+**Settings → Downloads & Bandwidth** (`DOWNLOAD_GROUPS` is under **Settings → Permission
+Groups**). The master switch `FEATURE_MEDIA_DOWNLOAD` is in
+[Feature flags](/reference/feature-flags/#playback-and-streaming). See
+[Administration → Downloads](/guides/administration/#downloads).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DOWNLOADS_ALLOWED_BY_DEFAULT` | `true` | Whether users may download when neither a per-user setting nor `DOWNLOAD_GROUPS` decides. |
+| `DOWNLOAD_GROUPS` | empty | Identity-provider groups allowed to download. Empty means this list is not used. |
+| `DOWNLOAD_THROTTLE_KBPS` | `0` | Speed cap for one download, in KB/s. `0` is unlimited. |
+| `DOWNLOAD_USER_BANDWIDTH_KBPS` | `0` | Speed cap for all of one user's downloads together, in KB/s. `0` is unlimited. |
+| `DOWNLOAD_TOTAL_BANDWIDTH_KBPS` | `0` | Speed cap for all downloads of all users together, in KB/s, shared fairly between active users. `0` is unlimited. |
+| `DOWNLOAD_MAX_PARALLEL_PER_USER` | `3` | Distinct files one user may download at once. A further start answers `429` with `Retry-After`. `0` is unlimited. |
+| `DOWNLOAD_LOG_RETENTION_DAYS` | `90` | Days the download log keeps its entries. |
+
+Without a Valkey cache, the per-user and total limits apply per web instance, not per install.
+
 ## Live TV
 
 Most Live TV settings are managed in the admin UI and covered in the

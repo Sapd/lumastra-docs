@@ -396,6 +396,36 @@ in [Authentication](/guides/authentication/#if-something-goes-wrong).
 
 The Admin toggle pins a user independently of their identity-provider groups.
 
+### Downloads
+
+Original-file downloads follow the first rule that applies:
+
+1. **Admin accounts** can always download.
+2. **Per user:** in the user editor, **Downloads** is **Allowed** or **Not allowed**.
+   **Default** passes the decision on.
+3. **Download Groups:** if you list groups under **Settings → Permission Groups**, members
+   of those identity-provider groups may download.
+4. **Allow downloads by default** (**Settings → Downloads & Bandwidth**, on by default)
+   decides for everyone else.
+
+The master switch is `FEATURE_MEDIA_DOWNLOAD`, off by default. Set it to `true` and restart
+the container. Offline renditions keep their own switch, `FEATURE_DOWNLOAD_RENDITIONS`, but
+follow the same per-user rule and limits. Jellyfin apps such as Streamyfin show their
+download option only when the user is allowed.
+
+Speed caps are in KB/s, and `0` means unlimited. A download runs at the lowest cap that applies:
+
+- **Download speed per download** caps one file.
+- **Download speed per user** caps all of one user's downloads together.
+- **Total download speed** caps all users together, shared fairly between active users.
+
+**Parallel downloads per user** (default 3) answers further starts with `429` until one
+finishes. The keys are listed in [Environment variables](/reference/environment-variables/#downloads).
+
+**Users → Downloads** lists running downloads with their speed, the history, and refused
+attempts, so you can see why a family member's queue stalled. Entries are kept for 90 days
+by default (**Download log retention**).
+
 ---
 
 ## Troubleshooting entry points

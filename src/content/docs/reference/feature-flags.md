@@ -48,7 +48,7 @@ feature, follow the linked guide.
 | `FEATURE_JELLYFIN_SYNC` | `true` | Background watch-state sync with a Jellyfin server (distinct from the `/j` client API below). |
 | `FEATURE_JELLYFIN_COMPAT` | `true` | The `/j` Jellyfin-compatible client API. Serves Lumastra's own catalog; no Jellyfin server required. |
 | `FEATURE_SUBSONIC_COMPAT` | `false` | The OpenSubsonic-compatible API. Per-client credentials are stored recoverable (plaintext at rest) by protocol design. See the self-check note in [Administration operations](/guides/administration-operations/#health-and-self-check-findings). |
-| `FEATURE_MEDIA_DOWNLOAD` | `false` | Downloading the original, untranscoded file. |
+| `FEATURE_MEDIA_DOWNLOAD` | `false` | Downloading the original, untranscoded file: the Download buttons and `/download` routes. Who may download is set under [Administration → Downloads](/guides/administration/#downloads). |
 | `FEATURE_DOWNLOAD_RENDITIONS` | `false` | Offline download renditions at a chosen quality. |
 | `FEATURE_PLAYER_AUTO_QUALITY` | `false` | Automatic quality switching in the player. |
 | `FEATURE_WATCH_TOGETHER` | `true` | Watch Together. |

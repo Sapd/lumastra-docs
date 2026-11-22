@@ -117,6 +117,31 @@ station to listen live. A station has no timeline, track skips or crossfade, and
 current song or programme appears when the station provides it. Which
 Lumastra apps offer internet radio varies by version; check the app's release notes.
 
+## Downloads
+
+If your administrator allows it, you can save movies and episodes as their original files,
+for example to copy a series onto a USB stick for a trip. No Download buttons means
+downloads are not allowed for your account.
+
+- **Movie:** press **Download**. For a movie with several editions, pick one first.
+- **Episode:** press the download icon on its row.
+- **Season or series:** press **Download season** or **Download series**. The confirm
+  sheet shows the episode count and total size. Specials are skipped unless you tick them.
+
+To copy a season onto a USB stick:
+
+1. Plug in the stick and press **Download season** (or **Download series**).
+2. In Chrome or Edge, press **Choose folder…** and pick the stick once. Lumastra creates
+   folders in it, such as `Harbor Lights (2019)/Season 01/Harbor Lights - S01E01 - Pilot.mkv`.
+   Safari and Firefox save every file into your Downloads folder with its full name instead.
+3. Keep the tab open until the queue panel says it is finished. Closing the tab stops the
+   queue, and the episode in progress starts again.
+4. If the queue stops, run the same season again. Files that are already complete are skipped.
+
+Files over 4 GB need an exFAT stick, because FAT32 cannot hold them. Downloads are the
+original files, not smaller copies. The queue fetches a few episodes at once; if it waits,
+another of your devices may be downloading.
+
 ## Preferences
 
 **Settings → Display → Home & browsing → Show episode languages** controls audio and
