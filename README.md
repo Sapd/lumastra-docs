@@ -56,7 +56,7 @@ Two exceptions:
   rights reserved
   ([LicenseRef-Lumastra-Branding](https://github.com/Sapd/lumastra/blob/main/LICENSES/LicenseRef-Lumastra-Branding.txt)).
   They are here only so the preview looks like the real site. The Lumastra name and logos
-  are trademarks of Denis Arnst.
+  are trademarks of Sapd.
 - Material that a page marks as third-party keeps its own license.
 
 Contributions are accepted under the

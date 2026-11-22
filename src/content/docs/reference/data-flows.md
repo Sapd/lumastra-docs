@@ -31,7 +31,7 @@ notifications in the iOS app.
 
 ## Services run by the Lumastra maintainer
 
-The project maintainer (Denis Arnst, Austria/EU, `lumastra@sapd.eu`) operates `lumastra.org`
+The project maintainer (Sapd, Austria/EU, `lumastra@sapd.eu`) operates `lumastra.org`
 and the push relay. These are the only places an install sends anything to the project (plugin repositories
 below are plain downloads).
 There are no licence keys and no usage reporting. The licence endpoints that 0.1.x installs
