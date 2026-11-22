@@ -422,6 +422,11 @@ Speed caps are in KB/s, and `0` means unlimited. A download runs at the lowest c
 **Parallel downloads per user** (default 3) answers further starts with `429` until one
 finishes. The keys are listed in [Environment variables](/reference/environment-variables/#downloads).
 
+Downloads slower than **Minimum download speed** (default 1 KB/s) over 10 minutes are
+stopped, so a stalled client can't hold a slot. Downloads only follow symlinks into the
+library folders; list debrid or rclone mounts that library symlinks point to under
+**Extra download folders**.
+
 **Users → Downloads** lists running downloads with their speed, the history, and refused
 attempts, so you can see why a family member's queue stalled. Entries are kept for 90 days
 by default (**Download log retention**).

@@ -133,7 +133,10 @@ To copy a season onto a USB stick:
 1. Plug in the stick and press **Download season** (or **Download series**).
 2. In Chrome or Edge, press **Choose folder…** and pick the stick once. Lumastra creates
    folders in it, such as `Harbor Lights (2019)/Season 01/Harbor Lights - S01E01 - Pilot.mkv`.
-   Safari and Firefox save every file into your Downloads folder with its full name instead.
+   Safari, Firefox and phones can't save into a chosen folder. There you choose between
+   **Separate files** (saved to your download location) and **One ZIP file**, which keeps the
+   `Show/Season 01/` folders. A ZIP can't resume if the connection drops, and over 4 GB it
+   needs an exFAT stick. On iPhone and iPad, open the ZIP in the Files app to unpack it.
 3. Keep the tab open until the queue panel says it is finished. Closing the tab stops the
    queue, and the episode in progress starts again.
 4. If the queue stops, run the same season again. Files that are already complete are skipped.

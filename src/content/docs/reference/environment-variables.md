@@ -363,6 +363,8 @@ Groups**). The master switch `FEATURE_MEDIA_DOWNLOAD` is in
 | `DOWNLOAD_TOTAL_BANDWIDTH_KBPS` | `0` | Speed cap for all downloads of all users together, in KB/s, shared fairly between active users. `0` is unlimited. |
 | `DOWNLOAD_MAX_PARALLEL_PER_USER` | `3` | Distinct files one user may download at once. A further start answers `429` with `Retry-After`. `0` is unlimited. |
 | `DOWNLOAD_LOG_RETENTION_DAYS` | `90` | Days the download log keeps its entries. |
+| `DOWNLOAD_MIN_SPEED_KBPS` | `1` | Downloads slower than this over 10 minutes are stopped, in KB/s. Not applied while Lumastra itself limits the speed below it. `0` turns it off. |
+| `DOWNLOAD_ALLOWED_MOUNT_ROOTS` | empty | Extra folders (for example a debrid or rclone mount) that library symlinks may point to for downloads. Downloads refuse symlinks that leave the library folders and these. |
 
 Without a Valkey cache, the per-user and total limits apply per web instance, not per install.
 
