@@ -14,6 +14,24 @@ The full changelog is in the repository:
 [CHANGELOG.md](https://github.com/Sapd/lumastra/blob/main/CHANGELOG.md). Each release on
 [GitHub Releases](https://github.com/Sapd/lumastra/releases) carries the same notes.
 
+### 0.3.0 (2026-11-26)
+
+Live TV proxy: update needed (Rust proxy: library updates only, no change in behaviour). It can
+wait for a quiet moment.
+
+- **Downloads in the web app:** a movie, an episode, chosen episodes, a season or a whole
+  series, into a folder or as one ZIP file. Who may download is set per user, by group or by
+  default; speed limits, parallel downloads and a download log are under Admin. See
+  [Administration → Downloads](/guides/administration/#downloads).
+- Subsonic `download.view` now follows the download permission. If people download music with
+  a Subsonic app, turn on **Original File Download** and allow them.
+- Live TV: deleting a source runs in the background; category starts renumber at once; the
+  guide shows a programme panel; the web player stays live after switching tabs.
+- Jellyfin apps: the Live TV guide no longer crashes Jellyfin Android TV on large lineups;
+  premiere-date filters and "Date added" sorting work.
+- Music: add a whole album to a playlist. Subsonic client passwords are shorter.
+- Fixes for radio logos, playlist order, the "requests ready" row and paged cleanup tasks.
+
 ### 0.2.0 (2026-11-14)
 
 Live TV proxy: no update needed.
