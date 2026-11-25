@@ -404,16 +404,17 @@ Original-file downloads follow the first rule that applies:
 2. **Per user:** in the user editor, **Downloads** is **Allowed** or **Not allowed**.
    **Default** passes the decision on.
 3. **Download Groups:** if you list groups under **Settings → Permission Groups**, members
-   of those identity-provider groups may download.
+   of those identity-provider groups may download. Lumastra learns a user's groups when they
+   sign in, so a new group shows a warning sign until a member has signed in once.
 4. **Allow downloads by default** (**Settings → Downloads & Bandwidth**, on by default)
    decides for everyone else.
 
-The master switch is `FEATURE_MEDIA_DOWNLOAD`, off by default. Set it to `true` and restart
-the container. Offline renditions keep their own switch, `FEATURE_DOWNLOAD_RENDITIONS`, but
+The master switch is **Original File Download** (**Settings → Downloads & Bandwidth**,
+`FEATURE_MEDIA_DOWNLOAD`), off by default. It applies without a restart. Offline renditions keep their own switch, `FEATURE_DOWNLOAD_RENDITIONS`, but
 follow the same per-user rule and limits. Jellyfin apps such as Streamyfin show their
 download option only when the user is allowed.
 
-Speed caps are in KB/s, and `0` means unlimited. A download runs at the lowest cap that applies:
+Speed caps are in KB/s (1 KB = 1024 bytes), and `0` means unlimited. A download runs at the lowest cap that applies:
 
 - **Download speed per download** caps one file.
 - **Download speed per user** caps all of one user's downloads together.
